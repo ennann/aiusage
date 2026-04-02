@@ -1,7 +1,7 @@
 // ── 统计维度 ──
 
-export type Provider = 'anthropic' | 'openai';
-export type Product = 'claude-code' | 'codex';
+export type Provider = 'anthropic' | 'openai' | 'google' | 'github' | 'alibaba' | 'moonshot' | 'sourcegraph' | (string & {});
+export type Product = 'claude-code' | 'codex' | 'copilot-cli' | 'gemini-cli' | 'qwen-code' | 'kimi-code' | 'amp' | 'droid' | 'opencode' | 'openclaw' | (string & {});
 export type Channel = 'cli' | 'ide' | 'web' | 'api';
 export type CostStatus = 'exact' | 'estimated' | 'unavailable';
 export type DeviceStatus = 'active' | 'disabled';
@@ -83,15 +83,84 @@ export interface IngestResponse {
 
 export interface OverviewResponse {
   totalDays: number;
+  activeDays: number;
   totalEvents: number;
   totalCostUsd: number;
+  averageDailyCostUsd: number;
   dailyTrend: DailyTrendItem[];
+  tokenComposition: TokenCompositionItem[];
+  modelCostShare: ShareItem[];
+  channelCostShare: ShareItem[];
+  sankey: SankeyGraph;
+  filters: DashboardFiltersPayload;
 }
 
 export interface DailyTrendItem {
   usageDate: string;
   eventCount: number;
   estimatedCostUsd: number;
+}
+
+export interface TokenCompositionItem {
+  usageDate: string;
+  inputTokens: number;
+  cachedInputTokens: number;
+  cacheWriteTokens: number;
+  outputTokens: number;
+  reasoningOutputTokens: number;
+  totalTokens: number;
+}
+
+export interface ShareItem {
+  value: string;
+  label: string;
+  estimatedCostUsd: number;
+  eventCount: number;
+}
+
+export interface SankeyNode {
+  id: string;
+  label: string;
+  layer: number;
+  totalTokens: number;
+}
+
+export interface SankeyLink {
+  source: string;
+  target: string;
+  value: number;
+}
+
+export interface SankeyGraph {
+  nodes: SankeyNode[];
+  links: SankeyLink[];
+}
+
+export interface FacetOption {
+  value: string;
+  label: string;
+  estimatedCostUsd: number;
+  eventCount: number;
+}
+
+export interface DashboardFiltersPayload {
+  selection: {
+    range: string;
+    deviceId: string | null;
+    provider: string | null;
+    product: string | null;
+    channel: string | null;
+    model: string | null;
+    project: string | null;
+  };
+  options: {
+    devices: FacetOption[];
+    providers: FacetOption[];
+    products: FacetOption[];
+    channels: FacetOption[];
+    models: FacetOption[];
+    projects: FacetOption[];
+  };
 }
 
 export interface BreakdownItem {
@@ -108,6 +177,7 @@ export interface BreakdownItem {
   cacheWriteTokens: number;
   outputTokens: number;
   reasoningOutputTokens: number;
+  totalTokens?: number;
   estimatedCostUsd: number;
   costStatus: CostStatus;
 }

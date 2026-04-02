@@ -1,12 +1,12 @@
 <p align="center"><code>npm i -g @aiusage/cli</code></p>
 
 <p align="center">
-  <strong>AIUsage</strong> tracks token usage and costs across all your AI tools and devices,<br>
-  syncs to your own Cloudflare Worker, and visualizes everything on a public dashboard.
+  <strong>AIUsage</strong> 追踪所有 AI 工具在所有设备上的 Token 用量与成本，<br>
+  同步到你自己的 Cloudflare Worker，通过公开看板可视化一切。
 </p>
 
 <p align="center">
-  <a href="./README.zh-CN.md">中文</a> | English
+  中文 | <a href="./README.md">English</a>
 </p>
 
 <p align="center">
@@ -21,11 +21,11 @@
 
 ---
 
-## What is AIUsage?
+## AIUsage 是什么？
 
-A self-hosted, privacy-first system for tracking how much you spend on AI coding tools — across every device you own.
+一套自托管、隐私优先的系统，用于追踪你在 AI 编程工具上的真实开销——跨所有设备。
 
-### Supported Tools
+### 支持的工具
 
 <p align="center">
   <img src="https://img.shields.io/badge/Claude_Code-191919?style=for-the-badge&logo=anthropic&logoColor=white" alt="Claude Code" />
@@ -42,36 +42,36 @@ A self-hosted, privacy-first system for tracking how much you spend on AI coding
   <img src="https://img.shields.io/badge/OpenClaw-EF4444?style=for-the-badge&logo=codeium&logoColor=white" alt="OpenClaw" />
 </p>
 
-### Why AIUsage?
+### 为什么选择 AIUsage？
 
-- **Scans locally** — reads token usage from session logs, never touches conversation content
-- **Syncs across devices** — every machine enrolls with its own secure token, data merges on your Worker
-- **Visualizes costs** — public dashboard with trends, model breakdowns, cost per session, and more
-- **You own the data** — deploys to your Cloudflare account (free tier is enough), no third-party services
+- **本地扫描** — 读取 AI 工具的会话日志，提取 Token 用量，不触及对话内容
+- **多设备同步** — 每台机器独立注册，各自持有安全令牌，数据汇聚到你的 Worker
+- **成本可视化** — 公开看板展示趋势、模型分布、单次成本等
+- **数据自主** — 部署到你自己的 Cloudflare 账户（免费套餐足够），不依赖任何第三方
 
-### Architecture
+### 架构
 
 ```mermaid
 graph LR
-  D1["<b>Device 01</b><br/>MacBook Pro"] -- sync --> W["<b>Cloudflare Worker</b><br/>+ D1 Database"]
-  D2["<b>Device 02</b><br/>Mac Mini"] -- sync --> W
-  D3["<b>Device 03</b><br/>Linux Server"] -- sync --> W
-  W -- public API --> Dashboard["<b>Dashboard</b><br/>read-only web UI"]
+  D1["<b>设备 01</b><br/>MacBook Pro"] -- sync --> W["<b>Cloudflare Worker</b><br/>+ D1 数据库"]
+  D2["<b>设备 02</b><br/>Mac Mini"] -- sync --> W
+  D3["<b>设备 03</b><br/>Linux 服务器"] -- sync --> W
+  W -- 公开 API --> Dashboard["<b>看板</b><br/>只读 Web UI"]
 ```
 
-## Quickstart
+## 快速开始
 
-### Deploy with your AI agent
+### 让 AI 代理帮你部署
 
-Copy this prompt, paste it into your AI coding agent (Claude Code, Codex, Copilot, Gemini, etc.):
+复制以下提示词，粘贴给你的 AI 编程代理（Claude Code、Codex、Copilot、Gemini 等）：
 
 ```text
-Clone https://github.com/ennann/aiusage.git, read skills/deploy-server.md,
-and help me deploy AIUsage to my Cloudflare account.
-After the server is up, follow skills/setup-controller.md to connect this device.
+克隆 https://github.com/ennann/aiusage.git，阅读 skills/deploy-server.md，
+帮我把 AIUsage 部署到我的 Cloudflare 账户。
+部署完成后，按照 skills/setup-controller.md 把这台设备接入。
 ```
 
-### Or deploy manually
+### 或手动部署
 
 ```bash
 git clone https://github.com/ennann/aiusage.git
@@ -80,21 +80,21 @@ npx wrangler login
 pnpm setup
 ```
 
-### Local reports (no server needed)
+### 本地报告（无需服务端）
 
 ```bash
 npm i -g @aiusage/cli
 aiusage report --range 7d
 ```
 
-## Docs
+## 文档
 
-| Document | Description |
-|----------|-------------|
-| [**Deployment Guide**](./docs/deployment-guide.md) | Full setup walkthrough, CLI reference, API docs |
-| [**CLI README**](./packages/cli/README.md) | CLI tool details and all commands |
+| 文档 | 说明 |
+|------|------|
+| [**部署指南**](./docs/deployment-guide.md) | 完整部署流程、CLI 参考、API 文档 |
+| [**CLI README**](./packages/cli/README.md) | CLI 工具详情与全部命令 |
 
 
-## License
+## 许可证
 
 [MIT](LICENSE)

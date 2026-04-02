@@ -1,8 +1,8 @@
 import { hostname } from 'node:os';
 import type { AIUsageConfig } from './config.js';
 import { getLocalTimezone } from './config.js';
+import { getVersion } from './version.js';
 
-const APP_VERSION = '0.1.0';
 const SCHEMA_VERSION = '1.0';
 const DEFAULT_LOOKBACK_DAYS = 7;
 
@@ -55,7 +55,7 @@ export async function enrollDevice(
       deviceAlias: params.deviceAlias,
       hostname: hostname(),
       timezone: getLocalTimezone(),
-      appVersion: APP_VERSION,
+      appVersion: getVersion(),
     }),
   });
 }
@@ -99,7 +99,7 @@ export async function uploadDailyUsage(
         deviceAlias: config.deviceAlias,
         hostname: hostname(),
         timezone: getLocalTimezone(),
-        appVersion: APP_VERSION,
+        appVersion: getVersion(),
       },
       days,
     }),

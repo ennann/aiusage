@@ -1,6 +1,6 @@
-# @aiusage/controller
+# @aiusage/cli
 
-`@aiusage/controller` is the AIUsage command-line tool for:
+`@aiusage/cli` is the AIUsage command-line tool for:
 
 - scanning local Claude Code and Codex token usage
 - printing local usage summaries for the last 7 days, 30 days, 90 days, or all history
@@ -10,13 +10,13 @@
 ## Install
 
 ```bash
-npm install -g @aiusage/controller
+npm install -g @aiusage/cli
 ```
 
 Or run it directly with `npx`:
 
 ```bash
-npx @aiusage/controller --help
+npx @aiusage/cli --help
 ```
 
 After installation:
@@ -84,27 +84,30 @@ aiusage enroll \
 
 ### sync
 
-Upload closed-day data to the Worker. Covers the last 7 days by default.
+Upload usage data to the Worker. Covers the last 7 closed days by default.
 
 ```bash
 aiusage sync
+aiusage sync --today           # include today's live data
 aiusage sync --date 2026-03-31
 aiusage sync --lookback 14
 ```
+
+Use `--today` to upload the current (incomplete) day. The server upserts, so partial data is updated on next sync.
 
 ### schedule
 
 Manage automatic sync. Uses `launchd` on macOS and `cron` on Linux.
 
 ```bash
-aiusage schedule            # show status
-aiusage schedule on         # enable, default every 1 hour
-aiusage schedule on --every 2h
+aiusage schedule            # enable, default every 5 minutes
+aiusage schedule on         # same as above
 aiusage schedule on --every 30m
 aiusage schedule off        # disable
+aiusage schedule status     # show current status
 ```
 
-Supported intervals: `10m` – `1d`. As long as your machine is awake for one interval within a day, yesterday's data will be uploaded.
+Supported intervals: `5m` – `1d`. Scheduled sync always includes today's live data (`--today`), so your dashboard stays current.
 
 ### doctor
 

@@ -17,6 +17,8 @@ packages/worker/wrangler.jsonc
 .env
 .env.local
 .env.*.local
+.credentials
+dev
 
 # OS
 .DS_Store

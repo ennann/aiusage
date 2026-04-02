@@ -3,7 +3,6 @@ import { handleEnroll } from './routes/enroll.js';
 import { handleIngest } from './routes/ingest.js';
 import { handleOverview } from './routes/overview.js';
 import { handleBreakdowns } from './routes/breakdowns.js';
-import { handleHome } from './routes/home.js';
 import { handlePricing } from './routes/pricing.js';
 import { corsHeaders, jsonError } from './utils/response.js';
 import type { Env } from './types.js';
@@ -19,9 +18,6 @@ export default {
     }
 
     try {
-      if (pathname === '/' && request.method === 'GET') {
-        return handleHome(env);
-      }
       if (pathname === '/pricing' && request.method === 'GET') {
         return handlePricing(env);
       }

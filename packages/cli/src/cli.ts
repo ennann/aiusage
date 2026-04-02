@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { hostname } from 'node:os';
-import { scanDate } from './scan.js';
+import { scanDate, scanDates } from './scan.js';
 import { buildLocalReport, parseReportRange, renderLocalReport } from './report.js';
 import {
   detectDeviceId,
@@ -13,12 +13,15 @@ import {
 import { defaultLookbackDays, enrollDevice, fetchHealth, uploadDailyUsage } from './api.js';
 import { disableSchedule, enableSchedule, formatInterval, getScheduleStatus, parseInterval } from './schedule.js';
 import { runDoctor } from './doctor.js';
+import { getVersion } from './version.js';
 
 const argv = process.argv.slice(2);
 const command = argv[0];
 
 try {
-  if (command === 'scan') {
+  if (command === '--version' || command === '-v') {
+    console.log(getVersion());
+  } else if (command === 'scan') {
     const parsed = parseArgs(argv.slice(1));
     const date = typeof parsed.flags.date === 'string' ? parsed.flags.date : getYesterdayDate();
     await runScan(date, Boolean(parsed.flags.json));
@@ -39,12 +42,28 @@ try {
     await runInit(parsed.flags);
   } else if (command === 'schedule') {
     const sub = argv[1];
-    const parsed = parseArgs(argv.slice(sub === 'on' || sub === 'off' ? 2 : 1));
-    await runSchedule(sub, parsed.flags);
+    if (sub === 'off') {
+      await runSchedule('off', {});
+    } else if (sub === 'status') {
+      await runSchedule('status', {});
+    } else if (sub === 'on') {
+      const parsed = parseArgs(argv.slice(2));
+      await runSchedule('on', parsed.flags);
+    } else {
+      // 无子命令 → 默认启用 5m
+      const parsed = parseArgs(argv.slice(1));
+      await runSchedule('on', parsed.flags);
+    }
   } else if (command === 'doctor') {
     await runDoctorCommand();
   } else if (command === 'config' && argv[1] === 'set') {
     await runConfigSet(argv.slice(2));
+  } else if (command === 'setup') {
+    console.log('To deploy the server, clone the repo and run the setup wizard:\n');
+    console.log('  git clone https://github.com/ennann/aiusage.git');
+    console.log('  cd aiusage && pnpm install');
+    console.log('  pnpm setup\n');
+    console.log('See: https://github.com/ennann/aiusage#deploy-your-own-server');
   } else {
     printHelp();
   }
@@ -148,30 +167,62 @@ async function runSync(flags: Record<string, string | boolean>) {
   const siteId = resolveRequiredString(undefined, config.siteId, '缺少 siteId，请先执行 init 或 enroll');
   const deviceId = resolveRequiredString(undefined, config.deviceId, '缺少 deviceId，请先执行 init 或 enroll');
   const deviceToken = resolveRequiredString(undefined, config.deviceToken, '缺少 deviceToken，请先执行 enroll');
-  const lookbackDays = typeof flags.lookback === 'string'
-    ? parsePositiveInt(flags.lookback, '--lookback')
-    : defaultLookbackDays(config);
 
   const requestedDate = typeof flags.date === 'string' ? flags.date : undefined;
-  const targetDates = requestedDate ? [requestedDate] : getClosedDates(lookbackDays);
-  const days = [];
+  const fromDate = typeof flags.from === 'string' ? flags.from : undefined;
+  const toDate = typeof flags.to === 'string' ? flags.to : undefined;
 
-  for (const date of targetDates) {
-    const result = await scanDate(date, { projectAliases: config.projectAliases });
-    if (result.breakdowns.length === 0) continue;
-    days.push({ usageDate: result.usageDate, breakdowns: result.breakdowns });
+  const includeToday = Boolean(flags.today);
+
+  let targetDates: string[];
+  if (requestedDate) {
+    targetDates = [requestedDate];
+  } else if (fromDate) {
+    targetDates = buildDateRange(fromDate, toDate ?? getYesterdayDate());
+  } else {
+    const lookbackDays = typeof flags.lookback === 'string'
+      ? parsePositiveInt(flags.lookback, '--lookback')
+      : defaultLookbackDays(config);
+    targetDates = getClosedDates(lookbackDays);
+    if (includeToday) {
+      targetDates.push(getTodayDate());
+    }
   }
 
-  if (days.length === 0) {
-    console.log('没有可上传的闭合日数据。');
+  console.log(`扫描 ${targetDates.length} 天 (${targetDates[0]} ~ ${targetDates[targetDates.length - 1]})${includeToday ? ' [含今日]' : ''} ...`);
+
+  const results = await scanDates(targetDates, { projectAliases: config.projectAliases });
+  const allDays = results
+    .filter(r => r.breakdowns.length > 0)
+    .map(r => ({ usageDate: r.usageDate, breakdowns: r.breakdowns }));
+
+  if (allDays.length === 0) {
+    console.log('没有可上传的数据。');
     return;
   }
 
-  const response = await uploadDailyUsage(
-    apiBaseUrl,
-    { siteId, deviceId, deviceAlias: config.deviceAlias, deviceToken },
-    days,
-  );
+  console.log(`发现 ${allDays.length} 天有数据，开始上传 ...`);
+
+  const BATCH_SIZE = 30;
+  let totalProcessed = 0;
+  const allCostSummary: Record<string, { estimatedCostUsd: number; costStatus: string }> = {};
+
+  for (let i = 0; i < allDays.length; i += BATCH_SIZE) {
+    const batch = allDays.slice(i, i + BATCH_SIZE);
+    const batchNum = Math.floor(i / BATCH_SIZE) + 1;
+    const totalBatches = Math.ceil(allDays.length / BATCH_SIZE);
+    if (totalBatches > 1) {
+      console.log(`  批次 ${batchNum}/${totalBatches}: ${batch[0].usageDate} ~ ${batch[batch.length - 1].usageDate}`);
+    }
+
+    const response = await uploadDailyUsage(
+      apiBaseUrl,
+      { siteId, deviceId, deviceAlias: config.deviceAlias, deviceToken },
+      batch,
+    );
+    totalProcessed += response.daysProcessed;
+    Object.assign(allCostSummary, response.costSummary);
+  }
 
   await writeConfig({
     ...config,
@@ -183,9 +234,9 @@ async function runSync(flags: Record<string, string | boolean>) {
   });
 
   console.log(JSON.stringify({
-    uploadedDays: days.map(day => day.usageDate),
-    daysProcessed: response.daysProcessed,
-    costSummary: response.costSummary,
+    uploadedDays: allDays.map(day => day.usageDate),
+    daysProcessed: totalProcessed,
+    costSummary: allCostSummary,
   }, null, 2));
 }
 
@@ -210,10 +261,10 @@ async function runInit(flags: Record<string, string | boolean>) {
 
 async function runSchedule(sub: string | undefined, flags: Record<string, string | boolean>) {
   if (sub === 'on') {
-    const every = typeof flags.every === 'string' ? flags.every : '1h';
+    const every = typeof flags.every === 'string' ? flags.every : '5m';
     const { seconds } = parseInterval(every);
     const status = await enableSchedule(seconds);
-    console.log(`定时同步已启用，每 ${status.intervalLabel} 执行一次。`);
+    console.log(`定时同步已启用，每 ${status.intervalLabel} 执行一次（含今日数据）。`);
     if (status.path) console.log(`配置: ${status.path}`);
     console.log(`日志: ~/.aiusage/sync.log`);
   } else if (sub === 'off') {
@@ -227,7 +278,7 @@ async function runSchedule(sub: string | undefined, flags: Record<string, string
       if (status.path) console.log(`配置: ${status.path}`);
     } else {
       console.log('状态: 未启用');
-      console.log('启用: aiusage schedule on [--every 1h]');
+      console.log('启用: aiusage schedule [--every 5m]');
     }
   }
 }
@@ -253,16 +304,17 @@ async function runConfigSet(args: string[]) {
 
 function printHelp() {
   const initialized = existsSync(getConfigPath());
+  console.log(`aiusage v${getVersion()}\n`);
   console.log('Usage: aiusage <command>');
   console.log('');
   console.log('Commands:');
   console.log('  aiusage init [--server URL] [--site-id ID] [--device-id ID] [--device-name NAME] [--lookback N]');
   console.log('  aiusage health [--server URL]');
   console.log('  aiusage enroll --server URL --site-id ID --enroll-token TOKEN [--device-id ID] [--device-name NAME]');
-  console.log('  aiusage sync [--date YYYY-MM-DD] [--lookback N] [--server URL]');
+  console.log('  aiusage sync [--date YYYY-MM-DD] [--from YYYY-MM-DD [--to YYYY-MM-DD]] [--lookback N] [--today] [--server URL]');
   console.log('  aiusage scan [--date YYYY-MM-DD] [--json]');
   console.log('  aiusage report [--range 7d|1m|3m|all] [--json]');
-  console.log('  aiusage schedule [on|off] [--every 1h]');
+  console.log('  aiusage schedule [on|off|status] [--every 5m]');
   console.log('  aiusage doctor');
   console.log('  aiusage config set <key> <value...>');
   console.log('');
@@ -305,6 +357,29 @@ function getYesterdayDate(): string {
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
   return yesterday.toISOString().split('T')[0];
+}
+
+function getTodayDate(): string {
+  return new Date().toISOString().split('T')[0];
+}
+
+function buildDateRange(from: string, to: string): string[] {
+  const start = new Date(from + 'T00:00:00');
+  const end = new Date(to + 'T00:00:00');
+  if (isNaN(start.getTime())) throw new Error(`--from 日期格式错误: ${from}`);
+  if (isNaN(end.getTime())) throw new Error(`--to 日期格式错误: ${to}`);
+  if (start > end) throw new Error('--from 不能晚于 --to');
+
+  const dates: string[] = [];
+  const current = new Date(start);
+  while (current <= end) {
+    const year = current.getFullYear();
+    const month = String(current.getMonth() + 1).padStart(2, '0');
+    const day = String(current.getDate()).padStart(2, '0');
+    dates.push(`${year}-${month}-${day}`);
+    current.setDate(current.getDate() + 1);
+  }
+  return dates;
 }
 
 function getClosedDates(lookbackDays: number): string[] {

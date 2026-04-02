@@ -30,7 +30,7 @@ export function parseInterval(value: string): { seconds: number; label: string }
     case 'd': seconds = num * 86400; break;
     default: throw new Error('不支持的时间单位');
   }
-  if (seconds < 600) throw new Error('间隔不能少于 10 分钟');
+  if (seconds < 300) throw new Error('间隔不能少于 5 分钟');
   if (seconds > 86400) throw new Error('间隔不能超过 1 天');
   return { seconds, label: value };
 }
@@ -62,7 +62,7 @@ function resolveCommandPaths(): { nodePath: string; scriptPath: string } {
   const scriptPath = resolve(process.argv[1]);
   if (scriptPath.includes('_npx') || scriptPath.includes('/npx-')) {
     throw new Error(
-      '检测到通过 npx 运行，定时任务需要全局安装。\n请先执行: npm install -g @aiusage/controller',
+      '检测到通过 npx 运行，定时任务需要全局安装。\n请先执行: npm install -g @aiusage/cli',
     );
   }
   return { nodePath: process.execPath, scriptPath };
@@ -86,6 +86,7 @@ async function enableLaunchd(intervalSeconds: number): Promise<ScheduleStatus> {
     `    <string>${escapeXml(nodePath)}</string>`,
     `    <string>${escapeXml(scriptPath)}</string>`,
     '    <string>sync</string>',
+    '    <string>--today</string>',
     '  </array>',
     '  <key>StartInterval</key>',
     `  <integer>${intervalSeconds}</integer>`,
@@ -142,7 +143,7 @@ async function enableCron(intervalSeconds: number): Promise<ScheduleStatus> {
   const { nodePath, scriptPath } = resolveCommandPaths();
   const cronExpr = secondsToCron(intervalSeconds);
   const logPath = join(homedir(), '.aiusage', 'sync.log');
-  const cronLine = `${cronExpr} ${nodePath} ${scriptPath} sync >> ${logPath} 2>&1 ${CRON_MARKER}`;
+  const cronLine = `${cronExpr} ${nodePath} ${scriptPath} sync --today >> ${logPath} 2>&1 ${CRON_MARKER}`;
 
   await mkdir(join(homedir(), '.aiusage'), { recursive: true });
 

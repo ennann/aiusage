@@ -2,11 +2,16 @@
   "name": "@aiusage/worker",
   "version": "0.1.0",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ennann/aiusage.git",
+    "directory": "packages/worker"
+  },
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev",
-    "build": "wrangler deploy --dry-run --outdir dist",
-    "deploy": "wrangler deploy",
+    "dev": "pnpm --filter @aiusage/dashboard build && wrangler dev",
+    "build": "pnpm --filter @aiusage/dashboard build && wrangler deploy --dry-run --outdir dist",
+    "deploy": "pnpm --filter @aiusage/dashboard build && wrangler deploy",
     "lint": "tsc --noEmit",
     "types": "wrangler types",
     "test": "echo 'no tests yet'",
