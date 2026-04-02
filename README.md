@@ -25,7 +25,7 @@
 
 A self-hosted, privacy-first system for tracking how much you spend on AI coding tools — across every device you own.
 
-- **Scans locally** — reads token usage from AI tool session logs, never touches conversation content
+- **Scans locally** — reads token usage from AI tool session logs (Claude Code, Codex, Copilot CLI, Gemini CLI, Amp, Kimi Code, Qwen Code, Droid, OpenCode, OpenClaw), never touches conversation content
 - **Syncs across devices** — every machine enrolls with its own secure token, data merges on your Worker
 - **Visualizes costs** — public dashboard with trends, model breakdowns, cost per session, and more
 - **You own the data** — deploys to your Cloudflare account (free tier is enough), no third-party services

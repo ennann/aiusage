@@ -1,5 +1,13 @@
 import { scanClaudeDates } from './scanners/claude.js';
 import { scanCodexDates } from './scanners/codex.js';
+import { scanCopilotDates } from './scanners/copilot.js';
+import { scanGeminiDates } from './scanners/gemini.js';
+import { scanQwenDates } from './scanners/qwen.js';
+import { scanKimiDates } from './scanners/kimi.js';
+import { scanAmpDates } from './scanners/amp.js';
+import { scanDroidDates } from './scanners/droid.js';
+import { scanOpencodeDates } from './scanners/opencode.js';
+import { scanOpenclawDates } from './scanners/openclaw.js';
 import type { IngestBreakdown } from '@aiusage/shared';
 
 export interface ScanResult {
@@ -32,13 +40,23 @@ export async function scanDates(targetDates: string[], options: ScanOptions = {}
   const uniqueDates = [...new Set(targetDates)];
   if (uniqueDates.length === 0) return [];
 
-  const [claudeByDate, codexByDate] = await Promise.all([
+  const scanners = [
     scanClaudeDates(uniqueDates, undefined, options.projectAliases),
     scanCodexDates(uniqueDates, undefined, options.projectAliases),
-  ]);
+    scanCopilotDates(uniqueDates, undefined, options.projectAliases),
+    scanGeminiDates(uniqueDates, undefined, options.projectAliases),
+    scanQwenDates(uniqueDates, undefined, options.projectAliases),
+    scanKimiDates(uniqueDates, undefined, options.projectAliases),
+    scanAmpDates(uniqueDates, undefined, options.projectAliases),
+    scanDroidDates(uniqueDates, undefined, options.projectAliases),
+    scanOpencodeDates(uniqueDates, undefined, options.projectAliases),
+    scanOpenclawDates(uniqueDates, undefined, options.projectAliases),
+  ];
+
+  const results = await Promise.all(scanners);
 
   return uniqueDates.map((usageDate) => {
-    const breakdowns = [...(claudeByDate.get(usageDate) ?? []), ...(codexByDate.get(usageDate) ?? [])];
+    const breakdowns = results.flatMap(m => m.get(usageDate) ?? []);
     const totals = breakdowns.reduce(
       (acc, b) => ({
         eventCount: acc.eventCount + b.eventCount,

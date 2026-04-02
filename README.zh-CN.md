@@ -25,7 +25,7 @@
 
 一套自托管、隐私优先的系统，用于追踪你在 AI 编程工具上的真实开销——跨所有设备。
 
-- **本地扫描** — 读取 AI 工具的会话日志，提取 Token 用量，不触及对话内容
+- **本地扫描** — 读取 AI 工具的会话日志（Claude Code、Codex、Copilot CLI、Gemini CLI、Amp、Kimi Code、Qwen Code、Droid、OpenCode、OpenClaw），提取 Token 用量，不触及对话内容
 - **多设备同步** — 每台机器独立注册，各自持有安全令牌，数据汇聚到你的 Worker
 - **成本可视化** — 公开看板展示趋势、模型分布、单次成本等
 - **数据自主** — 部署到你自己的 Cloudflare 账户（免费套餐足够），不依赖任何第三方
