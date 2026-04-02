@@ -25,23 +25,38 @@
 
 一套自托管、隐私优先的系统，用于追踪你在 AI 编程工具上的真实开销——跨所有设备。
 
-- **本地扫描** — 读取 AI 工具的会话日志（Claude Code、Codex、Copilot CLI、Gemini CLI、Amp、Kimi Code、Qwen Code、Droid、OpenCode、OpenClaw），提取 Token 用量，不触及对话内容
+### 支持的工具
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Claude_Code-191919?style=for-the-badge&logo=anthropic&logoColor=white" alt="Claude Code" />
+  <img src="https://img.shields.io/badge/Codex_CLI-412991?style=for-the-badge&logo=openai&logoColor=white" alt="Codex CLI" />
+  <img src="https://img.shields.io/badge/Copilot_CLI-000?style=for-the-badge&logo=githubcopilot&logoColor=white" alt="Copilot CLI" />
+  <img src="https://img.shields.io/badge/Gemini_CLI-8E75B2?style=for-the-badge&logo=googlegemini&logoColor=white" alt="Gemini CLI" />
+  <img src="https://img.shields.io/badge/Amp-FF4F00?style=for-the-badge&logo=sourcegraph&logoColor=white" alt="Amp" />
+</p>
+<p align="center">
+  <img src="https://img.shields.io/badge/Kimi_Code-4A6CF7?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0id2hpdGUiPjxjaXJjbGUgY3g9IjEyIiBjeT0iMTIiIHI9IjEwIi8+PC9zdmc+&logoColor=white" alt="Kimi Code" />
+  <img src="https://img.shields.io/badge/Qwen_Code-5A29E4?style=for-the-badge&logo=alibabacloud&logoColor=white" alt="Qwen Code" />
+  <img src="https://img.shields.io/badge/Droid-2C3E50?style=for-the-badge&logo=android&logoColor=white" alt="Droid" />
+  <img src="https://img.shields.io/badge/OpenCode-16A34A?style=for-the-badge&logo=go&logoColor=white" alt="OpenCode" />
+  <img src="https://img.shields.io/badge/OpenClaw-EF4444?style=for-the-badge&logo=codeium&logoColor=white" alt="OpenClaw" />
+</p>
+
+### 为什么选择 AIUsage？
+
+- **本地扫描** — 读取 AI 工具的会话日志，提取 Token 用量，不触及对话内容
 - **多设备同步** — 每台机器独立注册，各自持有安全令牌，数据汇聚到你的 Worker
 - **成本可视化** — 公开看板展示趋势、模型分布、单次成本等
 - **数据自主** — 部署到你自己的 Cloudflare 账户（免费套餐足够），不依赖任何第三方
 
-```
-┌─────────────┐         ┌──────────────────────┐
-│   采集器     │── sync ──▶  Cloudflare Worker  │
-│  (设备 A)    │         │  + D1 数据库          │
-└─────────────┘         └──────────┬───────────┘
-                                   │
-┌─────────────┐              公开 API
-│   采集器     │── sync ──▶        │
-│  (设备 B)    │         ┌─────────▼──────────┐
-└─────────────┘         │      看板           │
-                        │  (只读 Web UI)      │
-                        └─────────────────────┘
+### 架构
+
+```mermaid
+graph LR
+  D1["<b>设备 01</b><br/>MacBook Pro"] -- sync --> W["<b>Cloudflare Worker</b><br/>+ D1 数据库"]
+  D2["<b>设备 02</b><br/>Mac Mini"] -- sync --> W
+  D3["<b>设备 03</b><br/>Linux 服务器"] -- sync --> W
+  W -- 公开 API --> Dashboard["<b>看板</b><br/>只读 Web UI"]
 ```
 
 ## 快速开始

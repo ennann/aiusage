@@ -25,23 +25,38 @@
 
 A self-hosted, privacy-first system for tracking how much you spend on AI coding tools — across every device you own.
 
-- **Scans locally** — reads token usage from AI tool session logs (Claude Code, Codex, Copilot CLI, Gemini CLI, Amp, Kimi Code, Qwen Code, Droid, OpenCode, OpenClaw), never touches conversation content
+### Supported Tools
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Claude_Code-191919?style=for-the-badge&logo=anthropic&logoColor=white" alt="Claude Code" />
+  <img src="https://img.shields.io/badge/Codex_CLI-412991?style=for-the-badge&logo=openai&logoColor=white" alt="Codex CLI" />
+  <img src="https://img.shields.io/badge/Copilot_CLI-000?style=for-the-badge&logo=githubcopilot&logoColor=white" alt="Copilot CLI" />
+  <img src="https://img.shields.io/badge/Gemini_CLI-8E75B2?style=for-the-badge&logo=googlegemini&logoColor=white" alt="Gemini CLI" />
+  <img src="https://img.shields.io/badge/Amp-FF4F00?style=for-the-badge&logo=sourcegraph&logoColor=white" alt="Amp" />
+</p>
+<p align="center">
+  <img src="https://img.shields.io/badge/Kimi_Code-4A6CF7?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0id2hpdGUiPjxjaXJjbGUgY3g9IjEyIiBjeT0iMTIiIHI9IjEwIi8+PC9zdmc+&logoColor=white" alt="Kimi Code" />
+  <img src="https://img.shields.io/badge/Qwen_Code-5A29E4?style=for-the-badge&logo=alibabacloud&logoColor=white" alt="Qwen Code" />
+  <img src="https://img.shields.io/badge/Droid-2C3E50?style=for-the-badge&logo=android&logoColor=white" alt="Droid" />
+  <img src="https://img.shields.io/badge/OpenCode-16A34A?style=for-the-badge&logo=go&logoColor=white" alt="OpenCode" />
+  <img src="https://img.shields.io/badge/OpenClaw-EF4444?style=for-the-badge&logo=codeium&logoColor=white" alt="OpenClaw" />
+</p>
+
+### Why AIUsage?
+
+- **Scans locally** — reads token usage from session logs, never touches conversation content
 - **Syncs across devices** — every machine enrolls with its own secure token, data merges on your Worker
 - **Visualizes costs** — public dashboard with trends, model breakdowns, cost per session, and more
 - **You own the data** — deploys to your Cloudflare account (free tier is enough), no third-party services
 
-```
-┌─────────────┐         ┌──────────────────────┐
-│  Controller  │── sync ──▶  Cloudflare Worker  │
-│   (device)   │         │  + D1 Database       │
-└─────────────┘         └──────────┬───────────┘
-                                   │
-┌─────────────┐              public API
-│  Controller  │── sync ──▶        │
-│   (device)   │         ┌─────────▼──────────┐
-└─────────────┘         │     Dashboard       │
-                        │  (read-only web UI) │
-                        └─────────────────────┘
+### Architecture
+
+```mermaid
+graph LR
+  D1["<b>Device 01</b><br/>MacBook Pro"] -- sync --> W["<b>Cloudflare Worker</b><br/>+ D1 Database"]
+  D2["<b>Device 02</b><br/>Mac Mini"] -- sync --> W
+  D3["<b>Device 03</b><br/>Linux Server"] -- sync --> W
+  W -- public API --> Dashboard["<b>Dashboard</b><br/>read-only web UI"]
 ```
 
 ## Quickstart
