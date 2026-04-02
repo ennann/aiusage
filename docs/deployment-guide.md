@@ -121,7 +121,7 @@ npx wrangler deploy
 ### Install the controller
 
 ```bash
-npm install -g @aiusage/controller
+npm install -g @aiusage/cli
 ```
 
 ### Register the device

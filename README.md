@@ -1,4 +1,4 @@
-<p align="center"><code>npm i -g @aiusage/controller</code></p>
+<p align="center"><code>npm i -g @aiusage/cli</code></p>
 
 <p align="center">
   <strong>AIUsage</strong> tracks token usage and costs across all your AI tools and devices,<br>
@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/@aiusage/controller"><img src="https://img.shields.io/npm/v/@aiusage/controller?label=npm&color=cb0000&logo=npm" alt="npm" /></a>
+  <a href="https://www.npmjs.com/package/@aiusage/cli"><img src="https://img.shields.io/npm/v/@aiusage/cli?label=npm&color=cb0000&logo=npm" alt="npm" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT License" /></a>
   <a href="https://workers.cloudflare.com"><img src="https://img.shields.io/badge/Cloudflare-Workers-F38020?logo=cloudflare&logoColor=white" alt="Cloudflare Workers" /></a>
   <a href="https://developers.cloudflare.com/d1"><img src="https://img.shields.io/badge/Cloudflare-D1-F38020?logo=cloudflare&logoColor=white" alt="Cloudflare D1" /></a>
@@ -83,7 +83,7 @@ pnpm setup
 ### Local reports (no server needed)
 
 ```bash
-npm i -g @aiusage/controller
+npm i -g @aiusage/cli
 aiusage report --range 7d
 ```
 
@@ -92,21 +92,8 @@ aiusage report --range 7d
 | Document | Description |
 |----------|-------------|
 | [**Deployment Guide**](./docs/deployment-guide.md) | Full setup walkthrough, CLI reference, API docs |
-| [**Controller README**](./packages/controller/README.md) | CLI tool details and all commands |
+| [**CLI README**](./packages/cli/README.md) | CLI tool details and all commands |
 
-## Project Structure
-
-```
-aiusage/
-├── packages/
-│   ├── controller/    # CLI tool (@aiusage/controller on npm)
-│   ├── worker/        # Cloudflare Worker + D1 API
-│   ├── dashboard/     # React SPA analytics UI
-│   └── shared/        # Shared types and constants
-├── skills/            # AI agent deployment skills
-├── scripts/           # One-click deployment wizard
-└── docs/              # Guides and references
-```
 
 ## License
 

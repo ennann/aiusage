@@ -1,4 +1,4 @@
-<p align="center"><code>npm i -g @aiusage/controller</code></p>
+<p align="center"><code>npm i -g @aiusage/cli</code></p>
 
 <p align="center">
   <strong>AIUsage</strong> 追踪所有 AI 工具在所有设备上的 Token 用量与成本，<br>
@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/@aiusage/controller"><img src="https://img.shields.io/npm/v/@aiusage/controller?label=npm&color=cb0000&logo=npm" alt="npm" /></a>
+  <a href="https://www.npmjs.com/package/@aiusage/cli"><img src="https://img.shields.io/npm/v/@aiusage/cli?label=npm&color=cb0000&logo=npm" alt="npm" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT License" /></a>
   <a href="https://workers.cloudflare.com"><img src="https://img.shields.io/badge/Cloudflare-Workers-F38020?logo=cloudflare&logoColor=white" alt="Cloudflare Workers" /></a>
   <a href="https://developers.cloudflare.com/d1"><img src="https://img.shields.io/badge/Cloudflare-D1-F38020?logo=cloudflare&logoColor=white" alt="Cloudflare D1" /></a>
@@ -83,7 +83,7 @@ pnpm setup
 ### 本地报告（无需服务端）
 
 ```bash
-npm i -g @aiusage/controller
+npm i -g @aiusage/cli
 aiusage report --range 7d
 ```
 
@@ -92,21 +92,8 @@ aiusage report --range 7d
 | 文档 | 说明 |
 |------|------|
 | [**部署指南**](./docs/deployment-guide.md) | 完整部署流程、CLI 参考、API 文档 |
-| [**Controller README**](./packages/controller/README.md) | CLI 工具详情与全部命令 |
+| [**CLI README**](./packages/cli/README.md) | CLI 工具详情与全部命令 |
 
-## 项目结构
-
-```
-aiusage/
-├── packages/
-│   ├── controller/    # CLI 工具（npm: @aiusage/controller）
-│   ├── worker/        # Cloudflare Worker + D1 API
-│   ├── dashboard/     # React 分析看板
-│   └── shared/        # 共享类型与常量
-├── skills/            # AI 代理部署指南
-├── scripts/           # 一键部署向导
-└── docs/              # 使用指南与参考
-```
 
 ## 许可证
 

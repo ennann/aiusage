@@ -1,13 +1,13 @@
 {
-  "name": "@aiusage/controller",
-  "version": "0.1.1",
-  "description": "CLI tool for tracking and syncing Claude Code & Codex token usage.",
+  "name": "@aiusage/cli",
+  "version": "0.2.0",
+  "description": "Track and sync AI tool token usage across devices.",
   "license": "MIT",
   "private": false,
   "repository": {
     "type": "git",
     "url": "https://github.com/ennann/aiusage.git",
-    "directory": "packages/controller"
+    "directory": "packages/cli"
   },
   "homepage": "https://github.com/ennann/aiusage",
   "bugs": {

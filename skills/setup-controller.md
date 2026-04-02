@@ -11,7 +11,7 @@ You are setting up the AIUsage controller CLI on the user's device so it can sca
 ## Step 1: Install the controller
 
 ```bash
-npm install -g @aiusage/controller
+npm install -g @aiusage/cli
 ```
 
 Verify:
@@ -122,5 +122,5 @@ aiusage config set privacy.projectVisibility plain    # real names (private depl
 - **"缺少 siteId"** → Run `aiusage enroll` first with server URL and credentials
 - **"缺少 deviceToken"** → Enrollment failed or config lost; re-run `aiusage enroll`
 - **"请求失败 (401)"** → ENROLL_TOKEN mismatch or device was disabled; verify with server admin
-- **"检测到通过 npx 运行"** → Schedule requires global install: `npm i -g @aiusage/controller`
+- **"检测到通过 npx 运行"** → Schedule requires global install: `npm i -g @aiusage/cli`
 - **No data after sync** → Check `aiusage scan` locally first; verify tool log directories exist

@@ -62,7 +62,7 @@ function resolveCommandPaths(): { nodePath: string; scriptPath: string } {
   const scriptPath = resolve(process.argv[1]);
   if (scriptPath.includes('_npx') || scriptPath.includes('/npx-')) {
     throw new Error(
-      '检测到通过 npx 运行，定时任务需要全局安装。\n请先执行: npm install -g @aiusage/controller',
+      '检测到通过 npx 运行，定时任务需要全局安装。\n请先执行: npm install -g @aiusage/cli',
     );
   }
   return { nodePath: process.execPath, scriptPath };

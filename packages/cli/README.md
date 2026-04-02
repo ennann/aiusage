@@ -1,6 +1,6 @@
-# @aiusage/controller
+# @aiusage/cli
 
-`@aiusage/controller` is the AIUsage command-line tool for:
+`@aiusage/cli` is the AIUsage command-line tool for:
 
 - scanning local Claude Code and Codex token usage
 - printing local usage summaries for the last 7 days, 30 days, 90 days, or all history
@@ -10,13 +10,13 @@
 ## Install
 
 ```bash
-npm install -g @aiusage/controller
+npm install -g @aiusage/cli
 ```
 
 Or run it directly with `npx`:
 
 ```bash
-npx @aiusage/controller --help
+npx @aiusage/cli --help
 ```
 
 After installation:

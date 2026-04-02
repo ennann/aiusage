@@ -326,7 +326,7 @@ async function main() {
   console.log('');
   console.log(bold('  Connect your device:'));
   console.log('');
-  console.log(cyan(`  npm i -g @aiusage/controller`));
+  console.log(cyan(`  npm i -g @aiusage/cli`));
   console.log(cyan(`  aiusage enroll \\`));
   console.log(cyan(`    --server ${url} \\`));
   console.log(cyan(`    --site-id ${siteId} \\`));
