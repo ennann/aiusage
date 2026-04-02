@@ -61,26 +61,23 @@ graph LR
 
 ## 快速开始
 
-### 让你的 AI 代理帮你部署
+### 让 AI 代理帮你部署
 
-AIUsage 提供了 [skill 文件](./skills/)，任何 AI 编程代理都能按步骤完成部署：
+复制以下提示词，粘贴给你的 AI 编程代理（Claude Code、Codex、Copilot、Gemini 等）：
 
-| Skill | 功能 |
-|-------|------|
-| [`skills/deploy-server.md`](./skills/deploy-server.md) | 部署 Cloudflare Worker + D1 + 看板 |
-| [`skills/setup-controller.md`](./skills/setup-controller.md) | 安装 CLI 并接入设备 |
+```text
+克隆 https://github.com/ennann/aiusage.git，阅读 skills/deploy-server.md，
+帮我把 AIUsage 部署到我的 Cloudflare 账户。
+部署完成后，按照 skills/setup-controller.md 把这台设备接入。
+```
 
-告诉你的 AI 代理：
-
-> 阅读 `skills/deploy-server.md`，帮我部署 AIUsage。
-
-### 手动部署
+### 或手动部署
 
 ```bash
 git clone https://github.com/ennann/aiusage.git
 cd aiusage && pnpm install
 npx wrangler login
-pnpm setup                # 交互式一键部署向导
+pnpm setup
 ```
 
 ### 本地报告（无需服务端）

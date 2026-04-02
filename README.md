@@ -63,24 +63,21 @@ graph LR
 
 ### Deploy with your AI agent
 
-AIUsage provides [skill files](./skills/) that any AI coding agent can follow to deploy the full stack:
+Copy this prompt, paste it into your AI coding agent (Claude Code, Codex, Copilot, Gemini, etc.):
 
-| Skill | What it does |
-|-------|-------------|
-| [`skills/deploy-server.md`](./skills/deploy-server.md) | Deploy Cloudflare Worker + D1 + Dashboard |
-| [`skills/setup-controller.md`](./skills/setup-controller.md) | Install CLI and connect a device |
+```text
+Clone https://github.com/ennann/aiusage.git, read skills/deploy-server.md,
+and help me deploy AIUsage to my Cloudflare account.
+After the server is up, follow skills/setup-controller.md to connect this device.
+```
 
-Just tell your AI agent:
-
-> Read `skills/deploy-server.md` and help me deploy AIUsage.
-
-### Deploy manually
+### Or deploy manually
 
 ```bash
 git clone https://github.com/ennann/aiusage.git
 cd aiusage && pnpm install
 npx wrangler login
-pnpm setup                # interactive one-click wizard
+pnpm setup
 ```
 
 ### Local reports (no server needed)
