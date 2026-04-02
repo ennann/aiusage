@@ -28,7 +28,7 @@ A self-hosted, privacy-first system for tracking how much you spend on AI coding
 ### Supported Tools
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Claude_Code-191919?style=for-the-badge&logo=anthropic&logoColor=white" alt="Claude Code" />
+  <img src="https://img.shields.io/badge/Claude_Code-D97757?style=for-the-badge&logo=anthropic&logoColor=white" alt="Claude Code" />
   <img src="https://img.shields.io/badge/Codex_CLI-412991?style=for-the-badge&logo=openai&logoColor=white" alt="Codex CLI" />
   <img src="https://img.shields.io/badge/Copilot_CLI-000?style=for-the-badge&logo=githubcopilot&logoColor=white" alt="Copilot CLI" />
   <img src="https://img.shields.io/badge/Gemini_CLI-8E75B2?style=for-the-badge&logo=googlegemini&logoColor=white" alt="Gemini CLI" />
@@ -66,9 +66,9 @@ graph LR
 Copy this prompt, paste it into your AI coding agent (Claude Code, Codex, Copilot, Gemini, etc.):
 
 ```text
-Clone https://github.com/ennann/aiusage.git, read skills/deploy-server.md,
+Clone https://github.com/ennann/aiusage.git, read skills/deploy-server/deploy-server.md,
 and help me deploy AIUsage to my Cloudflare account.
-After the server is up, follow skills/setup-controller.md to connect this device.
+After the server is up, follow skills/setup-controller/setup-controller.md to connect this device.
 ```
 
 ### Or deploy manually
@@ -87,11 +87,25 @@ npm i -g @aiusage/cli
 aiusage report --range 7d
 ```
 
+## Staying Up to Date
+
+AIUsage uses a **fork-based update model** — fork this repo, connect your fork to Cloudflare Workers via Git integration, and updates flow automatically.
+
+1. **Fork** this repository to your GitHub account
+2. **Connect** your fork to Cloudflare Workers (Git integration)
+3. **Sync** upstream updates via GitHub's "Sync fork" button or `git merge upstream/main`
+4. Cloudflare **auto-redeploys** on every push to your fork
+
+CLI updates are separate: `npm update -g @aiusage/cli`
+
+See the [**Update Guide**](./docs/update-guide.md) for detailed instructions, including fully automatic sync via GitHub Actions.
+
 ## Docs
 
 | Document | Description |
 |----------|-------------|
 | [**Deployment Guide**](./docs/deployment-guide.md) | Full setup walkthrough, CLI reference, API docs |
+| [**Update Guide**](./docs/update-guide.md) | Fork-based update mechanism and auto-deploy setup |
 | [**CLI README**](./packages/cli/README.md) | CLI tool details and all commands |
 
 

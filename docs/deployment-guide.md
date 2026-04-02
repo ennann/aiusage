@@ -1,6 +1,6 @@
 # AIUsage Deployment Guide
 
-This guide covers deploying the AIUsage server and connecting devices. For AI-assisted deployment, see the [skills/](../skills/) directory.
+This guide covers deploying the AIUsage server and connecting devices. For AI-assisted deployment, see the [skills/](../skills/) directory — each skill is in its own folder with YAML frontmatter.
 
 ## Overview
 

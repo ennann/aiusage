@@ -469,6 +469,115 @@ const catalog: PricingCatalog = {
         },
       },
     },
+    google: {
+      'gemini-cli': {
+        models: {
+          'gemini-2.5-pro': {
+            input_per_million_usd: 1.25,
+            output_per_million_usd: 10,
+            cached_input_per_million_usd: 0.31,
+            cache_write_5m_per_million_usd: 0,
+            cache_write_1h_per_million_usd: 0,
+          },
+          'gemini-2.5-flash': {
+            input_per_million_usd: 0.15,
+            output_per_million_usd: 0.6,
+            cached_input_per_million_usd: 0.0375,
+            cache_write_5m_per_million_usd: 0,
+            cache_write_1h_per_million_usd: 0,
+          },
+          'gemini-2.0-flash': {
+            input_per_million_usd: 0.1,
+            output_per_million_usd: 0.4,
+            cached_input_per_million_usd: 0.025,
+            cache_write_5m_per_million_usd: 0,
+            cache_write_1h_per_million_usd: 0,
+          },
+          'gemini-1.5-pro': {
+            input_per_million_usd: 1.25,
+            output_per_million_usd: 5,
+            cached_input_per_million_usd: 0.3125,
+            cache_write_5m_per_million_usd: 0,
+            cache_write_1h_per_million_usd: 0,
+          },
+          'gemini-1.5-flash': {
+            input_per_million_usd: 0.075,
+            output_per_million_usd: 0.3,
+            cached_input_per_million_usd: 0.01875,
+            cache_write_5m_per_million_usd: 0,
+            cache_write_1h_per_million_usd: 0,
+          },
+        },
+      },
+    },
+    github: {
+      'copilot-cli': {
+        models: {
+          'gpt-4o': {
+            input_per_million_usd: 2.5,
+            output_per_million_usd: 10,
+            cached_input_per_million_usd: 1.25,
+            cache_write_5m_per_million_usd: 0,
+            cache_write_1h_per_million_usd: 0,
+          },
+          'gpt-4o-mini': {
+            input_per_million_usd: 0.15,
+            output_per_million_usd: 0.6,
+            cached_input_per_million_usd: 0.075,
+            cache_write_5m_per_million_usd: 0,
+            cache_write_1h_per_million_usd: 0,
+          },
+          'claude-sonnet-4': {
+            input_per_million_usd: 3,
+            output_per_million_usd: 15,
+            cached_input_per_million_usd: 0.3,
+            cache_write_5m_per_million_usd: 0,
+            cache_write_1h_per_million_usd: 0,
+          },
+          'o3-mini': {
+            input_per_million_usd: 1.1,
+            output_per_million_usd: 4.4,
+            cached_input_per_million_usd: 0.55,
+            cache_write_5m_per_million_usd: 0,
+            cache_write_1h_per_million_usd: 0,
+          },
+          'gemini-2.0-flash': {
+            input_per_million_usd: 0.1,
+            output_per_million_usd: 0.4,
+            cached_input_per_million_usd: 0.025,
+            cache_write_5m_per_million_usd: 0,
+            cache_write_1h_per_million_usd: 0,
+          },
+        },
+      },
+    },
+    sourcegraph: {
+      amp: {
+        models: {
+          'claude-sonnet-4': {
+            input_per_million_usd: 3,
+            output_per_million_usd: 15,
+            cached_input_per_million_usd: 0.3,
+            cache_write_5m_per_million_usd: 0,
+            cache_write_1h_per_million_usd: 0,
+          },
+          'claude-sonnet-3.7': {
+            input_per_million_usd: 3,
+            output_per_million_usd: 15,
+            cached_input_per_million_usd: 0.3,
+            cache_write_5m_per_million_usd: 0,
+            cache_write_1h_per_million_usd: 0,
+          },
+          'gemini-2.5-pro': {
+            input_per_million_usd: 1.25,
+            output_per_million_usd: 10,
+            cached_input_per_million_usd: 0.31,
+            cache_write_5m_per_million_usd: 0,
+            cache_write_1h_per_million_usd: 0,
+          },
+        },
+      },
+    },
   },
 };
 

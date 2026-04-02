@@ -147,7 +147,7 @@ export async function handleIngest(request: Request, env: Env): Promise<Response
         .run();
     }
 
-    // 计算 top project / model
+    // 计算 top project / model 并回填 daily_usage
     const topProject = await env.DB.prepare(`
       SELECT project, SUM(estimated_cost_usd) as total_cost
       FROM daily_usage_breakdown
@@ -164,40 +164,18 @@ export async function handleIngest(request: Request, env: Env): Promise<Response
     `).bind(tokenPayload.deviceId, day.usageDate)
       .first<{ model: string; total_cost: number }>();
 
-    // 回填 daily_usage 的 top project / model
     await env.DB.prepare(`
-      INSERT INTO daily_usage
-        (device_id, usage_date, event_count, input_tokens, cached_input_tokens,
-         cache_write_tokens, output_tokens, reasoning_output_tokens,
-         estimated_cost_usd, cost_status, pricing_version,
-         top_project_by_cost, top_project_cost_usd, top_model_by_cost, top_model_cost_usd,
-         created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT (device_id, usage_date)
-      DO UPDATE SET
-        event_count = excluded.event_count,
-        input_tokens = excluded.input_tokens,
-        cached_input_tokens = excluded.cached_input_tokens,
-        cache_write_tokens = excluded.cache_write_tokens,
-        output_tokens = excluded.output_tokens,
-        reasoning_output_tokens = excluded.reasoning_output_tokens,
-        estimated_cost_usd = excluded.estimated_cost_usd,
-        cost_status = excluded.cost_status,
-        pricing_version = excluded.pricing_version,
-        top_project_by_cost = excluded.top_project_by_cost,
-        top_project_cost_usd = excluded.top_project_cost_usd,
-        top_model_by_cost = excluded.top_model_by_cost,
-        top_model_cost_usd = excluded.top_model_cost_usd,
-        updated_at = excluded.updated_at
+      UPDATE daily_usage
+      SET top_project_by_cost = ?, top_project_cost_usd = ?,
+          top_model_by_cost = ?, top_model_cost_usd = ?,
+          updated_at = ?
+      WHERE device_id = ? AND usage_date = ?
     `)
       .bind(
-        tokenPayload.deviceId, day.usageDate,
-        dayTotalEvents, dayTotalInput, dayTotalCachedInput, dayTotalCacheWrite,
-        dayTotalOutput, dayTotalReasoning,
-        Math.round(dayTotalCost * 10000) / 10000, dayCostStatus, 'current',
         topProject?.project ?? 'unknown', topProject?.total_cost ?? 0,
         topModel?.model ?? 'unknown', topModel?.total_cost ?? 0,
-        now, now,
+        now,
+        tokenPayload.deviceId, day.usageDate,
       )
       .run();
 
