@@ -14,6 +14,8 @@ export interface AIUsageConfig {
   privacy?: {
     projectVisibility?: 'hidden' | 'masked' | 'plain';
   };
+  lang?: 'en' | 'zh';
+  emoji?: boolean;
 }
 
 const CONFIG_DIR = join(homedir(), '.aiusage');
@@ -112,6 +114,24 @@ export function setConfigValue(
     const alias = rest.join(' ').trim();
     if (!alias) throw new Error('project.alias 别名不能为空');
     next.projectAliases = { ...(next.projectAliases ?? {}), [from]: alias };
+    return next;
+  }
+
+  if (keyPath === 'lang') {
+    const value = requireSingleValue(keyPath, values);
+    if (value !== 'en' && value !== 'zh') {
+      throw new Error('lang only supports en or zh');
+    }
+    next.lang = value;
+    return next;
+  }
+
+  if (keyPath === 'emoji') {
+    const value = requireSingleValue(keyPath, values);
+    if (value !== 'true' && value !== 'false') {
+      throw new Error('emoji only supports true or false');
+    }
+    next.emoji = value === 'true';
     return next;
   }
 
