@@ -1,3 +1,12 @@
+---
+name: setup-controller
+description: Set up the AIUsage CLI controller on a device to scan local AI tool usage and sync data to the AIUsage server.
+trigger: when the user asks to connect a device, set up the CLI, or install the controller
+tools:
+  - Bash
+  - Read
+---
+
 # AIUsage Controller Setup Skill
 
 You are setting up the AIUsage controller CLI on the user's device so it can scan local AI tool usage and sync data to their AIUsage server.
@@ -5,7 +14,7 @@ You are setting up the AIUsage controller CLI on the user's device so it can sca
 ## Prerequisites
 
 1. **Node.js >= 18** — run `node --version`
-2. **An AIUsage server already deployed** — you need the dashboard URL, SITE_ID, and ENROLL_TOKEN (see `skills/deploy-server.md` if not yet deployed)
+2. **An AIUsage server already deployed** — you need the dashboard URL, SITE_ID, and ENROLL_TOKEN (see `skills/deploy-server/deploy-server.md` if not yet deployed)
 3. **At least one AI coding tool installed** — Claude Code, Codex, Copilot CLI, Gemini CLI, etc.
 
 ## Step 1: Install the controller
