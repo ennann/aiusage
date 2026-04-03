@@ -6,6 +6,7 @@ import { renderReport } from './render.js';
 import {
   type SyncTarget,
   detectDeviceId,
+  findTargetOrThrow,
   getConfigPath,
   normalizeServerUrl,
   readConfig,
@@ -179,15 +180,23 @@ async function runEnroll(flags: Record<string, string | boolean>) {
 
 async function runSync(flags: Record<string, string | boolean>) {
   const config = await readConfig();
-  const apiBaseUrl = resolveServer(flags.server, config.apiBaseUrl);
-  const siteId = resolveRequiredString(undefined, config.siteId, '缺少 siteId，请先执行 init 或 enroll');
-  const deviceId = resolveRequiredString(undefined, config.deviceId, '缺少 deviceId，请先执行 init 或 enroll');
-  const deviceToken = resolveRequiredString(undefined, config.deviceToken, '缺少 deviceToken，请先执行 enroll');
+  const allTargets = config.targets ?? [];
+  if (allTargets.length === 0) {
+    throw new Error('未配置任何上报目标，请先执行 aiusage enroll');
+  }
 
+  const deviceId = resolveRequiredString(undefined, config.deviceId, '缺少 deviceId，请先执行 enroll');
+
+  // 确定目标列表
+  const targetName = resolveOptionalString(flags.target, undefined);
+  const targets = targetName
+    ? [findTargetOrThrow(config, targetName)]
+    : allTargets;
+
+  // ── 日期解析（保持现有逻辑不变） ──
   const requestedDate = typeof flags.date === 'string' ? flags.date : undefined;
   const fromDate = typeof flags.from === 'string' ? flags.from : undefined;
   const toDate = typeof flags.to === 'string' ? flags.to : undefined;
-
   const includeToday = Boolean(flags.today);
 
   let targetDates: string[];
@@ -205,6 +214,7 @@ async function runSync(flags: Record<string, string | boolean>) {
     }
   }
 
+  // 扫描一次，所有 target 共享结果
   console.log(`扫描 ${targetDates.length} 天 (${targetDates[0]} ~ ${targetDates[targetDates.length - 1]})${includeToday ? ' [含今日]' : ''} ...`);
 
   const results = await scanDates(targetDates, { projectAliases: config.projectAliases });
@@ -219,40 +229,52 @@ async function runSync(flags: Record<string, string | boolean>) {
 
   console.log(`发现 ${allDays.length} 天有数据，开始上传 ...`);
 
-  const BATCH_SIZE = 30;
-  let totalProcessed = 0;
-  const allCostSummary: Record<string, { estimatedCostUsd: number; costStatus: string }> = {};
+  // 逐 target 上传
+  const uploadResults: Array<{ target: string; daysProcessed: number; costSummary: Record<string, { estimatedCostUsd: number; costStatus: string }> }> = [];
 
-  for (let i = 0; i < allDays.length; i += BATCH_SIZE) {
-    const batch = allDays.slice(i, i + BATCH_SIZE);
-    const batchNum = Math.floor(i / BATCH_SIZE) + 1;
-    const totalBatches = Math.ceil(allDays.length / BATCH_SIZE);
-    if (totalBatches > 1) {
-      console.log(`  批次 ${batchNum}/${totalBatches}: ${batch[0].usageDate} ~ ${batch[batch.length - 1].usageDate}`);
+  for (const target of targets) {
+    if (!target.deviceToken) {
+      console.log(`跳过 "${target.name}"：未注册（缺少 deviceToken）`);
+      continue;
+    }
+    if (targets.length > 1) {
+      console.log(`上传至 "${target.name}" (${target.apiBaseUrl}) ...`);
     }
 
-    const response = await uploadDailyUsage(
-      apiBaseUrl,
-      { siteId, deviceId, deviceAlias: config.deviceAlias, deviceToken },
-      batch,
-    );
-    totalProcessed += response.daysProcessed;
-    Object.assign(allCostSummary, response.costSummary);
+    const BATCH_SIZE = 30;
+    let totalProcessed = 0;
+    const allCostSummary: Record<string, { estimatedCostUsd: number; costStatus: string }> = {};
+
+    for (let i = 0; i < allDays.length; i += BATCH_SIZE) {
+      const batch = allDays.slice(i, i + BATCH_SIZE);
+      const totalBatches = Math.ceil(allDays.length / BATCH_SIZE);
+      if (totalBatches > 1) {
+        const batchNum = Math.floor(i / BATCH_SIZE) + 1;
+        console.log(`  批次 ${batchNum}/${totalBatches}: ${batch[0].usageDate} ~ ${batch[batch.length - 1].usageDate}`);
+      }
+
+      const response = await uploadDailyUsage(
+        target.apiBaseUrl,
+        { siteId: target.siteId, deviceId, deviceAlias: config.deviceAlias, deviceToken: target.deviceToken },
+        batch,
+      );
+      totalProcessed += response.daysProcessed;
+      Object.assign(allCostSummary, response.costSummary);
+    }
+
+    // 更新该 target 的 lastSuccessfulUploadAt
+    target.lastSuccessfulUploadAt = new Date().toISOString();
+
+    uploadResults.push({ target: target.name, daysProcessed: totalProcessed, costSummary: allCostSummary });
   }
 
-  await writeConfig({
-    ...config,
-    apiBaseUrl,
-    siteId,
-    deviceId,
-    deviceToken,
-    lastSuccessfulUploadAt: new Date().toISOString(),
-  });
+  // 回写配置（targets 已在循环中被 mutate）
+  await writeConfig(config);
 
   console.log(JSON.stringify({
+    targets: uploadResults.map(r => r.target),
     uploadedDays: allDays.map(day => day.usageDate),
-    daysProcessed: totalProcessed,
-    costSummary: allCostSummary,
+    results: uploadResults,
   }, null, 2));
 }
 
