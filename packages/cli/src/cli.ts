@@ -232,25 +232,21 @@ async function runSync(flags: Record<string, string | boolean>) {
   const requestedDate = typeof flags.date === 'string' ? flags.date : undefined;
   const fromDate = typeof flags.from === 'string' ? flags.from : undefined;
   const toDate = typeof flags.to === 'string' ? flags.to : undefined;
-  const includeToday = Boolean(flags.today);
-
   let targetDates: string[];
   if (requestedDate) {
     targetDates = [requestedDate];
   } else if (fromDate) {
-    targetDates = buildDateRange(fromDate, toDate ?? getYesterdayDate());
+    targetDates = buildDateRange(fromDate, toDate ?? getTodayDate());
   } else {
     const lookbackDays = typeof flags.lookback === 'string'
       ? parsePositiveInt(flags.lookback, '--lookback')
       : defaultLookbackDays(config);
     targetDates = getClosedDates(lookbackDays);
-    if (includeToday) {
-      targetDates.push(getTodayDate());
-    }
+    targetDates.push(getTodayDate());
   }
 
   // 扫描一次，所有 target 共享结果
-  console.log(`扫描 ${targetDates.length} 天 (${targetDates[0]} ~ ${targetDates[targetDates.length - 1]})${includeToday ? ' [含今日]' : ''} ...`);
+  console.log(`扫描 ${targetDates.length} 天 (${targetDates[0]} ~ ${targetDates[targetDates.length - 1]}) ...`);
 
   const results = await scanDates(targetDates, { projectAliases: config.projectAliases });
   const allDays = results
