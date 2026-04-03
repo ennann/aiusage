@@ -82,9 +82,9 @@ export async function scanGeminiDates(
       continue;
     }
 
-    const messages = session.data?.messages ?? session.data?.history ?? [];
-    const fallbackModel = session.data?.model ?? session.model ?? 'unknown';
-    const fallbackTs = session.data?.createTime ?? session.createTime;
+    const messages = session.messages ?? session.history ?? session.data?.messages ?? session.data?.history ?? [];
+    const fallbackModel = session.model ?? session.data?.model ?? 'unknown';
+    const fallbackTs = session.createTime ?? session.startTime ?? session.data?.createTime;
 
     for (const msg of messages) {
       const tokens = extractTokens(msg);

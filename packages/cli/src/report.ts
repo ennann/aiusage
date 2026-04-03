@@ -148,8 +148,58 @@ function buildPresetDates(range: Exclude<ReportRange, 'all'>): string[] {
 
 async function discoverAllDates(): Promise<string[]> {
   const dates = new Set<string>();
-  await Promise.all([discoverClaudeDates(dates), discoverCodexDates(dates)]);
+  await Promise.all([
+    discoverClaudeDates(dates),
+    discoverCodexDates(dates),
+    discoverGeminiDates(dates),
+  ]);
   return [...dates].sort();
+}
+
+async function discoverGeminiDates(dates: Set<string>): Promise<void> {
+  const baseDir = join(homedir(), '.gemini', 'tmp');
+  const files: string[] = [];
+  try {
+    await walkForGeminiJsonl(baseDir, files);
+  } catch {
+    return;
+  }
+
+  for (const filePath of files) {
+    const content = await safeReadUtf8(filePath);
+    if (!content) continue;
+
+    let session: { messages?: { timestamp?: string }[]; history?: { timestamp?: string }[] };
+    try {
+      session = JSON.parse(content);
+    } catch {
+      continue;
+    }
+
+    const messages = session.messages ?? session.history ?? [];
+    for (const msg of messages) {
+      const ts = parseTimestamp(msg.timestamp);
+      if (ts) dates.add(toDateKey(ts));
+    }
+  }
+}
+
+async function walkForGeminiJsonl(dir: string, result: string[]): Promise<void> {
+  let entries;
+  try {
+    entries = await readdir(dir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+
+  for (const entry of entries) {
+    const fullPath = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      await walkForGeminiJsonl(fullPath, result);
+    } else if (entry.name.endsWith('.json')) {
+      result.push(fullPath);
+    }
+  }
 }
 
 async function discoverClaudeDates(dates: Set<string>): Promise<void> {
@@ -401,6 +451,13 @@ const OPENAI_PRICING: Record<string, { input: number; cached_input: number | nul
   'codex-mini-latest': { input: 1.5, cached_input: 0.375, output: 6, estimated: false },
 };
 
+const GEMINI_PRICING: Record<string, { input: number; cache_read: number; output: number }> = {
+  'gemini-3-flash': { input: 0.1, cache_read: 0.025, output: 0.4 },
+  'gemini-2.0-flash': { input: 0.1, cache_read: 0.025, output: 0.4 },
+  'gemini-1.5-flash': { input: 0.075, cache_read: 0.01875, output: 0.3 },
+  'gemini-1.5-pro': { input: 3.5, cache_read: 0.875, output: 10.5 },
+};
+
 function toBreakdownTotals(breakdown: IngestBreakdown, warnings: Set<string>): Totals {
   const estimatedCostUsd = calculateBreakdownCost(breakdown, warnings);
   return {
@@ -455,6 +512,23 @@ function calculateBreakdownCost(breakdown: IngestBreakdown, warnings: Set<string
     return (
       (breakdown.inputTokens / 1_000_000) * pricing.input +
       ((breakdown.cachedInputTokens / 1_000_000) * (pricing.cached_input ?? 0)) +
+      (breakdown.outputTokens / 1_000_000) * pricing.output
+    );
+  }
+
+  if (breakdown.provider === 'google' && breakdown.product === 'gemini-cli') {
+    const resolved = resolveModel(breakdown.model, GEMINI_PRICING);
+    if (!resolved) {
+      warnings.add(`Gemini 模型 ${breakdown.model} 未配置公开单价，已跳过成本估算。`);
+      return 0;
+    }
+    const pricing = GEMINI_PRICING[resolved.model];
+    if (resolved.normalized) {
+      warnings.add(`${breakdown.model} 已按 ${resolved.model} 的公开单价估算。`);
+    }
+    return (
+      (breakdown.inputTokens / 1_000_000) * pricing.input +
+      (breakdown.cachedInputTokens / 1_000_000) * pricing.cache_read +
       (breakdown.outputTokens / 1_000_000) * pricing.output
     );
   }
