@@ -2,20 +2,34 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { homedir, hostname } from 'node:os';
 import { basename, join } from 'node:path';
 
+export interface SyncTarget {
+  name: string;
+  apiBaseUrl: string;
+  siteId?: string;
+  deviceToken?: string;
+  lastSuccessfulUploadAt?: string;
+}
+
 export interface AIUsageConfig {
+  // 旧字段保留用于迁移检测
   apiBaseUrl?: string;
   siteId?: string;
+  deviceToken?: string;
+  lastSuccessfulUploadAt?: string;
+
+  // 设备级（所有 target 共享）
   deviceId?: string;
   deviceAlias?: string;
-  deviceToken?: string;
   lookbackDays?: number;
   projectAliases?: Record<string, string>;
-  lastSuccessfulUploadAt?: string;
   privacy?: {
     projectVisibility?: 'hidden' | 'masked' | 'plain';
   };
   lang?: 'en' | 'zh';
   emoji?: boolean;
+
+  // 多目标
+  targets?: SyncTarget[];
 }
 
 const CONFIG_DIR = join(homedir(), '.aiusage');
@@ -25,10 +39,33 @@ export function getConfigPath(): string {
   return CONFIG_PATH;
 }
 
+function migrateConfig(config: AIUsageConfig): AIUsageConfig {
+  if (config.targets || !config.apiBaseUrl) return config;
+
+  const target: SyncTarget = {
+    name: 'default',
+    apiBaseUrl: config.apiBaseUrl,
+    siteId: config.siteId,
+    deviceToken: config.deviceToken,
+    lastSuccessfulUploadAt: config.lastSuccessfulUploadAt,
+  };
+
+  return {
+    deviceId: config.deviceId,
+    deviceAlias: config.deviceAlias,
+    lookbackDays: config.lookbackDays,
+    projectAliases: config.projectAliases,
+    privacy: config.privacy,
+    lang: config.lang,
+    emoji: config.emoji,
+    targets: [target],
+  };
+}
+
 export async function readConfig(): Promise<AIUsageConfig> {
   try {
     const raw = await readFile(CONFIG_PATH, 'utf-8');
-    return JSON.parse(raw) as AIUsageConfig;
+    return migrateConfig(JSON.parse(raw) as AIUsageConfig);
   } catch {
     return {};
   }
@@ -60,22 +97,42 @@ export function getProjectAlias(rawProject: string, aliases?: Record<string, str
   return aliases[rawProject] ?? aliases[basename(rawProject)] ?? basename(rawProject) ?? rawProject ?? 'unknown';
 }
 
+export function findTarget(config: AIUsageConfig, name?: string): SyncTarget | undefined {
+  const targets = config.targets ?? [];
+  if (name) return targets.find(t => t.name === name);
+  return targets[0];
+}
+
+export function findTargetOrThrow(config: AIUsageConfig, name?: string): SyncTarget {
+  const target = findTarget(config, name);
+  if (!target) {
+    throw new Error(name
+      ? `未找到目标 "${name}"，可用: ${(config.targets ?? []).map(t => t.name).join(', ') || '(无)'}`
+      : '未配置任何上报目标，请先执行 aiusage enroll'
+    );
+  }
+  return target;
+}
+
+export function upsertTarget(config: AIUsageConfig, target: SyncTarget): AIUsageConfig {
+  const next = structuredClone(config);
+  const targets = next.targets ?? [];
+  const idx = targets.findIndex(t => t.name === target.name);
+  if (idx >= 0) {
+    targets[idx] = target;
+  } else {
+    targets.push(target);
+  }
+  next.targets = targets;
+  return next;
+}
+
 export function setConfigValue(
   config: AIUsageConfig,
   keyPath: string,
   values: string[],
 ): AIUsageConfig {
   const next = structuredClone(config);
-
-  if (keyPath === 'server' || keyPath === 'apiBaseUrl') {
-    next.apiBaseUrl = normalizeServerUrl(requireSingleValue(keyPath, values));
-    return next;
-  }
-
-  if (keyPath === 'siteId') {
-    next.siteId = requireSingleValue(keyPath, values);
-    return next;
-  }
 
   if (keyPath === 'device.id') {
     next.deviceId = requireSingleValue(keyPath, values);
@@ -84,11 +141,6 @@ export function setConfigValue(
 
   if (keyPath === 'device.alias') {
     next.deviceAlias = requireSingleValue(keyPath, values);
-    return next;
-  }
-
-  if (keyPath === 'device.token') {
-    next.deviceToken = requireSingleValue(keyPath, values);
     return next;
   }
 
