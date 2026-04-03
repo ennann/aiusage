@@ -150,17 +150,17 @@ export async function handleOverview(url: URL, env: Env): Promise<Response> {
       SELECT
         b.provider,
         b.product,
-        b.channel,
+        b.project,
         COALESCE(SUM(${TOTAL_TOKENS_SQL}), 0) AS total_tokens
       FROM daily_usage_breakdown b
       ${where.whereClause}
-      GROUP BY b.provider, b.product, b.channel
+      GROUP BY b.provider, b.product, b.project
       HAVING COALESCE(SUM(${TOTAL_TOKENS_SQL}), 0) > 0
-      ORDER BY total_tokens DESC, b.provider ASC, b.product ASC, b.channel ASC
+      ORDER BY total_tokens DESC, b.provider ASC, b.product ASC, b.project ASC
     `).bind(...where.params).all<{
       provider: string;
       product: string;
-      channel: string;
+      project: string;
       total_tokens: number;
     }>(),
     loadFacetOptions('device_id', filters, env),
@@ -217,7 +217,7 @@ export async function handleOverview(url: URL, env: Env): Promise<Response> {
       estimatedCostUsd: roundUsd(row.estimated_cost_usd ?? 0),
       eventCount: Number(row.event_count ?? 0),
     })),
-    sankey: buildSankey(flowRows.results ?? []),
+    sankey: await buildSankey(flowRows.results ?? [], env),
     filters: {
       selection: {
         range: filters.range,
@@ -336,18 +336,18 @@ function toFilterKey(column: string): FilterKey {
   return column as FilterKey;
 }
 
-function buildSankey(rows: Array<{
+async function buildSankey(rows: Array<{
   provider: string;
   product: string;
-  channel: string;
+  project: string;
   total_tokens: number;
-}>): {
+}>, env: Env): Promise<{
   nodes: Array<{ id: string; label: string; layer: number; totalTokens: number }>;
   links: Array<{ source: string; target: string; value: number }>;
-} {
+}> {
   const providerTotals = new Map<string, number>();
   const productTotals = new Map<string, number>();
-  const channelTotals = new Map<string, number>();
+  const projectTotals = new Map<string, number>();
   const leftLinks = new Map<string, number>();
   const rightLinks = new Map<string, number>();
 
@@ -357,12 +357,17 @@ function buildSankey(rows: Array<{
 
     providerTotals.set(row.provider, (providerTotals.get(row.provider) ?? 0) + value);
     productTotals.set(row.product, (productTotals.get(row.product) ?? 0) + value);
-    channelTotals.set(row.channel, (channelTotals.get(row.channel) ?? 0) + value);
+    projectTotals.set(row.project, (projectTotals.get(row.project) ?? 0) + value);
 
     const leftKey = `${row.provider}\u0000${row.product}`;
-    const rightKey = `${row.product}\u0000${row.channel}`;
+    const rightKey = `${row.product}\u0000${row.project}`;
     leftLinks.set(leftKey, (leftLinks.get(leftKey) ?? 0) + value);
     rightLinks.set(rightKey, (rightLinks.get(rightKey) ?? 0) + value);
+  }
+
+  const projectLabels = new Map<string, string>();
+  for (const [name] of projectTotals) {
+    projectLabels.set(name, await toPublicProjectName(name, env));
   }
 
   const nodes = [
@@ -378,9 +383,9 @@ function buildSankey(rows: Array<{
       layer: 1,
       totalTokens,
     })),
-    ...sortedNodeEntries(channelTotals).map(([label, totalTokens]) => ({
-      id: `channel:${label}`,
-      label,
+    ...sortedNodeEntries(projectTotals).map(([name, totalTokens]) => ({
+      id: `project:${name}`,
+      label: projectLabels.get(name) ?? name,
       layer: 2,
       totalTokens,
     })),
@@ -396,10 +401,10 @@ function buildSankey(rows: Array<{
       };
     }),
     ...sortedLinkEntries(rightLinks).map(([key, value]) => {
-      const [product, channel] = key.split('\u0000');
+      const [product, project] = key.split('\u0000');
       return {
         source: `product:${product}`,
-        target: `channel:${channel}`,
+        target: `project:${project}`,
         value,
       };
     }),

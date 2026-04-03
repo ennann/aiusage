@@ -51,7 +51,7 @@ const I18N = {
     channelShare: 'Channel Share', thisMonth: 'This Month',
     device: 'Device', product: 'Product', all: 'All',
     noData: 'No data', noFlowData: 'No flow data',
-    failedToLoad: 'Failed to load data', source: 'Source',
+    failedToLoad: 'Failed to load data',
     input: 'Input', cached: 'Cached', cacheWrite: 'Cache Write',
     output: 'Output', reasoning: 'Reasoning',
   },
@@ -67,7 +67,7 @@ const I18N = {
     channelShare: '渠道占比', thisMonth: '本月',
     device: '设备', product: '产品', all: '全部',
     noData: '暂无数据', noFlowData: '暂无流向数据',
-    failedToLoad: '加载失败', source: '源码',
+    failedToLoad: '加载失败',
     input: '输入', cached: '缓存', cacheWrite: '缓存写入',
     output: '输出', reasoning: '推理',
   },
@@ -110,6 +110,23 @@ const PROVIDER_COLORS: Record<string, string> = {
   opencode: '#16A34A',
   openclaw: '#EF4444',
 };
+
+const PROVIDER_LABELS: Record<string, string> = {
+  anthropic: 'Anthropic',
+  openai: 'OpenAI',
+  google: 'Google',
+  github: 'GitHub',
+  sourcegraph: 'Sourcegraph',
+  moonshot: 'Moonshot',
+  alibaba: 'Alibaba',
+  droid: 'Droid',
+  opencode: 'OpenCode',
+  openclaw: 'OpenClaw',
+};
+
+function providerLabel(id: string): string {
+  return PROVIDER_LABELS[id] ?? id;
+}
 
 const TOKEN_CONFIG = Object.fromEntries(
   TOKEN_SERIES.map((s) => [s.key, { label: s.label, color: s.color }]),
@@ -154,8 +171,13 @@ function formatUsdFull(v: number): string {
   return `$${Number(v || 0).toFixed(4)}`;
 }
 
-function formatCompact(v: number): string {
+function formatCompact(v: number, locale: Locale = 'en'): string {
   const n = Number(v || 0);
+  if (locale === 'zh') {
+    if (n >= 1e8) return `${(n / 1e8).toFixed(1)} 亿`;
+    if (n >= 1e4) return `${(n / 1e4).toFixed(1)} 万`;
+    return String(Math.round(n));
+  }
   if (n >= 1e9) return `${(n / 1e9).toFixed(1)}B`;
   if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`;
   if (n >= 1e3) return `${(n / 1e3).toFixed(1)}K`;
@@ -330,7 +352,9 @@ function transformSankey(input?: SankeyGraph) {
     );
   }
 
-  const nodeList = nodes.map((n) => ({ name: n.label || n.id }));
+  const nodeList = nodes.map((n) => ({
+    name: n.id.startsWith('provider:') ? providerLabel(n.label || n.id) : (n.label || n.id),
+  }));
   const idToIdx = new Map(nodes.map((n, i) => [n.id, i]));
 
   // Merge duplicate links (same source→target after folding)
@@ -628,7 +652,7 @@ function CostTrendChart({
   const barW = data.length <= 7 ? 28 : data.length <= 30 ? 14 : 6;
 
   const config = Object.fromEntries(
-    providers.map((p) => [p, { label: p, color: PROVIDER_COLORS[p] ?? '#94a3b8' }]),
+    providers.map((p) => [p, { label: providerLabel(p), color: PROVIDER_COLORS[p] ?? '#94a3b8' }]),
   ) satisfies ChartConfig;
 
   return (
@@ -670,7 +694,7 @@ function CostTrendChart({
       {providers.length > 1 && (
         <ChartLegend
           items={providers.map((p) => ({
-            label: p.charAt(0).toUpperCase() + p.slice(1),
+            label: providerLabel(p),
             color: PROVIDER_COLORS[p] ?? '#94a3b8',
           }))}
         />
@@ -679,7 +703,7 @@ function CostTrendChart({
   );
 }
 
-function TokenTrendChart({ data }: { data: OverviewPayload['tokenComposition'] }) {
+function TokenTrendChart({ data, locale }: { data: OverviewPayload['tokenComposition']; locale: Locale }) {
   if (!data.length) return <EmptyState label="No data" />;
   return (
     <ChartContainer config={TOKEN_CONFIG} className="h-[280px] w-full">
@@ -693,7 +717,7 @@ function TokenTrendChart({ data }: { data: OverviewPayload['tokenComposition'] }
           />
           <YAxis
             tickLine={false} axisLine={false} width={52} tickMargin={8}
-            tickFormatter={(v) => formatCompact(Number(v))} className="fill-slate-400 dark:fill-slate-500" fontSize={11}
+            tickFormatter={(v) => formatCompact(Number(v), locale)} className="fill-slate-400 dark:fill-slate-500" fontSize={11}
           />
           <ChartTooltip
             cursor={{ stroke: '#e2e8f0' }}
@@ -716,7 +740,7 @@ function TokenTrendChart({ data }: { data: OverviewPayload['tokenComposition'] }
   );
 }
 
-function TokenCompositionChart({ data }: { data: OverviewPayload['tokenComposition'] }) {
+function TokenCompositionChart({ data, locale }: { data: OverviewPayload['tokenComposition']; locale: Locale }) {
   if (!data.length) return <EmptyState label="No data" />;
   const barW = data.length <= 7 ? 28 : data.length <= 30 ? 14 : 6;
   return (
@@ -731,7 +755,7 @@ function TokenCompositionChart({ data }: { data: OverviewPayload['tokenCompositi
           />
           <YAxis
             tickLine={false} axisLine={false} width={52} tickMargin={8}
-            tickFormatter={(v) => formatCompact(Number(v))} className="fill-slate-400 dark:fill-slate-500" fontSize={11}
+            tickFormatter={(v) => formatCompact(Number(v), locale)} className="fill-slate-400 dark:fill-slate-500" fontSize={11}
           />
           <ChartTooltip
             cursor={{ fill: '#f8fafc' }}
@@ -996,9 +1020,9 @@ export function App() {
     return TOKEN_SERIES.map((s) => ({
       label: t[tokenLegendLabels[s.key] ?? 'input'],
       color: s.color,
-      value: formatCompact(arrSum(tc.map((d) => Number(d[s.key] || 0)))),
+      value: formatCompact(arrSum(tc.map((d) => Number(d[s.key] || 0))), locale),
     }));
-  }, [overview, t]);
+  }, [overview, t, locale]);
 
   return (
     <main className="mx-auto max-w-[1200px] px-4 pb-16 sm:px-6 lg:px-8">
@@ -1112,16 +1136,16 @@ export function App() {
               <KpiCard label={t.estimatedCost} value={formatUsd(overview?.totalCostUsd ?? 0)} highlight />
             </div>
             <div className="card">
-              <KpiCard label={t.totalTokens} value={formatCompact(kpis?.totalTokens ?? 0)} />
+              <KpiCard label={t.totalTokens} value={formatCompact(kpis?.totalTokens ?? 0, locale)} />
             </div>
             <div className="card">
-              <KpiCard label={t.inputTokens} value={formatCompact(kpis?.inputTokens ?? 0)} />
+              <KpiCard label={t.inputTokens} value={formatCompact(kpis?.inputTokens ?? 0, locale)} />
             </div>
             <div className="card">
-              <KpiCard label={t.outputTokens} value={formatCompact(kpis?.outputTokens ?? 0)} />
+              <KpiCard label={t.outputTokens} value={formatCompact(kpis?.outputTokens ?? 0, locale)} />
             </div>
             <div className="card">
-              <KpiCard label={t.cachedTokens} value={formatCompact(kpis?.cachedTokens ?? 0)} />
+              <KpiCard label={t.cachedTokens} value={formatCompact(kpis?.cachedTokens ?? 0, locale)} />
             </div>
           </div>
 
@@ -1164,9 +1188,9 @@ export function App() {
 
           {/* ── Token Trend ── */}
           <div className="card fade-up p-6" style={{ animationDelay: '200ms' }}>
-            <SectionHeader title={t.tokenTrend} stat={formatCompact(kpis?.totalTokens ?? 0)} />
+            <SectionHeader title={t.tokenTrend} stat={formatCompact(kpis?.totalTokens ?? 0, locale)} />
             <ChartBoundary name="Token Trend">
-              <TokenTrendChart data={overview?.tokenComposition ?? []} />
+              <TokenTrendChart data={overview?.tokenComposition ?? []} locale={locale} />
             </ChartBoundary>
             <ChartLegend items={tokenLegend} />
           </div>
@@ -1175,7 +1199,7 @@ export function App() {
           <div className="card fade-up p-6" style={{ animationDelay: '250ms' }}>
             <SectionHeader title={t.tokenComposition} />
             <ChartBoundary name="Token Composition">
-              <TokenCompositionChart data={overview?.tokenComposition ?? []} />
+              <TokenCompositionChart data={overview?.tokenComposition ?? []} locale={locale} />
             </ChartBoundary>
             <ChartLegend items={tokenLegend} />
           </div>
@@ -1195,7 +1219,7 @@ export function App() {
                     title={t.providerShare}
                     data={(overview?.filters.options.providers ?? []).map((p) => ({
                       value: p.value,
-                      label: p.label,
+                      label: providerLabel(p.value),
                       estimatedCostUsd: p.estimatedCostUsd,
                       eventCount: p.eventCount,
                     }))}
@@ -1248,7 +1272,7 @@ export function App() {
               className="flex items-center gap-1.5 text-slate-400 transition-colors hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300"
             >
               <Github className="h-3.5 w-3.5" />
-              <span>{t.source}</span>
+              <span>GitHub</span>
             </a>
             <span className="h-3 w-px bg-slate-200 dark:bg-slate-700" />
             <span className="flex items-center gap-1">
@@ -1257,8 +1281,9 @@ export function App() {
                 href="https://x.com/qingnianxiaozhe"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-slate-400 transition-colors hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300"
+                className="flex items-center gap-1 text-slate-400 transition-colors hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300"
               >
+                <svg className="h-3 w-3" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" /></svg>
                 qingnianxiaozhe
               </a>
             </span>
