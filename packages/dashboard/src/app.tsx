@@ -1,14 +1,79 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import {
   Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Pie, PieChart,
   Sankey, ResponsiveContainer, XAxis, YAxis, Tooltip,
 } from 'recharts';
-import { RotateCw, Github, Heart } from 'lucide-react';
+import { RotateCw, Github, Heart, Sun, Moon, Monitor } from 'lucide-react';
 import type { OverviewResponse, SankeyGraph } from '@aiusage/shared';
 import {
   ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig,
 } from './components/ui/chart';
 import { DEMO_OVERVIEW, DEMO_HEALTH } from './demo-data';
+
+// ────────────────────────────────────────
+// Theme
+// ────────────────────────────────────────
+
+type ThemeMode = 'light' | 'dark' | 'system';
+
+function getStoredTheme(): ThemeMode {
+  try { return (localStorage.getItem('aiusage-theme') as ThemeMode) ?? 'system'; }
+  catch { return 'system'; }
+}
+
+function applyTheme(mode: ThemeMode) {
+  const isDark = mode === 'dark' || (mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  document.documentElement.classList.toggle('dark', isDark);
+  try { localStorage.setItem('aiusage-theme', mode); } catch {}
+}
+
+// ────────────────────────────────────────
+// i18n
+// ────────────────────────────────────────
+
+type Locale = 'en' | 'zh';
+
+function getStoredLocale(): Locale {
+  try { return (localStorage.getItem('aiusage-locale') as Locale) ?? 'en'; }
+  catch { return 'en'; }
+}
+
+const I18N = {
+  en: {
+    estimatedCost: 'Estimated Cost', totalTokens: 'Total Tokens',
+    inputTokens: 'Input Tokens', outputTokens: 'Output Tokens',
+    cachedTokens: 'Cached Tokens', activeDays: 'Active Days',
+    sessions: 'Sessions', costPerSession: 'Cost / Session',
+    avgDailyCost: 'Avg Daily Cost', cacheHitRate: 'Cache Hit Rate',
+    costTrend: 'Cost Trend', tokenTrend: 'Token Trend',
+    tokenComposition: 'Token Composition', tokenFlow: 'Token Flow',
+    providerShare: 'Provider Share', modelShare: 'Model Share',
+    channelShare: 'Channel Share', thisMonth: 'This Month',
+    device: 'Device', product: 'Product', all: 'All',
+    noData: 'No data', noFlowData: 'No flow data',
+    failedToLoad: 'Failed to load data', source: 'Source',
+    input: 'Input', cached: 'Cached', cacheWrite: 'Cache Write',
+    output: 'Output', reasoning: 'Reasoning',
+  },
+  zh: {
+    estimatedCost: '预估费用', totalTokens: '总 Token',
+    inputTokens: '输入 Token', outputTokens: '输出 Token',
+    cachedTokens: '缓存 Token', activeDays: '活跃天数',
+    sessions: '会话数', costPerSession: '单次费用',
+    avgDailyCost: '日均费用', cacheHitRate: '缓存命中率',
+    costTrend: '费用趋势', tokenTrend: 'Token 趋势',
+    tokenComposition: 'Token 构成', tokenFlow: 'Token 流向',
+    providerShare: '厂商占比', modelShare: '模型占比',
+    channelShare: '渠道占比', thisMonth: '本月',
+    device: '设备', product: '产品', all: '全部',
+    noData: '暂无数据', noFlowData: '暂无流向数据',
+    failedToLoad: '加载失败', source: '源码',
+    input: '输入', cached: '缓存', cacheWrite: '缓存写入',
+    output: '输出', reasoning: '推理',
+  },
+} as const;
+
+type T = Record<keyof typeof I18N['en'], string>;
 
 // ────────────────────────────────────────
 // Constants
@@ -45,10 +110,6 @@ const PROVIDER_COLORS: Record<string, string> = {
   opencode: '#16A34A',
   openclaw: '#EF4444',
 };
-
-const COST_CONFIG = {
-  estimatedCostUsd: { label: 'Cost', color: '#0f172a' },
-} satisfies ChartConfig;
 
 const TOKEN_CONFIG = Object.fromEntries(
   TOKEN_SERIES.map((s) => [s.key, { label: s.label, color: s.color }]),
@@ -312,14 +373,68 @@ class ChartBoundary extends React.Component<
 
 function EmptyState({ label }: { label: string }) {
   return (
-    <div className="flex min-h-[200px] items-center justify-center text-[13px] text-slate-300">
+    <div className="flex min-h-[200px] items-center justify-center text-[13px] text-slate-300 dark:text-slate-600">
       {label}
     </div>
   );
 }
 
 function Skeleton({ className = '' }: { className?: string }) {
-  return <div className={`animate-pulse rounded-lg bg-slate-100 ${className}`} />;
+  return <div className={`animate-pulse rounded-lg bg-slate-100 dark:bg-slate-800 ${className}`} />;
+}
+
+// ────────────────────────────────────────
+// Theme & Language Toggles
+// ────────────────────────────────────────
+
+const THEME_OPTIONS: { value: ThemeMode; icon: typeof Sun }[] = [
+  { value: 'light', icon: Sun },
+  { value: 'dark', icon: Moon },
+  { value: 'system', icon: Monitor },
+];
+
+function ThemeToggle({ value, onChange }: { value: ThemeMode; onChange: (v: ThemeMode) => void }) {
+  return (
+    <div className="inline-flex items-center rounded-md bg-slate-100/80 p-0.5 dark:bg-slate-800/80">
+      {THEME_OPTIONS.map((o) => {
+        const Icon = o.icon;
+        return (
+          <button
+            key={o.value}
+            onClick={() => onChange(o.value)}
+            className={`rounded p-1.5 transition-all duration-150 ${
+              value === o.value
+                ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-slate-100'
+                : 'text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300'
+            }`}
+            aria-label={o.value}
+          >
+            <Icon className="h-3.5 w-3.5" />
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function LangToggle({ value, onChange }: { value: Locale; onChange: (v: Locale) => void }) {
+  return (
+    <div className="inline-flex items-center rounded-md bg-slate-100/80 p-0.5 dark:bg-slate-800/80">
+      {(['en', 'zh'] as const).map((l) => (
+        <button
+          key={l}
+          onClick={() => onChange(l)}
+          className={`rounded px-2 py-1 text-[11px] font-medium transition-all duration-150 ${
+            value === l
+              ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-slate-100'
+              : 'text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300'
+          }`}
+        >
+          {l === 'en' ? 'EN' : '中'}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 // ────────────────────────────────────────
@@ -336,7 +451,7 @@ function SegmentedControl({
   onChange: (v: string) => void;
 }) {
   return (
-    <div className="inline-flex items-center rounded-lg bg-slate-100/80 p-0.5" role="radiogroup">
+    <div className="inline-flex items-center rounded-lg bg-slate-100/80 p-0.5 dark:bg-slate-800/80" role="radiogroup">
       {options.map((o) => (
         <button
           key={o.value}
@@ -345,8 +460,8 @@ function SegmentedControl({
           onClick={() => onChange(o.value)}
           className={`rounded-md px-3 py-1.5 text-[13px] font-medium transition-all duration-150 ${
             value === o.value
-              ? 'bg-white text-slate-900 shadow-sm'
-              : 'text-slate-400 hover:text-slate-600'
+              ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-slate-100'
+              : 'text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300'
           }`}
         >
           {o.label}
@@ -367,10 +482,12 @@ function FilterTabs({
   value,
   options,
   onChange,
+  allLabel = 'All',
 }: {
   value: string;
   options: FacetOption[];
   onChange: (v: string) => void;
+  allLabel?: string;
 }) {
   if (options.length <= 1) return null;
   return (
@@ -379,11 +496,11 @@ function FilterTabs({
         onClick={() => onChange('')}
         className={`rounded-md px-2.5 py-1 text-[12px] font-medium transition-all duration-150 ${
           !value
-            ? 'bg-slate-900 text-white shadow-sm'
-            : 'bg-slate-100 text-slate-400 hover:text-slate-600'
+            ? 'bg-slate-900 text-white shadow-sm dark:bg-slate-200 dark:text-slate-900'
+            : 'bg-slate-100 text-slate-400 hover:text-slate-600 dark:bg-slate-800 dark:text-slate-500 dark:hover:text-slate-300'
         }`}
       >
-        All
+        {allLabel}
       </button>
       {options.map((o) => (
         <button
@@ -391,8 +508,8 @@ function FilterTabs({
           onClick={() => onChange(o.value === value ? '' : o.value)}
           className={`rounded-md px-2.5 py-1 text-[12px] font-medium transition-all duration-150 ${
             value === o.value
-              ? 'bg-slate-900 text-white shadow-sm'
-              : 'bg-slate-100 text-slate-400 hover:text-slate-600'
+              ? 'bg-slate-900 text-white shadow-sm dark:bg-slate-200 dark:text-slate-900'
+              : 'bg-slate-100 text-slate-400 hover:text-slate-600 dark:bg-slate-800 dark:text-slate-500 dark:hover:text-slate-300'
           }`}
         >
           {formatProductLabel(o.label)}
@@ -419,16 +536,16 @@ function KpiCard({
 }) {
   return (
     <div className="px-4 py-4 sm:px-5 sm:py-5">
-      <div className="text-[11px] font-medium uppercase tracking-[0.06em] text-slate-400">
+      <div className="text-[11px] font-medium uppercase tracking-[0.06em] text-slate-400 dark:text-slate-500">
         {label}
       </div>
       <div
         className={`mt-1.5 text-[22px] font-semibold tracking-tight tabular-nums leading-none ${
-          highlight ? 'text-emerald-600' : 'text-slate-900'
+          highlight ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-900 dark:text-slate-100'
         }`}
       >
         {value}
-        {suffix && <span className="text-slate-300">{suffix}</span>}
+        {suffix && <span className="text-slate-300 dark:text-slate-600">{suffix}</span>}
       </div>
     </div>
   );
@@ -441,9 +558,9 @@ function KpiCard({
 function SectionHeader({ title, stat }: { title: string; stat?: string }) {
   return (
     <div className="mb-5 flex items-baseline justify-between">
-      <h2 className="text-[15px] font-semibold tracking-tight text-slate-900">{title}</h2>
+      <h2 className="text-[15px] font-semibold tracking-tight text-slate-900 dark:text-slate-100">{title}</h2>
       {stat && (
-        <span className="text-[14px] font-semibold tabular-nums text-slate-900">{stat}</span>
+        <span className="text-[14px] font-semibold tabular-nums text-slate-900 dark:text-slate-100">{stat}</span>
       )}
     </div>
   );
@@ -459,8 +576,8 @@ function ChartLegend({ items }: { items: { label: string; color: string; value?:
       {items.map((it) => (
         <div key={it.label} className="flex items-center gap-1.5 text-[12px]">
           <span className="h-[7px] w-[7px] shrink-0 rounded-full" style={{ backgroundColor: it.color }} />
-          <span className="text-slate-500">{it.label}</span>
-          {it.value && <span className="ml-0.5 font-medium tabular-nums text-slate-700">{it.value}</span>}
+          <span className="text-slate-500 dark:text-slate-400">{it.label}</span>
+          {it.value && <span className="ml-0.5 font-medium tabular-nums text-slate-700 dark:text-slate-300">{it.value}</span>}
         </div>
       ))}
     </div>
@@ -519,15 +636,15 @@ function CostTrendChart({
       <ChartContainer config={config} className="h-[280px] w-full">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={pivoted} margin={{ top: 12, left: 4, right: 12, bottom: 0 }} barSize={barW}>
-            <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="#f1f5f9" />
+            <CartesianGrid vertical={false} strokeDasharray="3 3" className="stroke-slate-100 dark:stroke-slate-800" />
             <XAxis
               dataKey="usageDate" tickLine={false} axisLine={false}
               tickMargin={12} tickFormatter={shortDate} minTickGap={36}
-              stroke="#94a3b8" fontSize={11}
+              className="fill-slate-400 dark:fill-slate-500" fontSize={11}
             />
             <YAxis
               tickLine={false} axisLine={false} width={48} tickMargin={8}
-              tickFormatter={(v) => formatUsd(Number(v))} stroke="#94a3b8" fontSize={11}
+              tickFormatter={(v) => formatUsd(Number(v))} className="fill-slate-400 dark:fill-slate-500" fontSize={11}
             />
             <ChartTooltip
               cursor={{ fill: '#f8fafc' }}
@@ -568,15 +685,15 @@ function TokenTrendChart({ data }: { data: OverviewPayload['tokenComposition'] }
     <ChartContainer config={TOKEN_CONFIG} className="h-[280px] w-full">
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={data} margin={{ top: 12, left: 4, right: 12, bottom: 0 }}>
-          <CartesianGrid vertical={false} stroke="#f1f5f9" />
+          <CartesianGrid vertical={false} className="stroke-slate-100 dark:stroke-slate-800" />
           <XAxis
             dataKey="usageDate" tickLine={false} axisLine={false}
             tickMargin={12} tickFormatter={shortDate} minTickGap={36}
-            stroke="#94a3b8" fontSize={11}
+            className="fill-slate-400 dark:fill-slate-500" fontSize={11}
           />
           <YAxis
             tickLine={false} axisLine={false} width={52} tickMargin={8}
-            tickFormatter={(v) => formatCompact(Number(v))} stroke="#94a3b8" fontSize={11}
+            tickFormatter={(v) => formatCompact(Number(v))} className="fill-slate-400 dark:fill-slate-500" fontSize={11}
           />
           <ChartTooltip
             cursor={{ stroke: '#e2e8f0' }}
@@ -606,15 +723,15 @@ function TokenCompositionChart({ data }: { data: OverviewPayload['tokenCompositi
     <ChartContainer config={TOKEN_CONFIG} className="h-[280px] w-full">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data} margin={{ top: 12, left: 4, right: 12, bottom: 0 }} barSize={barW}>
-          <CartesianGrid vertical={false} stroke="#f1f5f9" />
+          <CartesianGrid vertical={false} className="stroke-slate-100 dark:stroke-slate-800" />
           <XAxis
             dataKey="usageDate" tickLine={false} axisLine={false}
             tickMargin={12} tickFormatter={shortDate} minTickGap={36}
-            stroke="#94a3b8" fontSize={11}
+            className="fill-slate-400 dark:fill-slate-500" fontSize={11}
           />
           <YAxis
             tickLine={false} axisLine={false} width={52} tickMargin={8}
-            tickFormatter={(v) => formatCompact(Number(v))} stroke="#94a3b8" fontSize={11}
+            tickFormatter={(v) => formatCompact(Number(v))} className="fill-slate-400 dark:fill-slate-500" fontSize={11}
           />
           <ChartTooltip
             cursor={{ fill: '#f8fafc' }}
@@ -650,7 +767,7 @@ function SankeyNodeLabel({
       y={y + height / 2}
       textAnchor={isLeft ? 'start' : 'end'}
       dominantBaseline="central"
-      className="fill-slate-600 text-[11px]"
+      className="fill-slate-600 dark:fill-slate-400 text-[11px]"
     >
       {payload.name}
     </text>
@@ -692,19 +809,19 @@ function ProviderBars({
   const max = Math.max(...data.map((d) => d.estimatedCostUsd), 1);
   return (
     <div>
-      <h3 className="mb-4 text-[13px] font-semibold text-slate-900">Provider Share</h3>
+      <h3 className="mb-4 text-[13px] font-semibold text-slate-900 dark:text-slate-100">Provider Share</h3>
       <div className="flex flex-col gap-3">
         {data.map((item) => {
           const pct = (item.estimatedCostUsd / max) * 100;
           return (
             <div key={item.label}>
               <div className="mb-1 flex items-baseline justify-between text-[12px]">
-                <span className="font-medium text-slate-700">{item.label}</span>
-                <span className="tabular-nums font-medium text-slate-900">{formatUsd(item.estimatedCostUsd)}</span>
+                <span className="font-medium text-slate-700 dark:text-slate-300">{item.label}</span>
+                <span className="tabular-nums font-medium text-slate-900 dark:text-slate-100">{formatUsd(item.estimatedCostUsd)}</span>
               </div>
-              <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
+              <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
                 <div
-                  className="h-full rounded-full bg-slate-800 transition-all duration-500"
+                  className="h-full rounded-full bg-slate-800 dark:bg-slate-300 transition-all duration-500"
                   style={{ width: `${pct}%` }}
                 />
               </div>
@@ -734,11 +851,11 @@ function DonutSection({
 
   return (
     <div>
-      <h3 className="mb-4 text-[13px] font-semibold text-slate-900">{title}</h3>
-      <div className="flex items-center gap-5">
+      <h3 className="mb-4 text-[13px] font-semibold text-slate-900 dark:text-slate-100">{title}</h3>
+      <div className="flex flex-col items-center gap-4 sm:flex-row sm:gap-5">
         {/* Ring */}
         <div className="relative shrink-0">
-          <ChartContainer config={{}} className="h-[130px] w-[130px]">
+          <ChartContainer config={{}} className="h-[120px] w-[120px] sm:h-[130px] sm:w-[130px]">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
@@ -754,12 +871,12 @@ function DonutSection({
             </ResponsiveContainer>
           </ChartContainer>
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-            <span className="text-[13px] font-semibold tabular-nums text-slate-900">{centerLabel}</span>
+            <span className="text-[13px] font-semibold tabular-nums text-slate-900 dark:text-slate-100">{centerLabel}</span>
           </div>
         </div>
 
         {/* Legend */}
-        <div className="flex min-w-0 flex-1 flex-col gap-2.5">
+        <div className="flex min-w-0 flex-1 flex-col gap-2.5 w-full">
           {folded.map((item, i) => {
             const pct = total > 0 ? (item.estimatedCostUsd / total) * 100 : 0;
             return (
@@ -768,9 +885,9 @@ function DonutSection({
                   className="h-[7px] w-[7px] shrink-0 rounded-full"
                   style={{ backgroundColor: colors[i % colors.length] }}
                 />
-                <span className="min-w-0 flex-1 truncate text-slate-500">{item.label}</span>
-                <span className="shrink-0 tabular-nums text-slate-400">{formatPercent(pct)}</span>
-                <span className="shrink-0 font-medium tabular-nums text-slate-900">
+                <span className="min-w-0 flex-1 truncate text-slate-500 dark:text-slate-400">{item.label}</span>
+                <span className="shrink-0 tabular-nums text-slate-400 dark:text-slate-500">{formatPercent(pct)}</span>
+                <span className="shrink-0 font-medium tabular-nums text-slate-900 dark:text-slate-100">
                   {formatUsd(item.estimatedCostUsd)}
                 </span>
               </div>
@@ -795,8 +912,26 @@ export function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
-
   const [isDemo, setIsDemo] = useState(false);
+
+  // Theme
+  const [theme, setThemeState] = useState<ThemeMode>(getStoredTheme);
+  const setTheme = useCallback((m: ThemeMode) => { setThemeState(m); applyTheme(m); }, []);
+  useEffect(() => {
+    applyTheme(theme);
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const handler = () => { if (theme === 'system') applyTheme('system'); };
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, [theme]);
+
+  // Locale
+  const [locale, setLocaleState] = useState<Locale>(getStoredLocale);
+  const setLocale = useCallback((l: Locale) => {
+    setLocaleState(l);
+    try { localStorage.setItem('aiusage-locale', l); } catch {}
+  }, []);
+  const t: T = I18N[locale];
 
   // Fetch data — falls back to demo data when API is unreachable (local dev)
   useEffect(() => {
@@ -849,53 +984,40 @@ export function App() {
     products: overview?.filters.options.products ?? [],
   }), [overview]);
 
-  // Token legend
+  // Token legend (locale-aware)
+  const tokenLegendLabels: Record<string, keyof T> = {
+    inputTokens: 'input', cachedInputTokens: 'cached',
+    cacheWriteTokens: 'cacheWrite', outputTokens: 'output',
+    reasoningOutputTokens: 'reasoning',
+  };
   const tokenLegend = useMemo(() => {
     if (!overview) return [];
     const tc = overview.tokenComposition;
     return TOKEN_SERIES.map((s) => ({
-      label: s.label,
+      label: t[tokenLegendLabels[s.key] ?? 'input'],
       color: s.color,
       value: formatCompact(arrSum(tc.map((d) => Number(d[s.key] || 0)))),
     }));
-  }, [overview]);
+  }, [overview, t]);
 
   return (
     <main className="mx-auto max-w-[1200px] px-4 pb-16 sm:px-6 lg:px-8">
 
       {/* ── Header ── */}
-      <header className="fade-up relative z-20 py-8">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <h1 className="flex items-center gap-2 text-[22px] font-semibold tracking-tight text-slate-900">
+      <header className="fade-up relative z-20 py-6 sm:py-8">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <h1 className="flex items-center gap-2 text-[22px] font-semibold tracking-tight text-slate-900 dark:text-slate-100">
             <svg viewBox="0 0 200 160" fill="none" className="h-7 w-7" aria-hidden="true">
               <path d="M22 112 C30 112 38 90 44 82 C50 74 54 78 58 88 C62 98 64 116 70 120 C76 124 80 108 86 84 C92 60 96 22 104 16 C112 10 116 36 120 64 C124 92 126 138 134 140 C142 142 146 108 152 72 C158 36 162 14 168 16 C174 18 178 50 182 68" stroke="currentColor" strokeWidth="20" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
             AI Usage
           </h1>
-          <div className="flex flex-wrap items-center gap-2.5">
-            <SegmentedControl
-              value={filters.range === 'month' ? '' : filters.range}
-              options={RANGES}
-              onChange={(v) => setFilters((f) => ({ ...f, range: v }))}
-            />
+          <div className="flex flex-wrap items-center gap-2">
+            <ThemeToggle value={theme} onChange={setTheme} />
+            <LangToggle value={locale} onChange={setLocale} />
             <button
-              onClick={() => setFilters((f) => ({ ...f, range: 'month' }))}
-              className={`rounded-lg px-3 py-1.5 text-[13px] font-medium transition-all duration-150 ${
-                filters.range === 'month'
-                  ? 'bg-slate-900 text-white'
-                  : 'bg-slate-100/80 text-slate-400 hover:text-slate-600'
-              }`}
-            >
-              This Month
-            </button>
-            <div className="hidden h-4 w-px bg-slate-200 sm:block" />
-            <div className="hidden items-center gap-1.5 text-[12px] text-slate-400 sm:flex">
-              <span className={`h-1.5 w-1.5 rounded-full ${health?.ok ? (isDemo ? 'bg-amber-400' : 'bg-emerald-500') : 'bg-slate-300'}`} />
-              {isDemo ? 'Demo' : health?.ok ? health.siteId : '\u2026'}
-            </div>
-            <button
-              onClick={() => setTick((t) => t + 1)}
-              className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+              onClick={() => setTick((n) => n + 1)}
+              className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300"
               aria-label="Refresh"
             >
               <RotateCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
@@ -903,34 +1025,52 @@ export function App() {
           </div>
         </div>
 
-        {/* ── Inline Filters ── */}
-        {overview && (fOpts.devices.length > 1 || fOpts.products.length > 1) && (
-          <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2">
-            {fOpts.devices.length > 1 && (
+        {/* ── Range + Filters ── */}
+        <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
+          <SegmentedControl
+            value={filters.range === 'month' ? '' : filters.range}
+            options={RANGES}
+            onChange={(v) => setFilters((f) => ({ ...f, range: v }))}
+          />
+          <button
+            onClick={() => setFilters((f) => ({ ...f, range: 'month' }))}
+            className={`rounded-lg px-3 py-1.5 text-[13px] font-medium transition-all duration-150 ${
+              filters.range === 'month'
+                ? 'bg-slate-900 text-white dark:bg-slate-200 dark:text-slate-900'
+                : 'bg-slate-100/80 text-slate-400 hover:text-slate-600 dark:bg-slate-800/80 dark:text-slate-500 dark:hover:text-slate-300'
+            }`}
+          >
+            {t.thisMonth}
+          </button>
+          {overview && fOpts.devices.length > 1 && (
+            <>
+              <div className="hidden h-4 w-px bg-slate-200 dark:bg-slate-700 sm:block" />
               <div className="flex items-center gap-2">
-                <span className="text-[11px] font-medium uppercase tracking-wider text-slate-400">Device</span>
+                <span className="text-[11px] font-medium uppercase tracking-wider text-slate-400 dark:text-slate-500">{t.device}</span>
                 <FilterTabs
                   value={filters.deviceId}
                   options={fOpts.devices}
+                  allLabel={t.all}
                   onChange={(v) => setFilters((f) => ({ ...f, deviceId: v }))}
                 />
               </div>
-            )}
-            {fOpts.devices.length > 1 && fOpts.products.length > 1 && (
-              <div className="hidden h-4 w-px bg-slate-200 sm:block" />
-            )}
-            {fOpts.products.length > 1 && (
+            </>
+          )}
+          {overview && fOpts.products.length > 1 && (
+            <>
+              <div className="hidden h-4 w-px bg-slate-200 dark:bg-slate-700 sm:block" />
               <div className="flex items-center gap-2">
-                <span className="text-[11px] font-medium uppercase tracking-wider text-slate-400">Product</span>
+                <span className="text-[11px] font-medium uppercase tracking-wider text-slate-400 dark:text-slate-500">{t.product}</span>
                 <FilterTabs
                   value={filters.product}
                   options={fOpts.products}
+                  allLabel={t.all}
                   onChange={(v) => setFilters((f) => ({ ...f, product: v }))}
                 />
               </div>
-            )}
-          </div>
-        )}
+            </>
+          )}
+        </div>
       </header>
 
       {/* ── Content ── */}
@@ -957,7 +1097,7 @@ export function App() {
         </div>
       ) : error ? (
         <div className="card flex min-h-[320px] flex-col items-center justify-center p-8">
-          <div className="mb-1.5 text-[13px] text-slate-400">Failed to load data</div>
+          <div className="mb-1.5 text-[13px] text-slate-400 dark:text-slate-500">{t.failedToLoad}</div>
           <div className="text-[13px] text-red-500/80">{error}</div>
         </div>
       ) : (
@@ -968,20 +1108,20 @@ export function App() {
             className="fade-up grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5"
             style={{ animationDelay: '50ms' }}
           >
-            <div className="card">
-              <KpiCard label="Estimated Cost" value={formatUsd(overview?.totalCostUsd ?? 0)} highlight />
+            <div className="card col-span-2 sm:col-span-1">
+              <KpiCard label={t.estimatedCost} value={formatUsd(overview?.totalCostUsd ?? 0)} highlight />
             </div>
             <div className="card">
-              <KpiCard label="Total Tokens" value={formatCompact(kpis?.totalTokens ?? 0)} />
+              <KpiCard label={t.totalTokens} value={formatCompact(kpis?.totalTokens ?? 0)} />
             </div>
             <div className="card">
-              <KpiCard label="Input Tokens" value={formatCompact(kpis?.inputTokens ?? 0)} />
+              <KpiCard label={t.inputTokens} value={formatCompact(kpis?.inputTokens ?? 0)} />
             </div>
             <div className="card">
-              <KpiCard label="Output Tokens" value={formatCompact(kpis?.outputTokens ?? 0)} />
+              <KpiCard label={t.outputTokens} value={formatCompact(kpis?.outputTokens ?? 0)} />
             </div>
             <div className="card">
-              <KpiCard label="Cached Tokens" value={formatCompact(kpis?.cachedTokens ?? 0)} />
+              <KpiCard label={t.cachedTokens} value={formatCompact(kpis?.cachedTokens ?? 0)} />
             </div>
           </div>
 
@@ -990,30 +1130,30 @@ export function App() {
             className="fade-up grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5"
             style={{ animationDelay: '100ms' }}
           >
-            <div className="card">
+            <div className="card col-span-2 sm:col-span-1">
               <KpiCard
-                label="Active Days"
+                label={t.activeDays}
                 value={String(overview?.activeDays ?? 0)}
                 suffix={` / ${overview?.totalDays ?? 0}`}
               />
             </div>
             <div className="card">
-              <KpiCard label="Sessions" value={formatNumber(overview?.totalEvents ?? 0)} />
+              <KpiCard label={t.sessions} value={formatNumber(overview?.totalEvents ?? 0)} />
             </div>
             <div className="card">
-              <KpiCard label="Cost / Session" value={formatUsd(kpis?.costPerSession ?? 0)} />
+              <KpiCard label={t.costPerSession} value={formatUsd(kpis?.costPerSession ?? 0)} />
             </div>
             <div className="card">
-              <KpiCard label="Avg Daily Cost" value={formatUsd(overview?.averageDailyCostUsd ?? 0)} />
+              <KpiCard label={t.avgDailyCost} value={formatUsd(overview?.averageDailyCostUsd ?? 0)} />
             </div>
             <div className="card">
-              <KpiCard label="Cache Hit Rate" value={formatPercent(kpis?.cacheHitRate ?? 0)} />
+              <KpiCard label={t.cacheHitRate} value={formatPercent(kpis?.cacheHitRate ?? 0)} />
             </div>
           </div>
 
           {/* ── Cost Trend ── */}
           <div className="card fade-up p-6" style={{ animationDelay: '150ms' }}>
-            <SectionHeader title="Cost Trend" stat={formatUsd(overview?.totalCostUsd ?? 0)} />
+            <SectionHeader title={t.costTrend} stat={formatUsd(overview?.totalCostUsd ?? 0)} />
             <ChartBoundary name="Cost Trend">
               <CostTrendChart
                 data={overview?.dailyTrend ?? []}
@@ -1024,7 +1164,7 @@ export function App() {
 
           {/* ── Token Trend ── */}
           <div className="card fade-up p-6" style={{ animationDelay: '200ms' }}>
-            <SectionHeader title="Token Trend" stat={formatCompact(kpis?.totalTokens ?? 0)} />
+            <SectionHeader title={t.tokenTrend} stat={formatCompact(kpis?.totalTokens ?? 0)} />
             <ChartBoundary name="Token Trend">
               <TokenTrendChart data={overview?.tokenComposition ?? []} />
             </ChartBoundary>
@@ -1033,7 +1173,7 @@ export function App() {
 
           {/* ── Token Composition ── */}
           <div className="card fade-up p-6" style={{ animationDelay: '250ms' }}>
-            <SectionHeader title="Token Composition" />
+            <SectionHeader title={t.tokenComposition} />
             <ChartBoundary name="Token Composition">
               <TokenCompositionChart data={overview?.tokenComposition ?? []} />
             </ChartBoundary>
@@ -1043,7 +1183,7 @@ export function App() {
           {/* ── Flow & Share ── */}
           <div className="fade-up grid gap-4 lg:grid-cols-5" style={{ animationDelay: '300ms' }}>
             <div className="card p-6 lg:col-span-3">
-              <SectionHeader title="Token Flow" />
+              <SectionHeader title={t.tokenFlow} />
               <ChartBoundary name="Token Flow">
                 <FlowChart data={overview?.sankey} />
               </ChartBoundary>
@@ -1052,7 +1192,7 @@ export function App() {
               <ChartBoundary name="Share">
                 <div className="flex flex-1 flex-col">
                   <DonutSection
-                    title="Provider Share"
+                    title={t.providerShare}
                     data={(overview?.filters.options.providers ?? []).map((p) => ({
                       value: p.value,
                       label: p.label,
@@ -1062,16 +1202,16 @@ export function App() {
                     colors={['#0f172a', '#475569', '#94a3b8', '#cbd5e1']}
                     centerLabel={formatUsd(overview?.totalCostUsd ?? 0)}
                   />
-                  <div className="my-5 border-t border-slate-100" />
+                  <div className="my-5 border-t border-slate-100 dark:border-slate-800" />
                   <DonutSection
-                    title="Model Share"
+                    title={t.modelShare}
                     data={(overview?.modelCostShare ?? []).map((m) => ({ ...m, label: formatModelName(m.label) }))}
                     colors={CHART_COLORS}
                     centerLabel={formatUsd(overview?.totalCostUsd ?? 0)}
                   />
-                  <div className="my-5 border-t border-slate-100" />
+                  <div className="my-5 border-t border-slate-100 dark:border-slate-800" />
                   <DonutSection
-                    title="Channel Share"
+                    title={t.channelShare}
                     data={overview?.channelCostShare ?? []}
                     colors={['#1e3a5f', '#3b6fa0', '#6b9fd0', '#a8c5e2', '#cddff0', '#e8f0f8']}
                     centerLabel={formatNumber(overview?.totalEvents ?? 0)}
@@ -1085,39 +1225,39 @@ export function App() {
       )}
 
       {/* ── Footer ── */}
-      <footer className="fade-up mt-16 border-t border-slate-100 pb-10 pt-8">
+      <footer className="fade-up mt-16 border-t border-slate-100 dark:border-slate-800 pb-10 pt-8">
         <div className="flex flex-col items-center gap-4">
-          <div className="flex items-center gap-3 text-[12px] text-slate-400">
-            <span className="flex items-center gap-1.5 font-medium text-slate-500">
+          <div className="flex items-center gap-3 text-[12px] text-slate-400 dark:text-slate-500">
+            <span className="flex items-center gap-1.5 font-medium text-slate-500 dark:text-slate-400">
               <svg viewBox="0 0 200 160" fill="none" className="h-3.5 w-3.5" aria-hidden="true">
                 <path d="M22 112 C30 112 38 90 44 82 C50 74 54 78 58 88 C62 98 64 116 70 120 C76 124 80 108 86 84 C92 60 96 22 104 16 C112 10 116 36 120 64 C124 92 126 138 134 140 C142 142 146 108 152 72 C158 36 162 14 168 16 C174 18 178 50 182 68" stroke="currentColor" strokeWidth="20" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
               AI Usage
             </span>
             {health?.version && (
-              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-400">
+              <span className="rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-[10px] font-medium text-slate-400 dark:text-slate-500">
                 v{health.version}
               </span>
             )}
           </div>
-          <div className="flex items-center gap-4 text-[11px] text-slate-300">
+          <div className="flex items-center gap-4 text-[11px] text-slate-300 dark:text-slate-600">
             <a
               href="https://github.com/ennann/aiusage"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-1.5 text-slate-400 transition-colors hover:text-slate-600"
+              className="flex items-center gap-1.5 text-slate-400 transition-colors hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300"
             >
               <Github className="h-3.5 w-3.5" />
-              <span>Source</span>
+              <span>{t.source}</span>
             </a>
-            <span className="h-3 w-px bg-slate-200" />
+            <span className="h-3 w-px bg-slate-200 dark:bg-slate-700" />
             <span className="flex items-center gap-1">
               Made with <Heart className="h-3 w-3 fill-red-300 text-red-300" /> by{' '}
               <a
                 href="https://x.com/qingnianxiaozhe"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-slate-400 transition-colors hover:text-slate-600"
+                className="text-slate-400 transition-colors hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300"
               >
                 qingnianxiaozhe
               </a>

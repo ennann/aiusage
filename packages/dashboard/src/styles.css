@@ -1,11 +1,17 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --font-sans: "DM Sans", system-ui, -apple-system, sans-serif;
 }
 
 :root {
   color-scheme: light;
+}
+
+.dark {
+  color-scheme: dark;
 }
 
 html, body, #root {
@@ -23,6 +29,11 @@ body {
   overflow-x: hidden;
 }
 
+.dark body {
+  background: #0b0f1a;
+  color: #e2e8f0;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -31,12 +42,21 @@ body {
   background: rgba(15, 23, 42, 0.06);
 }
 
+.dark ::selection {
+  background: rgba(148, 163, 184, 0.2);
+}
+
 /* Card */
 .card {
   background: #ffffff;
   border: 1px solid rgba(226, 232, 240, 0.7);
   border-radius: 12px;
   overflow: clip;
+}
+
+.dark .card {
+  background: #141929;
+  border-color: rgba(51, 65, 85, 0.5);
 }
 
 /* Charts need visible overflow for tooltips */
@@ -77,4 +97,20 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
   background: #cbd5e1;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: #334155;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
+/* Dark-mode Recharts tooltip override */
+.dark .recharts-tooltip-wrapper .recharts-default-tooltip,
+.dark [class*="ChartTooltipContent"] {
+  background: #1e293b !important;
+  border-color: #334155 !important;
+  color: #e2e8f0 !important;
 }
