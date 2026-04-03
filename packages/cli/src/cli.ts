@@ -59,7 +59,8 @@ try {
       await runSchedule('on', parsed.flags);
     }
   } else if (command === 'doctor') {
-    await runDoctorCommand();
+    const parsed = parseArgs(argv.slice(1));
+    await runDoctorCommand(parsed.flags);
   } else if (command === 'config' && argv[1] === 'set') {
     await runConfigSet(argv.slice(2));
   } else if (command === 'setup') {
@@ -327,8 +328,10 @@ async function runSchedule(sub: string | undefined, flags: Record<string, string
   }
 }
 
-async function runDoctorCommand() {
-  const checks = await runDoctor();
+async function runDoctorCommand(flags: Record<string, string | boolean>) {
+  const config = await readConfig();
+  const lang = (typeof flags.lang === 'string' ? flags.lang : config.lang) || 'en';
+  const checks = await runDoctor(lang as 'en' | 'zh');
   for (const check of checks) {
     const icon = check.status === 'ok' ? '✓' : check.status === 'warn' ? '⚠' : '✗';
     console.log(`${icon} ${check.name}: ${check.message}`);
