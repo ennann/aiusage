@@ -3,7 +3,7 @@ import {
   Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Pie, PieChart,
   Sankey, ResponsiveContainer, XAxis, YAxis, Tooltip,
 } from 'recharts';
-import { RotateCw, SlidersHorizontal, Github, Heart } from 'lucide-react';
+import { RotateCw, Github, Heart } from 'lucide-react';
 import type { OverviewResponse, SankeyGraph } from '@aiusage/shared';
 import {
   ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig,
@@ -33,6 +33,19 @@ const CHART_COLORS = [
   '#0f172a', '#334155', '#475569', '#64748b', '#94a3b8', '#cbd5e1', '#e2e8f0',
 ];
 
+const PROVIDER_COLORS: Record<string, string> = {
+  anthropic: '#D97757',
+  openai: '#10A37F',
+  google: '#4285F4',
+  github: '#1F2328',
+  sourcegraph: '#FF4F00',
+  moonshot: '#4A6CF7',
+  alibaba: '#5A29E4',
+  droid: '#2C3E50',
+  opencode: '#16A34A',
+  openclaw: '#EF4444',
+};
+
 const COST_CONFIG = {
   estimatedCostUsd: { label: 'Cost', color: '#0f172a' },
 } satisfies ChartConfig;
@@ -48,10 +61,7 @@ const TOKEN_CONFIG = Object.fromEntries(
 interface FiltersState {
   range: string;
   deviceId: string;
-  provider: string;
   product: string;
-  channel: string;
-  model: string;
 }
 
 interface HealthPayload { ok: boolean; siteId: string; version: string }
@@ -168,6 +178,12 @@ function padMonth(ov: OverviewPayload): OverviewPayload {
     links: ov.sankey.links.map((l) => ({ ...l, value: Math.round(l.value * ratio) })),
   } : ov.sankey;
 
+  // Filter provider daily trend to current month
+  const monthDateSet = new Set(allDates);
+  const providerDailyTrend = (ov.providerDailyTrend ?? []).filter(
+    (item) => monthDateSet.has(item.usageDate),
+  );
+
   return {
     ...ov,
     totalDays: allDates.length,
@@ -176,6 +192,7 @@ function padMonth(ov: OverviewPayload): OverviewPayload {
     totalCostUsd,
     averageDailyCostUsd: activeDays > 0 ? totalCostUsd / activeDays : 0,
     dailyTrend,
+    providerDailyTrend,
     tokenComposition,
     modelCostShare: scaleShares(ov.modelCostShare),
     channelCostShare: scaleShares(ov.channelCostShare),
@@ -339,97 +356,48 @@ function SegmentedControl({
   );
 }
 
-function FilterPopover({
-  filters,
+function formatProductLabel(raw: string): string {
+  return raw
+    .split('-')
+    .map((w) => (w === 'cli' ? 'CLI' : w.charAt(0).toUpperCase() + w.slice(1)))
+    .join(' ');
+}
+
+function FilterTabs({
+  value,
   options,
   onChange,
 }: {
-  filters: FiltersState;
-  options: { devices: FacetOption[]; providers: FacetOption[]; products: FacetOption[]; channels: FacetOption[]; models: FacetOption[] };
-  onChange: (patch: Partial<FiltersState>) => void;
+  value: string;
+  options: FacetOption[];
+  onChange: (v: string) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  const activeCount = [
-    filters.deviceId, filters.provider, filters.product, filters.channel, filters.model,
-  ].filter(Boolean).length;
-
-  useEffect(() => {
-    if (!open) return;
-    function onDown(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') setOpen(false);
-    }
-    document.addEventListener('mousedown', onDown);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onDown);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
-
-  const dims = [
-    { key: 'deviceId' as const, label: 'Device', opts: options.devices },
-    { key: 'provider' as const, label: 'Provider', opts: options.providers },
-    { key: 'product' as const, label: 'Product', opts: options.products },
-    { key: 'channel' as const, label: 'Channel', opts: options.channels },
-    { key: 'model' as const, label: 'Model', opts: options.models },
-  ];
-
+  if (options.length <= 1) return null;
   return (
-    <div className="relative" ref={ref}>
+    <div className="flex flex-wrap gap-1">
       <button
-        onClick={() => setOpen(!open)}
-        className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[13px] font-medium transition-all duration-150 ${
-          open || activeCount > 0
-            ? 'bg-slate-900 text-white'
-            : 'bg-slate-100/80 text-slate-500 hover:text-slate-700'
+        onClick={() => onChange('')}
+        className={`rounded-md px-2.5 py-1 text-[12px] font-medium transition-all duration-150 ${
+          !value
+            ? 'bg-slate-900 text-white shadow-sm'
+            : 'bg-slate-100 text-slate-400 hover:text-slate-600'
         }`}
       >
-        <SlidersHorizontal className="h-3.5 w-3.5" />
-        <span>Filters</span>
-        {activeCount > 0 && (
-          <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-white/20 px-1 text-[10px] font-semibold">
-            {activeCount}
-          </span>
-        )}
+        All
       </button>
-
-      {open && (
-        <div className="absolute right-0 top-full z-50 mt-2 w-[300px] rounded-xl border border-slate-200/80 bg-white p-4 shadow-[0_12px_40px_rgba(0,0,0,0.08)]">
-          <div className="mb-3.5 flex items-center justify-between">
-            <span className="text-[13px] font-semibold text-slate-900">Filters</span>
-            {activeCount > 0 && (
-              <button
-                className="text-[12px] text-slate-400 transition-colors hover:text-slate-600"
-                onClick={() => onChange({ deviceId: '', provider: '', product: '', channel: '', model: '' })}
-              >
-                Clear all
-              </button>
-            )}
-          </div>
-          <div className="grid gap-3">
-            {dims.map((d) => (
-              <div key={d.key}>
-                <label className="mb-1 block text-[11px] font-medium tracking-wide text-slate-400">
-                  {d.label}
-                </label>
-                <select
-                  className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[13px] text-slate-700 outline-none transition-colors focus:border-slate-300"
-                  value={filters[d.key]}
-                  onChange={(e) => onChange({ [d.key]: e.target.value })}
-                >
-                  <option value="">All</option>
-                  {d.opts.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      {options.map((o) => (
+        <button
+          key={o.value}
+          onClick={() => onChange(o.value === value ? '' : o.value)}
+          className={`rounded-md px-2.5 py-1 text-[12px] font-medium transition-all duration-150 ${
+            value === o.value
+              ? 'bg-slate-900 text-white shadow-sm'
+              : 'bg-slate-100 text-slate-400 hover:text-slate-600'
+          }`}
+        >
+          {formatProductLabel(o.label)}
+        </button>
+      ))}
     </div>
   );
 }
@@ -503,48 +471,94 @@ function ChartLegend({ items }: { items: { label: string; color: string; value?:
 // Charts
 // ────────────────────────────────────────
 
-function CostTrendChart({ data }: { data: OverviewPayload['dailyTrend'] }) {
+function pivotProviderTrend(
+  dailyTrend: OverviewPayload['dailyTrend'],
+  providerTrend: OverviewPayload['providerDailyTrend'],
+): { data: Record<string, unknown>[]; providers: string[] } {
+  const providerSet = new Set<string>();
+  const dateMap = new Map<string, Record<string, number>>();
+
+  for (const r of providerTrend ?? []) {
+    providerSet.add(r.provider);
+    const existing = dateMap.get(r.usageDate) ?? {};
+    existing[r.provider] = r.estimatedCostUsd;
+    dateMap.set(r.usageDate, existing);
+  }
+
+  const providers = [...providerSet];
+  const data = dailyTrend.map((d) => ({
+    usageDate: d.usageDate,
+    ...Object.fromEntries(providers.map((p) => [p, dateMap.get(d.usageDate)?.[p] ?? 0])),
+  }));
+
+  return { data, providers };
+}
+
+function CostTrendChart({
+  data,
+  providerTrend,
+}: {
+  data: OverviewPayload['dailyTrend'];
+  providerTrend: OverviewPayload['providerDailyTrend'];
+}) {
   if (!data.length) return <EmptyState label="No data" />;
+
+  const { data: pivoted, providers } = useMemo(
+    () => pivotProviderTrend(data, providerTrend),
+    [data, providerTrend],
+  );
+
+  const barW = data.length <= 7 ? 28 : data.length <= 30 ? 14 : 6;
+
+  const config = Object.fromEntries(
+    providers.map((p) => [p, { label: p, color: PROVIDER_COLORS[p] ?? '#94a3b8' }]),
+  ) satisfies ChartConfig;
+
   return (
-    <ChartContainer config={COST_CONFIG} className="h-[280px] w-full">
-      <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={data} margin={{ top: 12, left: 4, right: 12, bottom: 0 }}>
-          <defs>
-            <linearGradient id="cost-fill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#0f172a" stopOpacity={0.2} />
-              <stop offset="60%" stopColor="#0f172a" stopOpacity={0.05} />
-              <stop offset="100%" stopColor="#0f172a" stopOpacity={0} />
-            </linearGradient>
-          </defs>
-          <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="#f1f5f9" />
-          <XAxis
-            dataKey="usageDate" tickLine={false} axisLine={false}
-            tickMargin={12} tickFormatter={shortDate} minTickGap={36}
-            stroke="#94a3b8" fontSize={11}
-          />
-          <YAxis
-            tickLine={false} axisLine={false} width={48} tickMargin={8}
-            tickFormatter={(v) => formatUsd(Number(v))} stroke="#94a3b8" fontSize={11}
-          />
-          <ChartTooltip
-            cursor={{ stroke: '#94a3b8', strokeWidth: 1, strokeDasharray: '4 4' }}
-            content={
-              <ChartTooltipContent
-                indicator="line"
-                labelFormatter={longDate}
-                formatter={(v) => formatUsdFull(Number(v))}
+    <>
+      <ChartContainer config={config} className="h-[280px] w-full">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={pivoted} margin={{ top: 12, left: 4, right: 12, bottom: 0 }} barSize={barW}>
+            <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="#f1f5f9" />
+            <XAxis
+              dataKey="usageDate" tickLine={false} axisLine={false}
+              tickMargin={12} tickFormatter={shortDate} minTickGap={36}
+              stroke="#94a3b8" fontSize={11}
+            />
+            <YAxis
+              tickLine={false} axisLine={false} width={48} tickMargin={8}
+              tickFormatter={(v) => formatUsd(Number(v))} stroke="#94a3b8" fontSize={11}
+            />
+            <ChartTooltip
+              cursor={{ fill: '#f8fafc' }}
+              content={
+                <ChartTooltipContent
+                  labelFormatter={longDate}
+                  formatter={(v) => formatUsdFull(Number(v))}
+                />
+              }
+            />
+            {providers.map((p, i) => (
+              <Bar
+                key={p}
+                dataKey={p}
+                stackId="cost"
+                fill={PROVIDER_COLORS[p] ?? '#94a3b8'}
+                radius={i === providers.length - 1 ? [3, 3, 0, 0] : [0, 0, 0, 0]}
               />
-            }
-          />
-          <Area
-            dataKey="estimatedCostUsd" type="natural"
-            fill="url(#cost-fill)" stroke="#0f172a" strokeWidth={2}
-            activeDot={{ r: 4, strokeWidth: 2, stroke: '#fff', fill: '#0f172a' }}
-            dot={false}
-          />
-        </AreaChart>
-      </ResponsiveContainer>
-    </ChartContainer>
+            ))}
+          </BarChart>
+        </ResponsiveContainer>
+      </ChartContainer>
+      {providers.length > 1 && (
+        <ChartLegend
+          items={providers.map((p) => ({
+            label: p.charAt(0).toUpperCase() + p.slice(1),
+            color: PROVIDER_COLORS[p] ?? '#94a3b8',
+          }))}
+        />
+      )}
+    </>
   );
 }
 
@@ -774,7 +788,7 @@ function DonutSection({
 
 export function App() {
   const [filters, setFilters] = useState<FiltersState>({
-    range: '30d', deviceId: '', provider: '', product: '', channel: '', model: '',
+    range: '30d', deviceId: '', product: '',
   });
   const [overview, setOverview] = useState<OverviewPayload | null>(null);
   const [health, setHealth] = useState<HealthPayload | null>(null);
@@ -832,10 +846,7 @@ export function App() {
   // Filter options
   const fOpts = useMemo(() => ({
     devices: overview?.filters.options.devices ?? [],
-    providers: overview?.filters.options.providers ?? [],
     products: overview?.filters.options.products ?? [],
-    channels: overview?.filters.options.channels ?? [],
-    models: (overview?.filters.options.models ?? []).map((m) => ({ ...m, label: formatModelName(m.label) })),
   }), [overview]);
 
   // Token legend
@@ -853,47 +864,73 @@ export function App() {
     <main className="mx-auto max-w-[1200px] px-4 pb-16 sm:px-6 lg:px-8">
 
       {/* ── Header ── */}
-      <header className="fade-up relative z-20 flex flex-col gap-4 py-8 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="flex items-center gap-2 text-[22px] font-semibold tracking-tight text-slate-900">
-          <svg viewBox="0 0 200 160" fill="none" className="h-7 w-7" aria-hidden="true">
-            <path d="M22 112 C30 112 38 90 44 82 C50 74 54 78 58 88 C62 98 64 116 70 120 C76 124 80 108 86 84 C92 60 96 22 104 16 C112 10 116 36 120 64 C124 92 126 138 134 140 C142 142 146 108 152 72 C158 36 162 14 168 16 C174 18 178 50 182 68" stroke="currentColor" strokeWidth="20" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-          AI Usage
-        </h1>
-        <div className="flex flex-wrap items-center gap-2.5">
-          <SegmentedControl
-            value={filters.range === 'month' ? '' : filters.range}
-            options={RANGES}
-            onChange={(v) => setFilters((f) => ({ ...f, range: v }))}
-          />
-          <button
-            onClick={() => setFilters((f) => ({ ...f, range: 'month' }))}
-            className={`rounded-lg px-3 py-1.5 text-[13px] font-medium transition-all duration-150 ${
-              filters.range === 'month'
-                ? 'bg-slate-900 text-white'
-                : 'bg-slate-100/80 text-slate-400 hover:text-slate-600'
-            }`}
-          >
-            This Month
-          </button>
-          <FilterPopover
-            filters={filters}
-            options={fOpts}
-            onChange={(patch) => setFilters((f) => ({ ...f, ...patch }))}
-          />
-          <div className="hidden h-4 w-px bg-slate-200 sm:block" />
-          <div className="hidden items-center gap-1.5 text-[12px] text-slate-400 sm:flex">
-            <span className={`h-1.5 w-1.5 rounded-full ${health?.ok ? (isDemo ? 'bg-amber-400' : 'bg-emerald-500') : 'bg-slate-300'}`} />
-            {isDemo ? 'Demo' : health?.ok ? health.siteId : '\u2026'}
+      <header className="fade-up relative z-20 py-8">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <h1 className="flex items-center gap-2 text-[22px] font-semibold tracking-tight text-slate-900">
+            <svg viewBox="0 0 200 160" fill="none" className="h-7 w-7" aria-hidden="true">
+              <path d="M22 112 C30 112 38 90 44 82 C50 74 54 78 58 88 C62 98 64 116 70 120 C76 124 80 108 86 84 C92 60 96 22 104 16 C112 10 116 36 120 64 C124 92 126 138 134 140 C142 142 146 108 152 72 C158 36 162 14 168 16 C174 18 178 50 182 68" stroke="currentColor" strokeWidth="20" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            AI Usage
+          </h1>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <SegmentedControl
+              value={filters.range === 'month' ? '' : filters.range}
+              options={RANGES}
+              onChange={(v) => setFilters((f) => ({ ...f, range: v }))}
+            />
+            <button
+              onClick={() => setFilters((f) => ({ ...f, range: 'month' }))}
+              className={`rounded-lg px-3 py-1.5 text-[13px] font-medium transition-all duration-150 ${
+                filters.range === 'month'
+                  ? 'bg-slate-900 text-white'
+                  : 'bg-slate-100/80 text-slate-400 hover:text-slate-600'
+              }`}
+            >
+              This Month
+            </button>
+            <div className="hidden h-4 w-px bg-slate-200 sm:block" />
+            <div className="hidden items-center gap-1.5 text-[12px] text-slate-400 sm:flex">
+              <span className={`h-1.5 w-1.5 rounded-full ${health?.ok ? (isDemo ? 'bg-amber-400' : 'bg-emerald-500') : 'bg-slate-300'}`} />
+              {isDemo ? 'Demo' : health?.ok ? health.siteId : '\u2026'}
+            </div>
+            <button
+              onClick={() => setTick((t) => t + 1)}
+              className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+              aria-label="Refresh"
+            >
+              <RotateCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+            </button>
           </div>
-          <button
-            onClick={() => setTick((t) => t + 1)}
-            className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
-            aria-label="Refresh"
-          >
-            <RotateCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
-          </button>
         </div>
+
+        {/* ── Inline Filters ── */}
+        {overview && (fOpts.devices.length > 1 || fOpts.products.length > 1) && (
+          <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2">
+            {fOpts.devices.length > 1 && (
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-medium uppercase tracking-wider text-slate-400">Device</span>
+                <FilterTabs
+                  value={filters.deviceId}
+                  options={fOpts.devices}
+                  onChange={(v) => setFilters((f) => ({ ...f, deviceId: v }))}
+                />
+              </div>
+            )}
+            {fOpts.devices.length > 1 && fOpts.products.length > 1 && (
+              <div className="hidden h-4 w-px bg-slate-200 sm:block" />
+            )}
+            {fOpts.products.length > 1 && (
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-medium uppercase tracking-wider text-slate-400">Product</span>
+                <FilterTabs
+                  value={filters.product}
+                  options={fOpts.products}
+                  onChange={(v) => setFilters((f) => ({ ...f, product: v }))}
+                />
+              </div>
+            )}
+          </div>
+        )}
       </header>
 
       {/* ── Content ── */}
@@ -978,7 +1015,10 @@ export function App() {
           <div className="card fade-up p-6" style={{ animationDelay: '150ms' }}>
             <SectionHeader title="Cost Trend" stat={formatUsd(overview?.totalCostUsd ?? 0)} />
             <ChartBoundary name="Cost Trend">
-              <CostTrendChart data={overview?.dailyTrend ?? []} />
+              <CostTrendChart
+                data={overview?.dailyTrend ?? []}
+                providerTrend={overview?.providerDailyTrend ?? []}
+              />
             </ChartBoundary>
           </div>
 

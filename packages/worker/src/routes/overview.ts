@@ -44,6 +44,7 @@ export async function handleOverview(url: URL, env: Env): Promise<Response> {
   const [
     summary,
     trendRows,
+    providerTrendRows,
     tokenRows,
     modelRows,
     channelRows,
@@ -79,6 +80,20 @@ export async function handleOverview(url: URL, env: Env): Promise<Response> {
     `).bind(...where.params).all<{
       usage_date: string;
       event_count: number;
+      estimated_cost_usd: number;
+    }>(),
+    env.DB.prepare(`
+      SELECT
+        b.usage_date,
+        b.provider,
+        COALESCE(SUM(b.estimated_cost_usd), 0) AS estimated_cost_usd
+      FROM daily_usage_breakdown b
+      ${where.whereClause}
+      GROUP BY b.usage_date, b.provider
+      ORDER BY b.usage_date, b.provider
+    `).bind(...where.params).all<{
+      usage_date: string;
+      provider: string;
       estimated_cost_usd: number;
     }>(),
     env.DB.prepare(`
@@ -169,6 +184,11 @@ export async function handleOverview(url: URL, env: Env): Promise<Response> {
     dailyTrend: (trendRows.results ?? []).map(row => ({
       usageDate: row.usage_date,
       eventCount: Number(row.event_count ?? 0),
+      estimatedCostUsd: roundUsd(row.estimated_cost_usd ?? 0),
+    })),
+    providerDailyTrend: (providerTrendRows.results ?? []).map(row => ({
+      usageDate: row.usage_date,
+      provider: row.provider,
       estimatedCostUsd: roundUsd(row.estimated_cost_usd ?? 0),
     })),
     tokenComposition: (tokenRows.results ?? []).map(row => ({
