@@ -20,7 +20,7 @@ export default {
     // IP 限流 — 仅对 API 路由生效
     if (pathname.startsWith('/api/')) {
       const ip = request.headers.get('CF-Connecting-IP') ?? 'unknown';
-      const { success } = await env.API_RATE_LIMITER.limit({ key: ip });
+      const { success } = await env.RATE_LIMITER.limit({ key: ip });
       if (!success) {
         return new Response(
           JSON.stringify({ ok: false, error: { code: 'RATE_LIMITED', message: 'Too many requests' } }),

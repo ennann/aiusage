@@ -20,7 +20,7 @@
     // IP 限流: 每 IP 每 60 秒最多 30 次 API 请求
     "ratelimits": [
         {
-            "name": "API_RATE_LIMITER",
+            "name": "RATE_LIMITER",
             "namespace_id": "1",
             "simple": {
                 "limit": 30,
