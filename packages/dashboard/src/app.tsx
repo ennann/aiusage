@@ -176,7 +176,7 @@ function formatUsd(v: number): string {
 }
 
 function formatUsdFull(v: number): string {
-  return `$${Number(v || 0).toFixed(4)}`;
+  return `$${Number(v || 0).toFixed(2)}`;
 }
 
 function formatCompact(v: number, locale: Locale = 'en'): string {
@@ -528,7 +528,7 @@ function FilterTabs({
   onChange: (v: string) => void;
   allLabel?: string;
 }) {
-  if (options.length <= 1) return null;
+  if (!options.length) return null;
   const activeClass = 'bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-slate-100';
   const inactiveClass = 'text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300';
   return (
@@ -815,21 +815,50 @@ function FlowChart({ data }: { data?: SankeyGraph }) {
   const sankeyData = transformSankey(data);
   if (!sankeyData) return <EmptyState label="No flow data" />;
   const nodeCount = sankeyData.nodes.length;
-  const minHeight = Math.max(320, nodeCount * 36);
+  const height = Math.max(360, nodeCount * 40);
   return (
-    <div style={{ minHeight }} className="h-full w-full">
+    <div style={{ height }} className="w-full">
       <ResponsiveContainer width="100%" height="100%">
         <Sankey
           data={sankeyData}
-          nodePadding={24}
+          nodePadding={28}
           nodeWidth={8}
-          margin={{ left: 0, right: 0, top: 8, bottom: 8 }}
+          margin={{ left: 0, right: 0, top: 4, bottom: 4 }}
           link={{ stroke: '#94a3b8', strokeOpacity: 0.3, fill: 'none' }}
           node={<SankeyNodeLabel x={0} y={0} width={0} height={0} payload={{ name: '' }} />}
         >
           <Tooltip
-            wrapperClassName="!rounded-xl !border-slate-200/90 !bg-white/96 !shadow-[0_12px_40px_rgba(0,0,0,0.08)] !backdrop-blur"
             cursor={false}
+            content={// eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (props: any) => {
+              const pl = props.payload as Array<Record<string, unknown>> | undefined;
+              if (!pl?.length) return null;
+              const d = (pl[0]?.payload ?? pl[0]) as Record<string, unknown>;
+              if (!d) return null;
+              // Link hover: source/target are node objects with .name
+              const srcNode = d.source as { name?: string } | undefined;
+              const tgtNode = d.target as { name?: string } | undefined;
+              // Node hover: just has .name
+              const nodeName = (d as { name?: string }).name;
+              const val = Number(d.value ?? 0);
+              if (srcNode?.name && tgtNode?.name) {
+                return (
+                  <div className="rounded-lg border border-slate-200/90 bg-white/96 px-3 py-2 text-[12px] shadow-lg backdrop-blur dark:border-slate-700 dark:bg-slate-800/96">
+                    <div className="font-medium text-slate-700 dark:text-slate-200">{srcNode.name} → {tgtNode.name}</div>
+                    <div className="mt-0.5 tabular-nums text-slate-500 dark:text-slate-400">{formatCompact(val)} tokens</div>
+                  </div>
+                );
+              }
+              if (nodeName) {
+                return (
+                  <div className="rounded-lg border border-slate-200/90 bg-white/96 px-3 py-2 text-[12px] shadow-lg backdrop-blur dark:border-slate-700 dark:bg-slate-800/96">
+                    <div className="font-medium text-slate-700 dark:text-slate-200">{nodeName}</div>
+                    {val > 0 && <div className="mt-0.5 tabular-nums text-slate-500 dark:text-slate-400">{formatCompact(val)} tokens</div>}
+                  </div>
+                );
+              }
+              return null;
+            }}
           />
         </Sankey>
       </ResponsiveContainer>
@@ -1054,11 +1083,10 @@ export function App() {
             <LangToggle value={locale} onChange={setLocale} />
             <button
               onClick={() => setTick((n) => n + 1)}
-              className="inline-flex items-center gap-1 rounded-md bg-slate-100/80 px-2 py-1 text-[11px] font-medium text-slate-400 transition-colors hover:text-slate-600 dark:bg-slate-800/80 dark:text-slate-500 dark:hover:text-slate-300"
+              className="hidden sm:inline-flex items-center justify-center rounded-md bg-slate-100/80 p-1.5 text-slate-400 transition-colors hover:text-slate-600 dark:bg-slate-800/80 dark:text-slate-500 dark:hover:text-slate-300"
               aria-label="Refresh"
             >
               <RotateCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
-              <span>{t.refresh}</span>
             </button>
           </div>
         </div>
@@ -1066,46 +1094,46 @@ export function App() {
       </header>
 
         {/* ── Range + Filters ── */}
-        <div className="mt-2 mb-6 flex flex-wrap items-center gap-x-4 gap-y-2">
-          <SegmentedControl
-            value={filters.range === 'month' ? '' : filters.range}
-            options={getRanges(t)}
-            onChange={(v) => setFilters((f) => ({ ...f, range: v }))}
-          />
-          <button
-            onClick={() => setFilters((f) => ({ ...f, range: 'month' }))}
-            className={`rounded-lg px-3 py-1.5 text-[13px] font-medium transition-all duration-150 ${
-              filters.range === 'month'
-                ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-slate-100'
-                : 'bg-slate-100/80 text-slate-400 hover:text-slate-600 dark:bg-slate-800/80 dark:text-slate-500 dark:hover:text-slate-300'
-            }`}
-          >
-            {t.thisMonth}
-          </button>
-          {overview && fOpts.devices.length > 1 && (
-            <>
-              <div className="hidden h-5 w-px bg-slate-200 dark:bg-slate-700 sm:block" />
-              <div className="flex items-center gap-2">
-                <span className="text-[11px] font-medium uppercase tracking-wider text-slate-400 dark:text-slate-500">{t.device}</span>
-                <FilterTabs
-                  value={filters.deviceId}
-                  options={fOpts.devices}
-                  allLabel={t.all}
-                  onChange={(v) => setFilters((f) => ({ ...f, deviceId: v }))}
-                />
-              </div>
-            </>
-          )}
+        <div className="mt-2 mb-6 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-4 sm:gap-y-2">
+          <div className="flex items-center gap-2">
+            <SegmentedControl
+              value={filters.range === 'month' ? '' : filters.range}
+              options={getRanges(t)}
+              onChange={(v) => setFilters((f) => ({ ...f, range: v }))}
+            />
+            <button
+              onClick={() => setFilters((f) => ({ ...f, range: 'month' }))}
+              className={`shrink-0 rounded-lg px-3 py-1.5 text-[13px] font-medium transition-all duration-150 ${
+                filters.range === 'month'
+                  ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-slate-100'
+                  : 'bg-slate-100/80 text-slate-400 hover:text-slate-600 dark:bg-slate-800/80 dark:text-slate-500 dark:hover:text-slate-300'
+              }`}
+            >
+              {t.thisMonth}
+            </button>
+          </div>
           {overview && fOpts.products.length > 1 && (
             <>
               <div className="hidden h-5 w-px bg-slate-200 dark:bg-slate-700 sm:block" />
-              <div className="flex items-center gap-2">
-                <span className="text-[11px] font-medium uppercase tracking-wider text-slate-400 dark:text-slate-500">{t.product}</span>
+              <div className="overflow-x-auto">
                 <FilterTabs
                   value={filters.product}
                   options={fOpts.products}
                   allLabel={t.all}
                   onChange={(v) => setFilters((f) => ({ ...f, product: v }))}
+                />
+              </div>
+            </>
+          )}
+          {overview && fOpts.devices.length >= 1 && (
+            <>
+              <div className="hidden h-5 w-px bg-slate-200 dark:bg-slate-700 sm:block" />
+              <div className="overflow-x-auto">
+                <FilterTabs
+                  value={filters.deviceId}
+                  options={fOpts.devices}
+                  allLabel={t.all}
+                  onChange={(v) => setFilters((f) => ({ ...f, deviceId: v }))}
                 />
               </div>
             </>
@@ -1221,13 +1249,11 @@ export function App() {
 
           {/* ── Flow & Share ── */}
           <div className="fade-up grid gap-4 lg:grid-cols-5" style={{ animationDelay: '300ms' }}>
-            <div className="card flex flex-col p-6 lg:col-span-3">
+            <div className="card p-6 lg:col-span-3">
               <SectionHeader title={t.tokenFlow} />
-              <div className="min-h-0 flex-1">
-                <ChartBoundary name="Token Flow">
-                  <FlowChart data={overview?.sankey} />
-                </ChartBoundary>
-              </div>
+              <ChartBoundary name="Token Flow">
+                <FlowChart data={overview?.sankey} />
+              </ChartBoundary>
             </div>
             <div className="card flex flex-col p-6 lg:col-span-2">
               <ChartBoundary name="Share">

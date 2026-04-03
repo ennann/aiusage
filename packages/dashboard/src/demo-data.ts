@@ -796,7 +796,7 @@ export const DEMO_OVERVIEW: OverviewResponse & { ok: boolean } = {
       "devices": [
         {
           "value": "Q5X45D77PL",
-          "label": "Q5X45D77PL",
+          "label": "MacBook Pro 16",
           "estimatedCostUsd": 3290.0577053,
           "eventCount": 18191
         }
