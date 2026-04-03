@@ -47,6 +47,9 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      - name: Inject D1 database ID
+        run: sed -i 's/LOCAL_DEV_PLACEHOLDER/${{ secrets.D1_DATABASE_ID }}/' packages/worker/wrangler.jsonc
+
       - name: Deploy worker
         run: pnpm --filter @aiusage/worker run deploy
         env:

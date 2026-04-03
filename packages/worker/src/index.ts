@@ -5,6 +5,7 @@ import { handleOverview } from './routes/overview.js';
 import { handleBreakdowns } from './routes/breakdowns.js';
 import { handlePricing } from './routes/pricing.js';
 import { corsHeaders, jsonError } from './utils/response.js';
+import { checkRateLimit } from './utils/rate-limit.js';
 import type { Env } from './types.js';
 
 export default {
@@ -15,6 +16,18 @@ export default {
     // CORS preflight
     if (request.method === 'OPTIONS' && pathname.startsWith('/api/v1/public/')) {
       return new Response(null, { status: 204, headers: corsHeaders() });
+    }
+
+    // IP 限流 — 仅对 API 路由生效
+    if (pathname.startsWith('/api/')) {
+      const ip = request.headers.get('CF-Connecting-IP') ?? 'unknown';
+      const { allowed, retryAfter } = checkRateLimit(ip);
+      if (!allowed) {
+        return new Response(
+          JSON.stringify({ ok: false, error: { code: 'RATE_LIMITED', message: 'Too many requests' } }),
+          { status: 429, headers: { 'Content-Type': 'application/json', 'Retry-After': String(retryAfter) } },
+        );
+      }
     }
 
     try {
