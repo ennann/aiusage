@@ -35,7 +35,7 @@ export default {
         return handlePricing(env);
       }
       if (pathname === '/embed/docs' && request.method === 'GET') {
-        return handleEmbedDocs(env);
+        return handleEmbedDocs(request, env);
       }
       if (pathname === '/favicon.ico') {
         return new Response(null, { status: 204 });

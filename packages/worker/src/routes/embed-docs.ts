@@ -1,7 +1,8 @@
 import type { Env } from '../types.js';
 
-export function handleEmbedDocs(_env: Env): Response {
-  return new Response(renderEmbedDocsPage(), {
+export function handleEmbedDocs(request: Request, _env: Env): Response {
+  const origin = new URL(request.url).origin;
+  return new Response(renderEmbedDocsPage(origin), {
     headers: {
       'Content-Type': 'text/html; charset=utf-8',
       'Cache-Control': 'no-store',
@@ -13,65 +14,68 @@ export function handleEmbedDocs(_env: Env): Response {
 
 interface WidgetDef {
   id: string;
-  name: string;
-  description: string;
+  nameZh: string;
+  nameEn: string;
+  descZh: string;
+  descEn: string;
   iframeHeight: number;
   supportsItems: boolean;
-  itemsNote?: string;
+  itemsNoteZh?: string;
+  itemsNoteEn?: string;
 }
 
 const widgets: WidgetDef[] = [
   {
     id: 'stats-row1',
-    name: '指标卡 · 第一行',
-    description: '预估费用、总 Token、输入、输出、缓存命中',
-    iframeHeight: 100,
-    supportsItems: true,
-    itemsNote: '索引 0-4',
+    nameZh: '指标卡 · 第一行', nameEn: 'KPI Cards · Row 1',
+    descZh: '预估费用、总 Token、输入、输出、缓存命中',
+    descEn: 'Estimated cost, total tokens, input, output, cached tokens',
+    iframeHeight: 100, supportsItems: true,
+    itemsNoteZh: '索引 0-4', itemsNoteEn: 'Index 0-4',
   },
   {
     id: 'stats-row2',
-    name: '指标卡 · 第二行',
-    description: '活跃天数、会话数、单次费用、日均费用、缓存命中率',
-    iframeHeight: 100,
-    supportsItems: true,
-    itemsNote: '索引 0-4',
+    nameZh: '指标卡 · 第二行', nameEn: 'KPI Cards · Row 2',
+    descZh: '活跃天数、会话数、单次费用、日均费用、缓存命中率',
+    descEn: 'Active days, sessions, cost/session, avg daily cost, cache hit rate',
+    iframeHeight: 100, supportsItems: true,
+    itemsNoteZh: '索引 0-4', itemsNoteEn: 'Index 0-4',
   },
   {
     id: 'cost-trend',
-    name: '费用趋势',
-    description: '按天展示费用变化的柱状图，支持多厂商堆叠',
-    iframeHeight: 360,
-    supportsItems: false,
+    nameZh: '费用趋势', nameEn: 'Cost Trend',
+    descZh: '按天展示费用变化的柱状图，支持多厂商堆叠',
+    descEn: 'Daily cost bar chart with multi-provider stacking',
+    iframeHeight: 360, supportsItems: false,
   },
   {
     id: 'token-trend',
-    name: 'Token 趋势',
-    description: '按天展示各类 Token 用量的面积图',
-    iframeHeight: 380,
-    supportsItems: false,
+    nameZh: 'Token 趋势', nameEn: 'Token Trend',
+    descZh: '按天展示各类 Token 用量的面积图',
+    descEn: 'Daily token usage area chart by type',
+    iframeHeight: 380, supportsItems: false,
   },
   {
     id: 'token-composition',
-    name: 'Token 构成',
-    description: '按天展示 Token 类型分布的堆叠柱状图',
-    iframeHeight: 380,
-    supportsItems: false,
+    nameZh: 'Token 构成', nameEn: 'Token Composition',
+    descZh: '按天展示 Token 类型分布的堆叠柱状图',
+    descEn: 'Daily token type distribution stacked bar chart',
+    iframeHeight: 380, supportsItems: false,
   },
   {
     id: 'flow',
-    name: 'Token 流向',
-    description: '模型到项目的 Token 流向桑基图',
-    iframeHeight: 420,
-    supportsItems: false,
+    nameZh: 'Token 流向', nameEn: 'Token Flow',
+    descZh: '模型到项目的 Token 流向桑基图',
+    descEn: 'Model-to-project token flow Sankey diagram',
+    iframeHeight: 420, supportsItems: false,
   },
   {
     id: 'share',
-    name: '占比分析',
-    description: '厂商、模型、设备的费用占比环形图',
-    iframeHeight: 480,
-    supportsItems: true,
-    itemsNote: '0=厂商, 1=模型, 2=设备',
+    nameZh: '占比分析', nameEn: 'Share Analysis',
+    descZh: '厂商、模型、设备的费用占比环形图',
+    descEn: 'Provider, model, and device cost share donut charts',
+    iframeHeight: 480, supportsItems: true,
+    itemsNoteZh: '0=厂商, 1=模型, 2=设备', itemsNoteEn: '0=Provider, 1=Model, 2=Device',
   },
 ];
 
@@ -86,36 +90,43 @@ function escapeHtml(value: string): string {
     .replaceAll("'", '&#39;');
 }
 
+/* ── bilingual helper ── */
+
+function t(zh: string, en: string): string {
+  return `<span data-zh="${escapeHtml(zh)}" data-en="${escapeHtml(en)}" class="i18n">${escapeHtml(zh)}</span>`;
+}
+
 /* ── widget card rendering ── */
 
-function renderWidgetCard(w: WidgetDef): string {
-  const embedCode = `<iframe src="https://your-site/embed?widget=${w.id}" width="100%" height="${w.iframeHeight}" frameborder="0"></iframe>`;
+function renderWidgetCard(w: WidgetDef, origin: string): string {
+  const embedCode = `<iframe src="${origin}/embed?widget=${w.id}" width="100%" height="${w.iframeHeight}" frameborder="0"></iframe>`;
 
-  const paramsRows = w.supportsItems
-    ? `<tr><td><code>widget</code></td><td><code>${w.id}</code></td><td>组件类型</td></tr>
-       <tr><td><code>items</code></td><td>${w.itemsNote ?? ''}</td><td>指定展示哪些子项（逗号分隔索引）</td></tr>
-       <tr><td><code>theme</code></td><td><code>light</code> / <code>dark</code> / <code>auto</code></td><td>主题，默认 auto</td></tr>
-       <tr><td><code>range</code></td><td><code>7d</code> / <code>30d</code> / <code>90d</code> …</td><td>时间范围，默认 30d</td></tr>`
-    : `<tr><td><code>widget</code></td><td><code>${w.id}</code></td><td>组件类型</td></tr>
-       <tr><td><code>theme</code></td><td><code>light</code> / <code>dark</code> / <code>auto</code></td><td>主题，默认 auto</td></tr>
-       <tr><td><code>range</code></td><td><code>7d</code> / <code>30d</code> / <code>90d</code> …</td><td>时间范围，默认 30d</td></tr>`;
+  const itemsRow = w.supportsItems
+    ? `<tr><td><code>items</code></td><td>${t(w.itemsNoteZh ?? '', w.itemsNoteEn ?? '')}</td><td>${t('指定展示哪些子项（逗号分隔索引）', 'Specify which sub-items to show (comma-separated indices)')}</td></tr>`
+    : '';
+
+  const paramsRows = `
+    <tr><td><code>widget</code></td><td><code>${w.id}</code></td><td>${t('组件类型', 'Widget type')}</td></tr>
+    ${itemsRow}
+    <tr><td><code>theme</code></td><td><code>light</code> / <code>dark</code> / <code>auto</code></td><td>${t('主题，默认 auto', 'Theme, default auto')}</td></tr>
+    <tr><td><code>range</code></td><td><code>7d</code> / <code>30d</code> / <code>90d</code> …</td><td>${t('时间范围，默认 30d', 'Time range, default 30d')}</td></tr>`;
 
   return `<div class="widget-card">
     <div class="widget-card-header">
       <h3 class="widget-name">${escapeHtml(w.id)}</h3>
-      <span class="widget-label">${escapeHtml(w.name)}</span>
+      <span class="widget-label">${t(w.nameZh, w.nameEn)}</span>
     </div>
-    <p class="widget-desc">${escapeHtml(w.description)}</p>
+    <p class="widget-desc">${t(w.descZh, w.descEn)}</p>
 
     <div class="preview-frame">
       <iframe src="/embed?widget=${w.id}&amp;theme=auto" style="height:${w.iframeHeight}px"></iframe>
     </div>
 
     <div class="params-section">
-      <h4 class="params-title">参数</h4>
+      <h4 class="params-title">${t('参数', 'Parameters')}</h4>
       <div class="table-scroll">
         <table class="params-table">
-          <thead><tr><th>参数</th><th>值</th><th>说明</th></tr></thead>
+          <thead><tr><th>${t('参数', 'Param')}</th><th>${t('值', 'Value')}</th><th>${t('说明', 'Description')}</th></tr></thead>
           <tbody>${paramsRows}</tbody>
         </table>
       </div>
@@ -130,8 +141,8 @@ function renderWidgetCard(w: WidgetDef): string {
 
 /* ── page rendering ── */
 
-function renderEmbedDocsPage(): string {
-  const widgetCards = widgets.map(renderWidgetCard).join('');
+function renderEmbedDocsPage(origin: string): string {
+  const widgetCards = widgets.map((w) => renderWidgetCard(w, origin)).join('');
 
   return `<!DOCTYPE html>
 <html lang="zh-CN">
@@ -530,6 +541,10 @@ function renderEmbedDocsPage(): string {
       </div>
       <div class="header-right">
         <a class="back-link" href="/">&larr; Dashboard</a>
+        <div class="theme-toggle" style="margin-right:4px">
+          <button class="theme-btn lang-btn" data-lang="zh">中</button>
+          <button class="theme-btn lang-btn" data-lang="en">En</button>
+        </div>
         <div class="theme-toggle">
           <button class="theme-btn" data-theme="system" title="System">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
@@ -548,8 +563,11 @@ function renderEmbedDocsPage(): string {
   <main class="container">
     <!-- hero -->
     <div class="hero">
-      <h1>Embed Widgets</h1>
-      <p>将 AI Usage 的数据组件嵌入到任何网页。通过 URL 参数精确控制展示内容。</p>
+      <h1>${t('嵌入组件', 'Embed Widgets')}</h1>
+      <p>${t(
+        '将 AI Usage 的数据组件嵌入到任何网页。通过 URL 参数精确控制展示内容。',
+        'Embed AI Usage data widgets into any webpage. Precisely control display content via URL parameters.',
+      )}</p>
     </div>
 
     <!-- widget catalog -->
@@ -559,15 +577,15 @@ function renderEmbedDocsPage(): string {
 
     <!-- common parameters -->
     <section class="common-params">
-      <h2>通用参数</h2>
+      <h2>${t('通用参数', 'Common Parameters')}</h2>
       <div class="table-scroll">
         <table>
           <thead>
             <tr>
-              <th>参数</th>
-              <th>可选值</th>
-              <th>默认值</th>
-              <th>说明</th>
+              <th>${t('参数', 'Param')}</th>
+              <th>${t('可选值', 'Values')}</th>
+              <th>${t('默认值', 'Default')}</th>
+              <th>${t('说明', 'Description')}</th>
             </tr>
           </thead>
           <tbody>
@@ -575,49 +593,49 @@ function renderEmbedDocsPage(): string {
               <td><code>widget</code></td>
               <td><code>stats-row1</code> / <code>stats-row2</code> / <code>cost-trend</code> / <code>token-trend</code> / <code>token-composition</code> / <code>flow</code> / <code>share</code></td>
               <td>&mdash;</td>
-              <td>组件类型（必填）</td>
+              <td>${t('组件类型（必填）', 'Widget type (required)')}</td>
             </tr>
             <tr>
               <td><code>items</code></td>
               <td><code>0,2,4</code></td>
-              <td>全部</td>
-              <td>指定展示哪些子项（逗号分隔索引）</td>
+              <td>${t('全部', 'All')}</td>
+              <td>${t('指定展示哪些子项（逗号分隔索引）', 'Specify sub-items to show (comma-separated indices)')}</td>
             </tr>
             <tr>
               <td><code>range</code></td>
               <td><code>7d</code> / <code>30d</code> / <code>90d</code> / <code>month</code> / <code>all</code></td>
               <td><code>30d</code></td>
-              <td>时间范围</td>
+              <td>${t('时间范围', 'Time range')}</td>
             </tr>
             <tr>
               <td><code>theme</code></td>
               <td><code>light</code> / <code>dark</code> / <code>auto</code></td>
               <td><code>auto</code></td>
-              <td>主题</td>
+              <td>${t('主题', 'Theme')}</td>
             </tr>
             <tr>
               <td><code>transparent</code></td>
               <td><code>0</code> / <code>1</code></td>
               <td><code>0</code></td>
-              <td>透明背景</td>
+              <td>${t('透明背景', 'Transparent background')}</td>
             </tr>
             <tr>
               <td><code>locale</code></td>
               <td><code>en</code> / <code>zh</code></td>
               <td><code>en</code></td>
-              <td>语言</td>
+              <td>${t('语言', 'Language')}</td>
             </tr>
             <tr>
               <td><code>deviceId</code></td>
               <td>device ID</td>
               <td>&mdash;</td>
-              <td>按设备筛选</td>
+              <td>${t('按设备筛选', 'Filter by device')}</td>
             </tr>
             <tr>
               <td><code>product</code></td>
               <td>product name</td>
               <td>&mdash;</td>
-              <td>按产品筛选</td>
+              <td>${t('按产品筛选', 'Filter by product')}</td>
             </tr>
           </tbody>
         </table>
@@ -652,6 +670,29 @@ function renderEmbedDocsPage(): string {
       });
       window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function() {
         if (getStored() === 'system') apply('system');
+      });
+    })();
+
+    // ── i18n ──
+    (function() {
+      var LANG_KEY = 'aiusage-locale';
+      function getStoredLang() {
+        try { return localStorage.getItem(LANG_KEY) || 'zh'; } catch(e) { return 'zh'; }
+      }
+      function applyLang(lang) {
+        document.querySelectorAll('.i18n').forEach(function(el) {
+          el.textContent = el.getAttribute('data-' + lang) || el.textContent;
+        });
+        document.querySelectorAll('.lang-btn').forEach(function(btn) {
+          btn.classList.toggle('active', btn.getAttribute('data-lang') === lang);
+        });
+        try { localStorage.setItem(LANG_KEY, lang); } catch(e) {}
+      }
+      applyLang(getStoredLang());
+      document.querySelectorAll('.lang-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          applyLang(btn.getAttribute('data-lang'));
+        });
       });
     })();
 
