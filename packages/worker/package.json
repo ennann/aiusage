@@ -11,7 +11,7 @@
   "scripts": {
     "dev": "pnpm --filter @aiusage/dashboard build && wrangler dev",
     "build": "tsc --noEmit",
-    "deploy": "wrangler deploy",
+    "deploy": "pnpm --filter @aiusage/dashboard build && wrangler deploy",
     "lint": "tsc --noEmit",
     "types": "wrangler types",
     "test": "echo 'no tests yet'",
@@ -19,12 +19,12 @@
     "db:migrate:remote": "wrangler d1 execute aiusage-db --remote --file=migrations/0001_init.sql"
   },
   "dependencies": {
-    "@aiusage/shared": "workspace:*",
-    "@aiusage/dashboard": "workspace:*"
+    "@aiusage/dashboard": "workspace:*",
+    "@aiusage/shared": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22",
     "typescript": "^5",
-    "wrangler": "^4"
+    "wrangler": "^4.80.0"
   }
 }
