@@ -54,6 +54,9 @@ const I18N = {
     failedToLoad: 'Failed to load data',
     input: 'Input', cached: 'Cached', cacheWrite: 'Cache Write',
     output: 'Output', reasoning: 'Reasoning',
+    range7d: '7D', range30d: '30D', range90d: '90D',
+    themeSystem: 'System', themeLight: 'Light', themeDark: 'Dark',
+    refresh: 'Refresh',
   },
   zh: {
     estimatedCost: '预估费用', totalTokens: '总 Token',
@@ -70,6 +73,9 @@ const I18N = {
     failedToLoad: '加载失败',
     input: '输入', cached: '缓存', cacheWrite: '缓存写入',
     output: '输出', reasoning: '推理',
+    range7d: '7 天', range30d: '30 天', range90d: '90 天',
+    themeSystem: '系统', themeLight: '日间', themeDark: '夜间',
+    refresh: '刷新',
   },
 } as const;
 
@@ -79,12 +85,14 @@ type T = Record<keyof typeof I18N['en'], string>;
 // Constants
 // ────────────────────────────────────────
 
-const RANGES = [
-  { value: '7d', label: '7D' },
-  { value: '30d', label: '30D' },
-  { value: '90d', label: '90D' },
-  { value: 'all', label: 'All' },
-] as const;
+function getRanges(t: T) {
+  return [
+    { value: 'all', label: t.all },
+    { value: '7d', label: t.range7d },
+    { value: '30d', label: t.range30d },
+    { value: '90d', label: t.range90d },
+  ] as const;
+}
 
 const TOKEN_SERIES = [
   { key: 'inputTokens' as const, label: 'Input', color: '#0f172a' },
@@ -412,12 +420,18 @@ function Skeleton({ className = '' }: { className?: string }) {
 // ────────────────────────────────────────
 
 const THEME_OPTIONS: { value: ThemeMode; icon: typeof Sun }[] = [
+  { value: 'system', icon: Monitor },
   { value: 'light', icon: Sun },
   { value: 'dark', icon: Moon },
-  { value: 'system', icon: Monitor },
 ];
 
-function ThemeToggle({ value, onChange }: { value: ThemeMode; onChange: (v: ThemeMode) => void }) {
+const THEME_LABELS: Record<ThemeMode, { en: string; zh: string }> = {
+  system: { en: 'System', zh: '系统' },
+  light: { en: 'Light', zh: '日间' },
+  dark: { en: 'Dark', zh: '夜间' },
+};
+
+function ThemeToggle({ value, onChange, locale }: { value: ThemeMode; onChange: (v: ThemeMode) => void; locale: Locale }) {
   return (
     <div className="inline-flex items-center rounded-md bg-slate-100/80 p-0.5 dark:bg-slate-800/80">
       {THEME_OPTIONS.map((o) => {
@@ -426,7 +440,7 @@ function ThemeToggle({ value, onChange }: { value: ThemeMode; onChange: (v: Them
           <button
             key={o.value}
             onClick={() => onChange(o.value)}
-            className={`rounded p-1.5 transition-all duration-150 ${
+            className={`inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] font-medium transition-all duration-150 ${
               value === o.value
                 ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-slate-100'
                 : 'text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300'
@@ -434,6 +448,7 @@ function ThemeToggle({ value, onChange }: { value: ThemeMode; onChange: (v: Them
             aria-label={o.value}
           >
             <Icon className="h-3.5 w-3.5" />
+            <span>{THEME_LABELS[o.value][locale]}</span>
           </button>
         );
       })}
@@ -514,14 +529,14 @@ function FilterTabs({
   allLabel?: string;
 }) {
   if (options.length <= 1) return null;
+  const activeClass = 'bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-slate-100';
+  const inactiveClass = 'text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300';
   return (
-    <div className="flex flex-wrap gap-1">
+    <div className="inline-flex items-center rounded-lg bg-slate-100/80 p-0.5 dark:bg-slate-800/80">
       <button
         onClick={() => onChange('')}
-        className={`rounded-md px-2.5 py-1 text-[12px] font-medium transition-all duration-150 ${
-          !value
-            ? 'bg-slate-900 text-white shadow-sm dark:bg-slate-200 dark:text-slate-900'
-            : 'bg-slate-100 text-slate-400 hover:text-slate-600 dark:bg-slate-800 dark:text-slate-500 dark:hover:text-slate-300'
+        className={`rounded-md px-2.5 py-1.5 text-[12px] font-medium transition-all duration-150 ${
+          !value ? activeClass : inactiveClass
         }`}
       >
         {allLabel}
@@ -530,10 +545,8 @@ function FilterTabs({
         <button
           key={o.value}
           onClick={() => onChange(o.value === value ? '' : o.value)}
-          className={`rounded-md px-2.5 py-1 text-[12px] font-medium transition-all duration-150 ${
-            value === o.value
-              ? 'bg-slate-900 text-white shadow-sm dark:bg-slate-200 dark:text-slate-900'
-              : 'bg-slate-100 text-slate-400 hover:text-slate-600 dark:bg-slate-800 dark:text-slate-500 dark:hover:text-slate-300'
+          className={`rounded-md px-2.5 py-1.5 text-[12px] font-medium transition-all duration-150 ${
+            value === o.value ? activeClass : inactiveClass
           }`}
         >
           {formatProductLabel(o.label)}
@@ -1037,30 +1050,33 @@ export function App() {
             AI Usage
           </h1>
           <div className="flex flex-wrap items-center gap-2">
-            <ThemeToggle value={theme} onChange={setTheme} />
+            <ThemeToggle value={theme} onChange={setTheme} locale={locale} />
             <LangToggle value={locale} onChange={setLocale} />
             <button
               onClick={() => setTick((n) => n + 1)}
-              className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+              className="inline-flex items-center gap-1 rounded-md bg-slate-100/80 px-2 py-1 text-[11px] font-medium text-slate-400 transition-colors hover:text-slate-600 dark:bg-slate-800/80 dark:text-slate-500 dark:hover:text-slate-300"
               aria-label="Refresh"
             >
               <RotateCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+              <span>{t.refresh}</span>
             </button>
           </div>
         </div>
 
+      </header>
+
         {/* ── Range + Filters ── */}
-        <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
+        <div className="mt-2 mb-6 flex flex-wrap items-center gap-x-4 gap-y-2">
           <SegmentedControl
             value={filters.range === 'month' ? '' : filters.range}
-            options={RANGES}
+            options={getRanges(t)}
             onChange={(v) => setFilters((f) => ({ ...f, range: v }))}
           />
           <button
             onClick={() => setFilters((f) => ({ ...f, range: 'month' }))}
             className={`rounded-lg px-3 py-1.5 text-[13px] font-medium transition-all duration-150 ${
               filters.range === 'month'
-                ? 'bg-slate-900 text-white dark:bg-slate-200 dark:text-slate-900'
+                ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-slate-100'
                 : 'bg-slate-100/80 text-slate-400 hover:text-slate-600 dark:bg-slate-800/80 dark:text-slate-500 dark:hover:text-slate-300'
             }`}
           >
@@ -1068,7 +1084,7 @@ export function App() {
           </button>
           {overview && fOpts.devices.length > 1 && (
             <>
-              <div className="hidden h-4 w-px bg-slate-200 dark:bg-slate-700 sm:block" />
+              <div className="hidden h-5 w-px bg-slate-200 dark:bg-slate-700 sm:block" />
               <div className="flex items-center gap-2">
                 <span className="text-[11px] font-medium uppercase tracking-wider text-slate-400 dark:text-slate-500">{t.device}</span>
                 <FilterTabs
@@ -1082,7 +1098,7 @@ export function App() {
           )}
           {overview && fOpts.products.length > 1 && (
             <>
-              <div className="hidden h-4 w-px bg-slate-200 dark:bg-slate-700 sm:block" />
+              <div className="hidden h-5 w-px bg-slate-200 dark:bg-slate-700 sm:block" />
               <div className="flex items-center gap-2">
                 <span className="text-[11px] font-medium uppercase tracking-wider text-slate-400 dark:text-slate-500">{t.product}</span>
                 <FilterTabs
@@ -1095,7 +1111,6 @@ export function App() {
             </>
           )}
         </div>
-      </header>
 
       {/* ── Content ── */}
       {loading && !overview ? (
