@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { HeatmapDay } from '@aiusage/shared';
 import { useIsDark } from '../hooks/use-dark';
 
@@ -8,23 +8,27 @@ const CELL = 11;   // 格子尺寸 px
 const GAP = 2;     // 间距 px
 const STEP = CELL + GAP;
 const DAYS = 7;
+const MAX_WEEKS = 53;
 const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-// 响应式：移动端 13 周（约 3 个月），平板 26 周（半年），桌面 53 周（全年）
-function getWeeks(): number {
-  const w = window.innerWidth;
-  if (w < 640) return 13;
-  if (w < 1024) return 26;
-  return 53;
+// 由容器宽度推算最多能放几列，上限 53 周
+function weeksFromWidth(containerWidth: number): number {
+  const cols = Math.floor((containerWidth + GAP) / STEP);
+  return Math.max(4, Math.min(MAX_WEEKS, cols));
 }
 
-function useWeeks(): number {
-  const [weeks, setWeeks] = useState(getWeeks);
+// 监听容器宽度，返回可容纳的周数
+function useContainerWeeks(ref: React.RefObject<HTMLDivElement | null>): number {
+  const [weeks, setWeeks] = useState(MAX_WEEKS);
   useEffect(() => {
-    const handler = () => setWeeks(getWeeks());
-    window.addEventListener('resize', handler);
-    return () => window.removeEventListener('resize', handler);
-  }, []);
+    if (!ref.current) return;
+    const ro = new ResizeObserver(entries => {
+      const width = entries[0]?.contentRect.width ?? 0;
+      if (width > 0) setWeeks(weeksFromWidth(width));
+    });
+    ro.observe(ref.current);
+    return () => ro.disconnect();
+  }, [ref]);
   return weeks;
 }
 
@@ -75,7 +79,8 @@ export function ActivityHeatmap({ days, className = '' }: {
   className?: string;
 }) {
   const isDark = useIsDark();
-  const weeks = useWeeks();
+  const containerRef = useRef<HTMLDivElement>(null);
+  const weeks = useContainerWeeks(containerRef);
   const [tooltip, setTooltip] = useState<{
     x: number; y: number;
     date: string; tokens: number; cost: number;
@@ -153,11 +158,13 @@ export function ActivityHeatmap({ days, className = '' }: {
       </div>
 
       {/* SVG 热力图 */}
-      <div className="relative overflow-x-auto">
+      <div ref={containerRef} className="relative w-full">
         <svg
-          width={svgW}
+          width="100%"
           height={totalH}
-          style={{ display: 'block', minWidth: svgW }}
+          viewBox={`0 0 ${svgW} ${totalH}`}
+          preserveAspectRatio="xMinYMid meet"
+          style={{ display: 'block' }}
           aria-label="Activity heatmap"
         >
           {/* 月份标签 */}
