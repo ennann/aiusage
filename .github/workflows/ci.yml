@@ -47,11 +47,15 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Inject D1 database ID
-        run: sed -i 's/LOCAL_DEV_PLACEHOLDER/${{ secrets.D1_DATABASE_ID }}/' packages/worker/wrangler.jsonc
+      - name: Build dashboard
+        run: pnpm --filter @aiusage/dashboard build
+
+      - name: Copy assets
+        run: cp -r packages/dashboard/dist packages/worker/public
 
       - name: Deploy worker
-        run: pnpm --filter @aiusage/worker run deploy
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: packages/worker
