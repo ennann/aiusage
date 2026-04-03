@@ -10,17 +10,14 @@
         "not_found_handling": "single-page-application",
         "run_worker_first": ["/api/*", "/pricing", "/favicon.ico"]
     },
-    // D1 数据库 — database_id 部署时通过环境变量 D1_DATABASE_ID 覆盖
-    // 本地开发: 复制此文件为 wrangler.jsonc 并填入你的 database_id
-    // CI 部署: 在 GitHub Secrets 中设置 D1_DATABASE_ID
+    // 首次 wrangler deploy 时自动创建 D1 数据库并回写 database_id
     "d1_databases": [
         {
             "binding": "DB",
             "database_name": "aiusage-db",
-            "database_id": "LOCAL_DEV_PLACEHOLDER",
         },
     ],
-    // 部署时通过 wrangler secret put 设置:
+    // 部署后通过 wrangler secret put 设置:
     // - SITE_ID
     // - ENROLL_TOKEN
     // - DEVICE_TOKEN_SECRET
