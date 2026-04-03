@@ -8,13 +8,24 @@
         "directory": "./public",
         "html_handling": "auto-trailing-slash",
         "not_found_handling": "single-page-application",
-        "run_worker_first": ["/api/*", "/pricing", "/favicon.ico"]
+        "run_worker_first": ["/api/*", "/pricing", "/favicon.ico"],
     },
     // 首次 wrangler deploy 时自动创建 D1 数据库并回写 database_id
     "d1_databases": [
         {
             "binding": "DB",
             "database_name": "aiusage-db",
+        },
+    ],
+    // IP 限流: 每 IP 每 60 秒最多 30 次 API 请求
+    "ratelimits": [
+        {
+            "name": "API_RATE_LIMITER",
+            "namespace_id": "1",
+            "simple": {
+                "limit": 30,
+                "period": 60,
+            },
         },
     ],
     // 部署后通过 wrangler secret put 设置:

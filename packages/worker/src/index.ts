@@ -5,7 +5,6 @@ import { handleOverview } from './routes/overview.js';
 import { handleBreakdowns } from './routes/breakdowns.js';
 import { handlePricing } from './routes/pricing.js';
 import { corsHeaders, jsonError } from './utils/response.js';
-import { checkRateLimit } from './utils/rate-limit.js';
 import type { Env } from './types.js';
 
 export default {
@@ -21,11 +20,11 @@ export default {
     // IP 限流 — 仅对 API 路由生效
     if (pathname.startsWith('/api/')) {
       const ip = request.headers.get('CF-Connecting-IP') ?? 'unknown';
-      const { allowed, retryAfter } = checkRateLimit(ip);
-      if (!allowed) {
+      const { success } = await env.API_RATE_LIMITER.limit({ key: ip });
+      if (!success) {
         return new Response(
           JSON.stringify({ ok: false, error: { code: 'RATE_LIMITED', message: 'Too many requests' } }),
-          { status: 429, headers: { 'Content-Type': 'application/json', 'Retry-After': String(retryAfter) } },
+          { status: 429, headers: { 'Content-Type': 'application/json', 'Retry-After': '60' } },
         );
       }
     }

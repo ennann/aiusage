@@ -7,6 +7,7 @@ declare namespace Cloudflare {
 	}
 	interface Env {
 		DB: D1Database;
+		API_RATE_LIMITER: RateLimit;
 		MAX_DEVICES: "10";
 		PUBLIC_PROJECT_VISIBILITY: "masked";
 		DEFAULT_TIMEZONE: "Asia/Shanghai";
