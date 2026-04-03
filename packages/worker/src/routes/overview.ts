@@ -41,6 +41,14 @@ export async function handleOverview(url: URL, env: Env): Promise<Response> {
 
   const where = buildWhere(filters);
 
+  // 热力图固定查最近 365 天（不受 range 过滤器影响，但保留 device/provider 等维度过滤）
+  const heatmapMinDate = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 364);
+    return d.toISOString().split('T')[0];
+  })();
+  const heatmapWhere = buildWhere({ ...filters, minDate: heatmapMinDate, range: '365d' });
+
   const [
     summary,
     trendRows,
@@ -49,6 +57,7 @@ export async function handleOverview(url: URL, env: Env): Promise<Response> {
     modelRows,
     channelRows,
     flowRows,
+    heatmapRows,
     devices,
     providers,
     products,
@@ -161,6 +170,20 @@ export async function handleOverview(url: URL, env: Env): Promise<Response> {
       project: string;
       total_tokens: number;
     }>(),
+    env.DB.prepare(`
+      SELECT
+        b.usage_date,
+        COALESCE(SUM(${TOTAL_TOKENS_SQL}), 0) AS total_tokens,
+        COALESCE(SUM(b.estimated_cost_usd), 0) AS estimated_cost_usd
+      FROM daily_usage_breakdown b
+      ${heatmapWhere.whereClause}
+      GROUP BY b.usage_date
+      ORDER BY b.usage_date
+    `).bind(...heatmapWhere.params).all<{
+      usage_date: string;
+      total_tokens: number;
+      estimated_cost_usd: number;
+    }>(),
     loadFacetOptions('device_id', filters, env),
     loadFacetOptions('provider', filters, env),
     loadFacetOptions('product', filters, env),
@@ -216,6 +239,11 @@ export async function handleOverview(url: URL, env: Env): Promise<Response> {
       eventCount: Number(row.event_count ?? 0),
     })),
     sankey: await buildSankey(flowRows.results ?? [], env),
+    heatmap: (heatmapRows.results ?? []).map(row => ({
+      usageDate: row.usage_date,
+      totalTokens: Number(row.total_tokens ?? 0),
+      estimatedCostUsd: roundUsd(row.estimated_cost_usd ?? 0),
+    })),
     filters: {
       selection: {
         range: filters.range,

@@ -1,7 +1,7 @@
 // ── 统计维度 ──
 
-export type Provider = 'anthropic' | 'openai' | 'google' | 'github' | 'alibaba' | 'moonshot' | 'sourcegraph' | 'inflection' | (string & {});
-export type Product = 'claude-code' | 'codex' | 'copilot-cli' | 'gemini-cli' | 'qwen-code' | 'kimi-code' | 'amp' | 'droid' | 'opencode' | 'pi' | (string & {});
+export type Provider = 'anthropic' | 'openai' | 'google' | 'github' | 'alibaba' | 'moonshot' | 'sourcegraph' | 'inflection' | 'cursor' | (string & {});
+export type Product = 'claude-code' | 'codex' | 'copilot-cli' | 'gemini-cli' | 'qwen-code' | 'kimi-code' | 'amp' | 'droid' | 'opencode' | 'pi' | 'cursor' | (string & {});
 export type Channel = 'cli' | 'ide' | 'web' | 'api';
 export type CostStatus = 'exact' | 'estimated' | 'unavailable';
 export type DeviceStatus = 'active' | 'disabled';
@@ -93,6 +93,7 @@ export interface OverviewResponse {
   modelCostShare: ShareItem[];
   channelCostShare: ShareItem[];
   sankey: SankeyGraph;
+  heatmap: HeatmapDay[];
   filters: DashboardFiltersPayload;
 }
 
@@ -187,6 +188,18 @@ export interface BreakdownItem {
   totalTokens?: number;
   estimatedCostUsd: number;
   costStatus: CostStatus;
+}
+
+// ── 热力图 ──
+
+export interface HeatmapDay {
+  usageDate: string;       // YYYY-MM-DD
+  totalTokens: number;
+  estimatedCostUsd: number;
+}
+
+export interface HeatmapResponse {
+  days: HeatmapDay[];
 }
 
 export interface PaginatedResponse<T> {

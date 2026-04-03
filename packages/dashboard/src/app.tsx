@@ -20,6 +20,7 @@ import { TokenTrendChart } from './components/token-trend-chart';
 import { TokenCompositionChart } from './components/token-composition-chart';
 import { FlowChart } from './components/flow-chart';
 import { DonutSection } from './components/donut-section';
+import { ActivityHeatmap } from './components/activity-heatmap';
 
 // ────────────────────────────────────────
 // Constants
@@ -369,6 +370,12 @@ export function App() {
             <div className="card">
               <KpiCard label={t.cacheHitRate} value={formatPercent(kpis?.cacheHitRate ?? 0)} />
             </div>
+          </div>
+
+          {/* ── Activity Heatmap ── */}
+          <div className="card fade-up p-6" style={{ animationDelay: '120ms' }}>
+            <SectionHeader title={locale === 'zh' ? '年度活跃热力图' : 'Activity Heatmap'} />
+            <ActivityHeatmap days={overview?.heatmap ?? []} />
           </div>
 
           {/* ── Cost Trend ── */}

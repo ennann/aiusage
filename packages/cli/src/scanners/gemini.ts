@@ -10,6 +10,7 @@ import {
   finalize,
   emptyResult,
   walkFiles,
+  normalizeModelName,
 } from './utils.js';
 
 /**
@@ -90,7 +91,7 @@ export async function scanGeminiDates(
       const tokens = extractTokens(msg);
       if (!tokens) continue;
 
-      const model = msg.model ?? fallbackModel;
+      const model = normalizeModelName(msg.model ?? fallbackModel);
       const ts = parseTs(msg.timestamp) ?? parseTs(msg.createTime) ?? parseTs(fallbackTs);
       if (!ts) continue;
 

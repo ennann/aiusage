@@ -2,6 +2,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import type { IngestBreakdown } from '@aiusage/shared';
+import { normalizeModelName } from './utils.js';
 
 interface CodexRecord {
   type?: string;
@@ -73,7 +74,7 @@ export async function scanCodexDates(
       }
 
       if (record.type === 'turn_context') {
-        currentModel = record.payload?.model ?? currentModel;
+        currentModel = normalizeModelName(record.payload?.model ?? currentModel);
         if (record.payload?.cwd) {
           currentProject = extractProject(record.payload.cwd, projectAliases);
         }

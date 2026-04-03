@@ -782,6 +782,7 @@ export const DEMO_OVERVIEW: OverviewResponse & { ok: boolean } = {
       }
     ]
   },
+  "heatmap": [],
   "filters": {
     "selection": {
       "range": "30d",

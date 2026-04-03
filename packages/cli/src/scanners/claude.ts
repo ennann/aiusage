@@ -2,6 +2,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import type { IngestBreakdown } from '@aiusage/shared';
+import { normalizeModelName } from './utils.js';
 
 interface ClaudeRecord {
   timestamp?: string;
@@ -105,7 +106,7 @@ export async function scanClaudeDates(
         if (!requestId) continue;
 
         const usage = message.usage;
-        const model = message.model ?? 'unknown';
+        const model = normalizeModelName(message.model ?? 'unknown');
         const recordProject = record.cwd ? resolveProject(record.cwd, projectAliases) : project;
 
         const cacheCreation = usage.cache_creation;

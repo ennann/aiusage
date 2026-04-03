@@ -78,3 +78,28 @@ export function finalize(groupedByDate: DateGrouped): Map<string, IngestBreakdow
 export function emptyResult(dates: Set<string>): Map<string, IngestBreakdown[]> {
   return new Map([...dates].map(d => [d, []]));
 }
+
+// 归一化模型名，去掉日期后缀（如 claude-3-5-sonnet-20241022 → claude-3-5-sonnet）
+export function normalizeModelName(name: string): string {
+  return name.replace(/-\d{8}$/, '');
+}
+
+// Pool-based 并发控制，避免同时打开过多文件句柄
+export async function runWithConcurrency<T>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T, index: number) => Promise<void>,
+): Promise<void> {
+  if (items.length === 0) return;
+  const limit = Math.max(1, Math.min(concurrency, items.length));
+  let nextIndex = 0;
+  await Promise.all(
+    Array.from({ length: limit }, async () => {
+      for (;;) {
+        const i = nextIndex++;
+        if (i >= items.length) return;
+        await worker(items[i], i);
+      }
+    }),
+  );
+}
