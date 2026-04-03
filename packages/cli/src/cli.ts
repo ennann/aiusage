@@ -4,11 +4,13 @@ import { scanDate, scanDates } from './scan.js';
 import { buildLocalReport, parseReportRange } from './report.js';
 import { renderReport } from './render.js';
 import {
+  type SyncTarget,
   detectDeviceId,
   getConfigPath,
   normalizeServerUrl,
   readConfig,
   setConfigValue,
+  upsertTarget,
   writeConfig,
 } from './config.js';
 import { defaultLookbackDays, enrollDevice, fetchHealth, uploadDailyUsage } from './api.js';
@@ -142,25 +144,32 @@ async function runHealth(serverFlag: string | boolean | undefined) {
 
 async function runEnroll(flags: Record<string, string | boolean>) {
   const config = await readConfig();
-  const apiBaseUrl = resolveServer(flags.server, config.apiBaseUrl);
-  const siteId = resolveRequiredString(flags['site-id'] ?? flags.siteId, config.siteId, '缺少 --site-id');
+  const apiBaseUrl = resolveServer(flags.server, undefined);
+  const siteId = resolveRequiredString(flags['site-id'] ?? flags.siteId, undefined, '缺少 --site-id');
   const enrollToken = resolveRequiredString(flags['enroll-token'], undefined, '缺少 --enroll-token');
   const deviceId = resolveOptionalString(flags['device-id'], config.deviceId) ?? detectDeviceId();
   const deviceAlias = resolveOptionalString(flags['device-name'] ?? flags['device-alias'], config.deviceAlias);
+  const targetName = resolveOptionalString(flags.target ?? flags.name, undefined) ?? deriveTargetName(apiBaseUrl);
 
   const response = await enrollDevice(apiBaseUrl, { siteId, deviceId, deviceAlias, enrollToken });
 
-  await writeConfig({
-    ...config,
+  const target: SyncTarget = {
+    name: targetName,
     apiBaseUrl,
     siteId,
-    deviceId,
-    deviceAlias,
     deviceToken: response.deviceToken,
-    lookbackDays: config.lookbackDays ?? 7,
-  });
+    lastSuccessfulUploadAt: undefined,
+  };
+
+  let next = upsertTarget(config, target);
+  next.deviceId = deviceId;
+  next.deviceAlias = deviceAlias;
+  next.lookbackDays = config.lookbackDays ?? 7;
+
+  await writeConfig(next);
 
   console.log(JSON.stringify({
+    target: targetName,
     siteId: response.siteId,
     deviceId: response.deviceId,
     issuedAt: response.issuedAt,
@@ -397,6 +406,15 @@ function getClosedDates(lookbackDays: number): string[] {
     dates.push(day.toISOString().split('T')[0]);
   }
   return dates;
+}
+
+function deriveTargetName(url: string): string {
+  try {
+    const host = new URL(url).hostname;
+    return host.split('.')[0] || 'default';
+  } catch {
+    return 'default';
+  }
 }
 
 function resolveServer(flagValue: string | boolean | undefined, configValue?: string): string {
