@@ -469,6 +469,20 @@ export function App() {
               <span>GitHub</span>
             </a>
             <span className="h-3 w-px bg-slate-200 dark:bg-slate-700" />
+            <a
+              href="/pricing"
+              className="text-slate-400 transition-colors hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300"
+            >
+              {t.pricing}
+            </a>
+            <span className="h-3 w-px bg-slate-200 dark:bg-slate-700" />
+            <a
+              href="/embed/docs"
+              className="text-slate-400 transition-colors hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300"
+            >
+              {t.embedWidgets}
+            </a>
+            <span className="h-3 w-px bg-slate-200 dark:bg-slate-700" />
             <span className="flex items-center gap-1">
               Made with <Heart className="h-3 w-3 fill-red-300 text-red-300" /> by{' '}
               <a
