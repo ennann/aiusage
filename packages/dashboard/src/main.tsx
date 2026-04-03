@@ -4,7 +4,7 @@ import { App } from './app';
 import { EmbedApp } from './embed/embed-app';
 import './styles.css';
 
-const isEmbed = window.location.pathname.startsWith('/embed');
+const isEmbed = window.location.pathname.startsWith('/embed') && !window.location.pathname.startsWith('/embed/docs');
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
