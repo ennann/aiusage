@@ -323,12 +323,35 @@ async function loadFacetOptions(column: string, filters: DashboardFilters, env: 
     event_count: number;
   }>();
 
+  const deviceLabels = column === 'device_id' ? await loadDeviceLabels(
+    (rows.results ?? []).map(r => r.value),
+    env,
+  ) : null;
+
   return Promise.all((rows.results ?? []).map(async row => ({
     value: row.value,
-    label: column === 'project' ? await toPublicProjectName(row.value, env) : row.value,
+    label: column === 'project'
+      ? await toPublicProjectName(row.value, env)
+      : column === 'device_id'
+        ? (deviceLabels?.get(row.value) ?? row.value)
+        : row.value,
     estimatedCostUsd: roundUsd(row.estimated_cost_usd ?? 0),
     eventCount: Number(row.event_count ?? 0),
   })));
+}
+
+async function loadDeviceLabels(deviceIds: string[], env: Env): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  if (!deviceIds.length) return map;
+  await Promise.all(deviceIds.map(async id => {
+    const row = await env.DB.prepare(
+      'SELECT public_label, hostname FROM devices WHERE device_id = ?'
+    ).bind(id).first<{ public_label: string | null; hostname: string | null }>();
+    if (row) {
+      map.set(id, row.public_label || row.hostname || id);
+    }
+  }));
+  return map;
 }
 
 function toFilterKey(column: string): FilterKey {

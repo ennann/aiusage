@@ -48,12 +48,15 @@ const I18N = {
     costTrend: 'Cost Trend', tokenTrend: 'Token Trend',
     tokenComposition: 'Token Composition', tokenFlow: 'Token Flow',
     providerShare: 'Provider Share', modelShare: 'Model Share',
-    channelShare: 'Channel Share', thisMonth: 'This Month',
+    channelShare: 'Channel Share', deviceShare: 'Device Share', thisMonth: 'This Month',
     device: 'Device', product: 'Product', all: 'All',
     noData: 'No data', noFlowData: 'No flow data',
     failedToLoad: 'Failed to load data',
     input: 'Input', cached: 'Cached', cacheWrite: 'Cache Write',
     output: 'Output', reasoning: 'Reasoning',
+    range7d: '7D', range30d: '30D', range90d: '90D',
+    themeSystem: 'System', themeLight: 'Light', themeDark: 'Dark',
+    refresh: 'Refresh',
   },
   zh: {
     estimatedCost: '预估费用', totalTokens: '总 Token',
@@ -64,12 +67,15 @@ const I18N = {
     costTrend: '费用趋势', tokenTrend: 'Token 趋势',
     tokenComposition: 'Token 构成', tokenFlow: 'Token 流向',
     providerShare: '厂商占比', modelShare: '模型占比',
-    channelShare: '渠道占比', thisMonth: '本月',
+    channelShare: '渠道占比', deviceShare: '设备占比', thisMonth: '本月',
     device: '设备', product: '产品', all: '全部',
     noData: '暂无数据', noFlowData: '暂无流向数据',
     failedToLoad: '加载失败',
     input: '输入', cached: '缓存', cacheWrite: '缓存写入',
     output: '输出', reasoning: '推理',
+    range7d: '7 天', range30d: '30 天', range90d: '90 天',
+    themeSystem: '系统', themeLight: '日间', themeDark: '夜间',
+    refresh: '刷新',
   },
 } as const;
 
@@ -79,12 +85,14 @@ type T = Record<keyof typeof I18N['en'], string>;
 // Constants
 // ────────────────────────────────────────
 
-const RANGES = [
-  { value: '7d', label: '7D' },
-  { value: '30d', label: '30D' },
-  { value: '90d', label: '90D' },
-  { value: 'all', label: 'All' },
-] as const;
+function getRanges(t: T) {
+  return [
+    { value: 'all', label: t.all },
+    { value: '7d', label: t.range7d },
+    { value: '30d', label: t.range30d },
+    { value: '90d', label: t.range90d },
+  ] as const;
+}
 
 const TOKEN_SERIES = [
   { key: 'inputTokens' as const, label: 'Input', color: '#0f172a' },
@@ -99,16 +107,16 @@ const CHART_COLORS = [
 ];
 
 const PROVIDER_COLORS: Record<string, string> = {
-  anthropic: '#D97757',
-  openai: '#10A37F',
-  google: '#4285F4',
-  github: '#1F2328',
-  sourcegraph: '#FF4F00',
-  moonshot: '#4A6CF7',
-  alibaba: '#5A29E4',
-  droid: '#2C3E50',
-  opencode: '#16A34A',
-  openclaw: '#EF4444',
+  anthropic: '#0f172a',
+  openai: '#1e293b',
+  google: '#334155',
+  github: '#475569',
+  sourcegraph: '#64748b',
+  moonshot: '#94a3b8',
+  alibaba: '#cbd5e1',
+  droid: '#e2e8f0',
+  opencode: '#f1f5f9',
+  openclaw: '#f8fafc',
 };
 
 const PROVIDER_LABELS: Record<string, string> = {
@@ -168,7 +176,7 @@ function formatUsd(v: number): string {
 }
 
 function formatUsdFull(v: number): string {
-  return `$${Number(v || 0).toFixed(4)}`;
+  return `$${Number(v || 0).toFixed(2)}`;
 }
 
 function formatCompact(v: number, locale: Locale = 'en'): string {
@@ -412,12 +420,18 @@ function Skeleton({ className = '' }: { className?: string }) {
 // ────────────────────────────────────────
 
 const THEME_OPTIONS: { value: ThemeMode; icon: typeof Sun }[] = [
+  { value: 'system', icon: Monitor },
   { value: 'light', icon: Sun },
   { value: 'dark', icon: Moon },
-  { value: 'system', icon: Monitor },
 ];
 
-function ThemeToggle({ value, onChange }: { value: ThemeMode; onChange: (v: ThemeMode) => void }) {
+const THEME_LABELS: Record<ThemeMode, { en: string; zh: string }> = {
+  system: { en: 'System', zh: '系统' },
+  light: { en: 'Light', zh: '日间' },
+  dark: { en: 'Dark', zh: '夜间' },
+};
+
+function ThemeToggle({ value, onChange, locale }: { value: ThemeMode; onChange: (v: ThemeMode) => void; locale: Locale }) {
   return (
     <div className="inline-flex items-center rounded-md bg-slate-100/80 p-0.5 dark:bg-slate-800/80">
       {THEME_OPTIONS.map((o) => {
@@ -426,7 +440,7 @@ function ThemeToggle({ value, onChange }: { value: ThemeMode; onChange: (v: Them
           <button
             key={o.value}
             onClick={() => onChange(o.value)}
-            className={`rounded p-1.5 transition-all duration-150 ${
+            className={`inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] font-medium transition-all duration-150 ${
               value === o.value
                 ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-slate-100'
                 : 'text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300'
@@ -434,6 +448,7 @@ function ThemeToggle({ value, onChange }: { value: ThemeMode; onChange: (v: Them
             aria-label={o.value}
           >
             <Icon className="h-3.5 w-3.5" />
+            <span>{THEME_LABELS[o.value][locale]}</span>
           </button>
         );
       })}
@@ -513,15 +528,15 @@ function FilterTabs({
   onChange: (v: string) => void;
   allLabel?: string;
 }) {
-  if (options.length <= 1) return null;
+  if (!options.length) return null;
+  const activeClass = 'bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-slate-100';
+  const inactiveClass = 'text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300';
   return (
-    <div className="flex flex-wrap gap-1">
+    <div className="inline-flex items-center rounded-lg bg-slate-100/80 p-0.5 dark:bg-slate-800/80">
       <button
         onClick={() => onChange('')}
-        className={`rounded-md px-2.5 py-1 text-[12px] font-medium transition-all duration-150 ${
-          !value
-            ? 'bg-slate-900 text-white shadow-sm dark:bg-slate-200 dark:text-slate-900'
-            : 'bg-slate-100 text-slate-400 hover:text-slate-600 dark:bg-slate-800 dark:text-slate-500 dark:hover:text-slate-300'
+        className={`rounded-md px-2.5 py-1.5 text-[12px] font-medium transition-all duration-150 ${
+          !value ? activeClass : inactiveClass
         }`}
       >
         {allLabel}
@@ -530,10 +545,8 @@ function FilterTabs({
         <button
           key={o.value}
           onClick={() => onChange(o.value === value ? '' : o.value)}
-          className={`rounded-md px-2.5 py-1 text-[12px] font-medium transition-all duration-150 ${
-            value === o.value
-              ? 'bg-slate-900 text-white shadow-sm dark:bg-slate-200 dark:text-slate-900'
-              : 'bg-slate-100 text-slate-400 hover:text-slate-600 dark:bg-slate-800 dark:text-slate-500 dark:hover:text-slate-300'
+          className={`rounded-md px-2.5 py-1.5 text-[12px] font-medium transition-all duration-150 ${
+            value === o.value ? activeClass : inactiveClass
           }`}
         >
           {formatProductLabel(o.label)}
@@ -564,8 +577,8 @@ function KpiCard({
         {label}
       </div>
       <div
-        className={`mt-1.5 text-[22px] font-semibold tracking-tight tabular-nums leading-none ${
-          highlight ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-900 dark:text-slate-100'
+        className={`mt-1.5 text-[22px] tracking-tight tabular-nums leading-none ${
+          highlight ? 'font-bold text-emerald-600 dark:text-emerald-400' : 'font-semibold text-slate-900 dark:text-slate-100'
         }`}
       >
         {value}
@@ -652,7 +665,7 @@ function CostTrendChart({
   const barW = data.length <= 7 ? 28 : data.length <= 30 ? 14 : 6;
 
   const config = Object.fromEntries(
-    providers.map((p) => [p, { label: providerLabel(p), color: PROVIDER_COLORS[p] ?? '#94a3b8' }]),
+    providers.map((p, i) => [p, { label: providerLabel(p), color: CHART_COLORS[i % CHART_COLORS.length] }]),
   ) satisfies ChartConfig;
 
   return (
@@ -684,7 +697,7 @@ function CostTrendChart({
                 key={p}
                 dataKey={p}
                 stackId="cost"
-                fill={PROVIDER_COLORS[p] ?? '#94a3b8'}
+                fill={CHART_COLORS[i % CHART_COLORS.length]}
                 radius={i === providers.length - 1 ? [3, 3, 0, 0] : [0, 0, 0, 0]}
               />
             ))}
@@ -693,9 +706,9 @@ function CostTrendChart({
       </ChartContainer>
       {providers.length > 1 && (
         <ChartLegend
-          items={providers.map((p) => ({
+          items={providers.map((p, i) => ({
             label: providerLabel(p),
-            color: PROVIDER_COLORS[p] ?? '#94a3b8',
+            color: CHART_COLORS[i % CHART_COLORS.length],
           }))}
         />
       )}
@@ -802,21 +815,50 @@ function FlowChart({ data }: { data?: SankeyGraph }) {
   const sankeyData = transformSankey(data);
   if (!sankeyData) return <EmptyState label="No flow data" />;
   const nodeCount = sankeyData.nodes.length;
-  const height = Math.max(320, nodeCount * 36);
+  const height = Math.max(360, nodeCount * 40);
   return (
     <div style={{ height }} className="w-full">
       <ResponsiveContainer width="100%" height="100%">
         <Sankey
           data={sankeyData}
-          nodePadding={24}
+          nodePadding={28}
           nodeWidth={8}
-          margin={{ left: 0, right: 0, top: 8, bottom: 8 }}
+          margin={{ left: 0, right: 0, top: 4, bottom: 4 }}
           link={{ stroke: '#94a3b8', strokeOpacity: 0.3, fill: 'none' }}
           node={<SankeyNodeLabel x={0} y={0} width={0} height={0} payload={{ name: '' }} />}
         >
           <Tooltip
-            wrapperClassName="!rounded-xl !border-slate-200/90 !bg-white/96 !shadow-[0_12px_40px_rgba(0,0,0,0.08)] !backdrop-blur"
             cursor={false}
+            content={// eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (props: any) => {
+              const pl = props.payload as Array<Record<string, unknown>> | undefined;
+              if (!pl?.length) return null;
+              const d = (pl[0]?.payload ?? pl[0]) as Record<string, unknown>;
+              if (!d) return null;
+              // Link hover: source/target are node objects with .name
+              const srcNode = d.source as { name?: string } | undefined;
+              const tgtNode = d.target as { name?: string } | undefined;
+              // Node hover: just has .name
+              const nodeName = (d as { name?: string }).name;
+              const val = Number(d.value ?? 0);
+              if (srcNode?.name && tgtNode?.name) {
+                return (
+                  <div className="rounded-lg border border-slate-200/90 bg-white/96 px-3 py-2 text-[12px] shadow-lg backdrop-blur dark:border-slate-700 dark:bg-slate-800/96">
+                    <div className="font-medium text-slate-700 dark:text-slate-200">{srcNode.name} → {tgtNode.name}</div>
+                    <div className="mt-0.5 tabular-nums text-slate-500 dark:text-slate-400">{formatCompact(val)} tokens</div>
+                  </div>
+                );
+              }
+              if (nodeName) {
+                return (
+                  <div className="rounded-lg border border-slate-200/90 bg-white/96 px-3 py-2 text-[12px] shadow-lg backdrop-blur dark:border-slate-700 dark:bg-slate-800/96">
+                    <div className="font-medium text-slate-700 dark:text-slate-200">{nodeName}</div>
+                    {val > 0 && <div className="mt-0.5 tabular-nums text-slate-500 dark:text-slate-400">{formatCompact(val)} tokens</div>}
+                  </div>
+                );
+              }
+              return null;
+            }}
           />
         </Sankey>
       </ResponsiveContainer>
@@ -1037,11 +1079,11 @@ export function App() {
             AI Usage
           </h1>
           <div className="flex flex-wrap items-center gap-2">
-            <ThemeToggle value={theme} onChange={setTheme} />
+            <ThemeToggle value={theme} onChange={setTheme} locale={locale} />
             <LangToggle value={locale} onChange={setLocale} />
             <button
               onClick={() => setTick((n) => n + 1)}
-              className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+              className="hidden sm:inline-flex items-center justify-center rounded-md bg-slate-100/80 p-1.5 text-slate-400 transition-colors hover:text-slate-600 dark:bg-slate-800/80 dark:text-slate-500 dark:hover:text-slate-300"
               aria-label="Refresh"
             >
               <RotateCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
@@ -1049,42 +1091,31 @@ export function App() {
           </div>
         </div>
 
+      </header>
+
         {/* ── Range + Filters ── */}
-        <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
-          <SegmentedControl
-            value={filters.range === 'month' ? '' : filters.range}
-            options={RANGES}
-            onChange={(v) => setFilters((f) => ({ ...f, range: v }))}
-          />
-          <button
-            onClick={() => setFilters((f) => ({ ...f, range: 'month' }))}
-            className={`rounded-lg px-3 py-1.5 text-[13px] font-medium transition-all duration-150 ${
-              filters.range === 'month'
-                ? 'bg-slate-900 text-white dark:bg-slate-200 dark:text-slate-900'
-                : 'bg-slate-100/80 text-slate-400 hover:text-slate-600 dark:bg-slate-800/80 dark:text-slate-500 dark:hover:text-slate-300'
-            }`}
-          >
-            {t.thisMonth}
-          </button>
-          {overview && fOpts.devices.length > 1 && (
-            <>
-              <div className="hidden h-4 w-px bg-slate-200 dark:bg-slate-700 sm:block" />
-              <div className="flex items-center gap-2">
-                <span className="text-[11px] font-medium uppercase tracking-wider text-slate-400 dark:text-slate-500">{t.device}</span>
-                <FilterTabs
-                  value={filters.deviceId}
-                  options={fOpts.devices}
-                  allLabel={t.all}
-                  onChange={(v) => setFilters((f) => ({ ...f, deviceId: v }))}
-                />
-              </div>
-            </>
-          )}
+        <div className="mt-2 mb-6 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-4 sm:gap-y-2">
+          <div className="flex items-center gap-2">
+            <SegmentedControl
+              value={filters.range === 'month' ? '' : filters.range}
+              options={getRanges(t)}
+              onChange={(v) => setFilters((f) => ({ ...f, range: v }))}
+            />
+            <button
+              onClick={() => setFilters((f) => ({ ...f, range: 'month' }))}
+              className={`shrink-0 rounded-lg px-3 py-1.5 text-[13px] font-medium transition-all duration-150 ${
+                filters.range === 'month'
+                  ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-slate-100'
+                  : 'bg-slate-100/80 text-slate-400 hover:text-slate-600 dark:bg-slate-800/80 dark:text-slate-500 dark:hover:text-slate-300'
+              }`}
+            >
+              {t.thisMonth}
+            </button>
+          </div>
           {overview && fOpts.products.length > 1 && (
             <>
-              <div className="hidden h-4 w-px bg-slate-200 dark:bg-slate-700 sm:block" />
-              <div className="flex items-center gap-2">
-                <span className="text-[11px] font-medium uppercase tracking-wider text-slate-400 dark:text-slate-500">{t.product}</span>
+              <div className="hidden h-5 w-px bg-slate-200 dark:bg-slate-700 sm:block" />
+              <div className="overflow-x-auto">
                 <FilterTabs
                   value={filters.product}
                   options={fOpts.products}
@@ -1094,8 +1125,20 @@ export function App() {
               </div>
             </>
           )}
+          {overview && fOpts.devices.length >= 1 && (
+            <>
+              <div className="hidden h-5 w-px bg-slate-200 dark:bg-slate-700 sm:block" />
+              <div className="overflow-x-auto">
+                <FilterTabs
+                  value={filters.deviceId}
+                  options={fOpts.devices}
+                  allLabel={t.all}
+                  onChange={(v) => setFilters((f) => ({ ...f, deviceId: v }))}
+                />
+              </div>
+            </>
+          )}
         </div>
-      </header>
 
       {/* ── Content ── */}
       {loading && !overview ? (
@@ -1235,10 +1278,15 @@ export function App() {
                   />
                   <div className="my-5 border-t border-slate-100 dark:border-slate-800" />
                   <DonutSection
-                    title={t.channelShare}
-                    data={overview?.channelCostShare ?? []}
-                    colors={['#1e3a5f', '#3b6fa0', '#6b9fd0', '#a8c5e2', '#cddff0', '#e8f0f8']}
-                    centerLabel={formatNumber(overview?.totalEvents ?? 0)}
+                    title={t.deviceShare}
+                    data={(overview?.filters.options.devices ?? []).map((d) => ({
+                      value: d.value,
+                      label: d.label,
+                      estimatedCostUsd: d.estimatedCostUsd,
+                      eventCount: d.eventCount,
+                    }))}
+                    colors={CHART_COLORS}
+                    centerLabel={formatUsd(overview?.totalCostUsd ?? 0)}
                   />
                 </div>
               </ChartBoundary>
