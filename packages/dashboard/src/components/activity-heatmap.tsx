@@ -4,32 +4,33 @@ import { useIsDark } from '../hooks/use-dark';
 
 // ── 常量 ──
 
-const CELL = 11;   // 格子尺寸 px
-const GAP = 2;     // 间距 px
-const STEP = CELL + GAP;
+const GAP = 2;       // 格子间距 px
 const DAYS = 7;
-const MAX_WEEKS = 53;
+const WEEKS = 53;
+const CELL_MIN = 8;  // 最小格子尺寸（约适合 320px 宽）
+const CELL_MAX = 14; // 最大格子尺寸
 const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-// 由容器宽度推算最多能放几列，上限 53 周
-function weeksFromWidth(containerWidth: number): number {
-  const cols = Math.floor((containerWidth + GAP) / STEP);
-  return Math.max(4, Math.min(MAX_WEEKS, cols));
+// 由容器宽度反推格子尺寸：保持 53 周，调整 cell 大小
+function cellFromWidth(containerWidth: number): number {
+  // cell = (width - (WEEKS-1)*GAP) / WEEKS
+  const cell = (containerWidth - (WEEKS - 1) * GAP) / WEEKS;
+  return Math.max(CELL_MIN, Math.min(CELL_MAX, Math.floor(cell)));
 }
 
-// 监听容器宽度，返回可容纳的周数
-function useContainerWeeks(ref: React.RefObject<HTMLDivElement | null>): number {
-  const [weeks, setWeeks] = useState(MAX_WEEKS);
+// 监听容器宽度，返回合适的 cell 尺寸
+function useContainerCell(ref: React.RefObject<HTMLDivElement | null>): number {
+  const [cell, setCell] = useState(11);
   useEffect(() => {
     if (!ref.current) return;
     const ro = new ResizeObserver(entries => {
       const width = entries[0]?.contentRect.width ?? 0;
-      if (width > 0) setWeeks(weeksFromWidth(width));
+      if (width > 0) setCell(cellFromWidth(width));
     });
     ro.observe(ref.current);
     return () => ro.disconnect();
   }, [ref]);
-  return weeks;
+  return cell;
 }
 
 // Gamma 校正让低值也有明显颜色区分
@@ -80,7 +81,8 @@ export function ActivityHeatmap({ days, className = '' }: {
 }) {
   const isDark = useIsDark();
   const containerRef = useRef<HTMLDivElement>(null);
-  const weeks = useContainerWeeks(containerRef);
+  const cell = useContainerCell(containerRef);
+  const step = cell + GAP;
   const [tooltip, setTooltip] = useState<{
     x: number; y: number;
     date: string; tokens: number; cost: number;
@@ -93,19 +95,19 @@ export function ActivityHeatmap({ days, className = '' }: {
 
     const maxTokens = Math.max(0, ...days.map(d => d.totalTokens));
 
-    // 以今天为终点，往前推 weeks 周
+    // 以今天为终点，往前推 WEEKS 周
     const today = new Date();
     // 对齐到周日（JS getDay()=0），让今天落在最后一列
     const dayOfWeek = today.getDay(); // 0=Sun,6=Sat
     const endDate = addDays(today, 6 - dayOfWeek); // 推到本周六
-    const startDate = addDays(endDate, -(weeks * DAYS - 1));
+    const startDate = addDays(endDate, -(WEEKS * DAYS - 1));
 
     // grid[week][dayOfWeek] = { dateStr, data? }
     const grid: Array<Array<{ dateStr: string; data?: HeatmapDay }>> = [];
     let monthMarks: Array<{ weekIdx: number; label: string }> = [];
     let lastMonth = -1;
 
-    for (let w = 0; w < weeks; w++) {
+    for (let w = 0; w < WEEKS; w++) {
       const col: Array<{ dateStr: string; data?: HeatmapDay }> = [];
       for (let d = 0; d < DAYS; d++) {
         const date = addDays(startDate, w * DAYS + d);
@@ -133,10 +135,10 @@ export function ActivityHeatmap({ days, className = '' }: {
     }
 
     return { grid, monthMarks, maxTokens, activeDays, streak };
-  }, [days, weeks]);
+  }, [days]);
 
-  const svgW = weeks * STEP - GAP;
-  const svgH = DAYS * STEP - GAP;
+  const svgW = WEEKS * step - GAP;
+  const svgH = DAYS * step - GAP;
   const MONTH_ROW = 14;   // 月份标签行高
   const LEGEND_ROW = 20;  // 底部图例行高
   const totalH = MONTH_ROW + svgH + LEGEND_ROW;
@@ -160,10 +162,8 @@ export function ActivityHeatmap({ days, className = '' }: {
       {/* SVG 热力图 */}
       <div ref={containerRef} className="relative w-full">
         <svg
-          width="100%"
+          width={svgW}
           height={totalH}
-          viewBox={`0 0 ${svgW} ${totalH}`}
-          preserveAspectRatio="xMinYMid meet"
           style={{ display: 'block' }}
           aria-label="Activity heatmap"
         >
@@ -171,7 +171,7 @@ export function ActivityHeatmap({ days, className = '' }: {
           {monthMarks.map(({ weekIdx, label }) => (
             <text
               key={label + weekIdx}
-              x={weekIdx * STEP}
+              x={weekIdx * step}
               y={MONTH_ROW - 4}
               fontSize={9}
               fill={isDark ? '#8b949e' : '#57606a'}
@@ -188,24 +188,21 @@ export function ActivityHeatmap({ days, className = '' }: {
                 const tokens = data?.totalTokens ?? 0;
                 const cost = data?.estimatedCostUsd ?? 0;
                 const fill = colorForValue(tokens, maxTokens, isDark);
-                const x = wi * STEP;
-                const y = di * STEP;
+                const x = wi * step;
+                const y = di * step;
                 return (
                   <rect
                     key={dateStr}
                     x={x}
                     y={y}
-                    width={CELL}
-                    height={CELL}
+                    width={cell}
+                    height={cell}
                     rx={2}
                     fill={fill}
                     style={{ cursor: tokens > 0 ? 'pointer' : 'default' }}
-                    onMouseEnter={(e) => {
-                      const rect = (e.currentTarget as SVGRectElement)
-                        .closest('svg')!
-                        .getBoundingClientRect();
+                    onMouseEnter={() => {
                       setTooltip({
-                        x: x + CELL / 2,
+                        x: x + cell / 2,
                         y: MONTH_ROW + y,
                         date: dateStr,
                         tokens,
@@ -220,23 +217,23 @@ export function ActivityHeatmap({ days, className = '' }: {
           </g>
 
           {/* 图例 */}
-          <g transform={`translate(${svgW - 5 * (CELL + GAP) - 30}, ${totalH - LEGEND_ROW + 4})`}>
+          <g transform={`translate(${svgW - 5 * step - 30}, ${totalH - LEGEND_ROW + 4})`}>
             <text x={0} y={9} fontSize={9} fill={isDark ? '#8b949e' : '#57606a'} fontFamily="system-ui, sans-serif">Less</text>
             {[0, 1, 2, 3, 4].map((lvl) => {
               const levels = isDark ? DARK_LEVELS : LIGHT_LEVELS;
               return (
                 <rect
                   key={lvl}
-                  x={28 + lvl * STEP}
+                  x={28 + lvl * step}
                   y={0}
-                  width={CELL}
-                  height={CELL}
+                  width={cell}
+                  height={cell}
                   rx={2}
                   fill={levels[lvl]}
                 />
               );
             })}
-            <text x={28 + 5 * STEP} y={9} fontSize={9} fill={isDark ? '#8b949e' : '#57606a'} fontFamily="system-ui, sans-serif">More</text>
+            <text x={28 + 5 * step} y={9} fontSize={9} fill={isDark ? '#8b949e' : '#57606a'} fontFamily="system-ui, sans-serif">More</text>
           </g>
         </svg>
 
