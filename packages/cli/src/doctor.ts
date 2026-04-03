@@ -24,37 +24,40 @@ export async function runDoctor(): Promise<Check[]> {
     checks.push({ name: '配置文件', status: 'fail', message: '未找到，请先执行 aiusage init' });
   }
 
-  // 必要字段
-  const fields: Array<[keyof typeof config, string, string]> = [
-    ['apiBaseUrl', '服务端地址', '请执行 aiusage init --server <URL>'],
-    ['siteId', '站点 ID', '请执行 aiusage init --site-id <ID>'],
-    ['deviceId', '设备 ID', '请执行 aiusage init'],
-    ['deviceToken', '设备令牌', '请执行 aiusage enroll'],
-  ];
-  for (const [key, label, hint] of fields) {
-    const value = config[key];
-    if (value) {
-      const display = key === 'deviceToken' ? `${String(value).slice(0, 12)}…` : String(value);
-      checks.push({ name: label, status: 'ok', message: display });
-    } else {
-      checks.push({
-        name: label,
-        status: key === 'deviceToken' ? 'fail' : 'warn',
-        message: `未配置，${hint}`,
-      });
-    }
+  // 设备 ID
+  if (config.deviceId) {
+    checks.push({ name: '设备 ID', status: 'ok', message: config.deviceId });
+  } else {
+    checks.push({ name: '设备 ID', status: 'warn', message: '未配置，请执行 aiusage init' });
   }
 
-  // 服务端连通性
-  if (config.apiBaseUrl) {
-    try {
-      const health = await fetchHealth(config.apiBaseUrl);
-      checks.push({ name: '服务端连通', status: 'ok', message: `${health.siteId} (v${health.version})` });
-    } catch (err) {
-      checks.push({ name: '服务端连通', status: 'fail', message: err instanceof Error ? err.message : String(err) });
-    }
+  // 按 target 检查
+  const targets = config.targets ?? [];
+  if (targets.length === 0) {
+    checks.push({ name: '上报目标', status: 'warn', message: '未配置，请执行 aiusage enroll' });
   } else {
-    checks.push({ name: '服务端连通', status: 'warn', message: '跳过（未配置服务端地址）' });
+    for (const target of targets) {
+      const prefix = `[${target.name}]`;
+
+      if (target.deviceToken) {
+        checks.push({ name: `${prefix} 设备令牌`, status: 'ok', message: `${target.deviceToken.slice(0, 12)}…` });
+      } else {
+        checks.push({ name: `${prefix} 设备令牌`, status: 'fail', message: '未注册' });
+      }
+
+      try {
+        const health = await fetchHealth(target.apiBaseUrl);
+        checks.push({ name: `${prefix} 服务端`, status: 'ok', message: `${health.siteId} (v${health.version})` });
+      } catch (err) {
+        checks.push({ name: `${prefix} 服务端`, status: 'fail', message: err instanceof Error ? err.message : String(err) });
+      }
+
+      if (target.lastSuccessfulUploadAt) {
+        checks.push({ name: `${prefix} 上次同步`, status: 'ok', message: target.lastSuccessfulUploadAt });
+      } else {
+        checks.push({ name: `${prefix} 上次同步`, status: 'warn', message: '暂无记录' });
+      }
+    }
   }
 
   // 扫描目录
@@ -81,13 +84,6 @@ export async function runDoctor(): Promise<Check[]> {
     });
   } else {
     checks.push({ name: '定时同步', status: 'warn', message: '未启用，可执行 aiusage schedule on' });
-  }
-
-  // 上次同步
-  if (config.lastSuccessfulUploadAt) {
-    checks.push({ name: '上次同步', status: 'ok', message: config.lastSuccessfulUploadAt });
-  } else {
-    checks.push({ name: '上次同步', status: 'warn', message: '暂无记录' });
   }
 
   return checks;
