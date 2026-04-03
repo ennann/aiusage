@@ -90,6 +90,9 @@ importers:
 
   packages/worker:
     dependencies:
+      '@aiusage/dashboard':
+        specifier: workspace:*
+        version: link:../dashboard
       '@aiusage/shared':
         specifier: workspace:*
         version: link:../shared
