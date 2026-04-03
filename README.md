@@ -66,9 +66,9 @@ graph LR
 Copy this prompt, paste it into your AI coding agent (Claude Code, Codex, Copilot, Gemini, etc.):
 
 ```text
-Clone https://github.com/ennann/aiusage.git, read skills/deploy-server/deploy-server.md,
+Clone https://github.com/ennann/aiusage.git, read skills/aiusage-server/aiusage-server.md,
 and help me deploy AIUsage to my Cloudflare account.
-After the server is up, follow skills/setup-controller/setup-controller.md to connect this device.
+After the server is up, follow skills/aiusage-cli/aiusage-cli.md to connect this device.
 ```
 
 ### Or deploy manually
