@@ -47,7 +47,7 @@ export async function runDoctor(): Promise<Check[]> {
 
       try {
         const health = await fetchHealth(target.apiBaseUrl);
-        checks.push({ name: `${prefix} 服务端`, status: 'ok', message: `${health.siteId} (v${health.version})` });
+        checks.push({ name: `${prefix} 服务端`, status: 'ok', message: health.siteId });
       } catch (err) {
         checks.push({ name: `${prefix} 服务端`, status: 'fail', message: err instanceof Error ? err.message : String(err) });
       }
