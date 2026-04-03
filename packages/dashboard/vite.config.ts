@@ -8,4 +8,11 @@ export default defineConfig({
     outDir: 'dist',
     emptyOutDir: true,
   },
+  server: {
+    proxy: {
+      '/api': 'http://localhost:8787',
+      '/pricing': 'http://localhost:8787',
+      '/embed/docs': 'http://localhost:8787',
+    },
+  },
 });
