@@ -34,7 +34,7 @@ try {
     await runReport(parsed.flags);
   } else if (command === 'health') {
     const parsed = parseArgs(argv.slice(1));
-    await runHealth(parsed.flags.server);
+    await runHealth(parsed.flags);
   } else if (command === 'enroll') {
     const parsed = parseArgs(argv.slice(1));
     await runEnroll(parsed.flags);
@@ -136,10 +136,18 @@ function fmt(n: number): string {
   return n.toLocaleString('en-US');
 }
 
-async function runHealth(serverFlag: string | boolean | undefined) {
+async function runHealth(flags: Record<string, string | boolean>) {
   const config = await readConfig();
-  const apiBaseUrl = resolveServer(serverFlag, config.apiBaseUrl);
-  const health = await fetchHealth(apiBaseUrl);
+
+  if (typeof flags.server === 'string') {
+    const health = await fetchHealth(normalizeServerUrl(flags.server));
+    console.log(JSON.stringify(health, null, 2));
+    return;
+  }
+
+  const targetName = resolveOptionalString(flags.target, undefined);
+  const target = findTargetOrThrow(config, targetName);
+  const health = await fetchHealth(target.apiBaseUrl);
   console.log(JSON.stringify(health, null, 2));
 }
 
@@ -282,17 +290,12 @@ async function runInit(flags: Record<string, string | boolean>) {
   const config = await readConfig();
   const next = {
     ...config,
-    apiBaseUrl: typeof flags.server === 'string'
-      ? normalizeServerUrl(flags.server)
-      : config.apiBaseUrl,
-    siteId: resolveOptionalString(flags['site-id'] ?? flags.siteId, config.siteId),
     deviceId: resolveOptionalString(flags['device-id'], config.deviceId) ?? detectDeviceId(),
     deviceAlias: resolveOptionalString(flags['device-name'] ?? flags['device-alias'], config.deviceAlias) ?? hostname(),
     lookbackDays: typeof flags.lookback === 'string'
       ? parsePositiveInt(flags.lookback, '--lookback')
       : config.lookbackDays ?? 7,
   };
-
   await writeConfig(next);
   console.log(JSON.stringify({ configPath: getConfigPath(), config: next }, null, 2));
 }
@@ -346,10 +349,10 @@ function printHelp() {
   console.log('Usage: aiusage <command>');
   console.log('');
   console.log('Commands:');
-  console.log('  aiusage init [--server URL] [--site-id ID] [--device-id ID] [--device-name NAME] [--lookback N]');
-  console.log('  aiusage health [--server URL]');
-  console.log('  aiusage enroll --server URL --site-id ID --enroll-token TOKEN [--device-id ID] [--device-name NAME]');
-  console.log('  aiusage sync [--date YYYY-MM-DD] [--from YYYY-MM-DD [--to YYYY-MM-DD]] [--lookback N] [--today] [--server URL]');
+  console.log('  aiusage init [--device-id ID] [--device-name NAME] [--lookback N]');
+  console.log('  aiusage enroll --server URL --site-id ID --enroll-token TOKEN [--target NAME]');
+  console.log('  aiusage sync [--target NAME] [--date YYYY-MM-DD] [--from YYYY-MM-DD [--to YYYY-MM-DD]] [--lookback N] [--today]');
+  console.log('  aiusage health [--target NAME] [--server URL]');
   console.log('  aiusage scan [--date YYYY-MM-DD] [--json]');
   console.log('  aiusage report [--range 7d|1m|3m|all] [--detail] [--lang en|zh] [--no-emoji] [--json]');
   console.log('  aiusage schedule [on|off|status] [--every 5m]');
