@@ -48,7 +48,7 @@ const I18N = {
     costTrend: 'Cost Trend', tokenTrend: 'Token Trend',
     tokenComposition: 'Token Composition', tokenFlow: 'Token Flow',
     providerShare: 'Provider Share', modelShare: 'Model Share',
-    channelShare: 'Channel Share', thisMonth: 'This Month',
+    channelShare: 'Channel Share', deviceShare: 'Device Share', thisMonth: 'This Month',
     device: 'Device', product: 'Product', all: 'All',
     noData: 'No data', noFlowData: 'No flow data',
     failedToLoad: 'Failed to load data',
@@ -67,7 +67,7 @@ const I18N = {
     costTrend: '费用趋势', tokenTrend: 'Token 趋势',
     tokenComposition: 'Token 构成', tokenFlow: 'Token 流向',
     providerShare: '厂商占比', modelShare: '模型占比',
-    channelShare: '渠道占比', thisMonth: '本月',
+    channelShare: '渠道占比', deviceShare: '设备占比', thisMonth: '本月',
     device: '设备', product: '产品', all: '全部',
     noData: '暂无数据', noFlowData: '暂无流向数据',
     failedToLoad: '加载失败',
@@ -107,16 +107,16 @@ const CHART_COLORS = [
 ];
 
 const PROVIDER_COLORS: Record<string, string> = {
-  anthropic: '#D97757',
-  openai: '#10A37F',
-  google: '#4285F4',
-  github: '#1F2328',
-  sourcegraph: '#FF4F00',
-  moonshot: '#4A6CF7',
-  alibaba: '#5A29E4',
-  droid: '#2C3E50',
-  opencode: '#16A34A',
-  openclaw: '#EF4444',
+  anthropic: '#0f172a',
+  openai: '#1e293b',
+  google: '#334155',
+  github: '#475569',
+  sourcegraph: '#64748b',
+  moonshot: '#94a3b8',
+  alibaba: '#cbd5e1',
+  droid: '#e2e8f0',
+  opencode: '#f1f5f9',
+  openclaw: '#f8fafc',
 };
 
 const PROVIDER_LABELS: Record<string, string> = {
@@ -577,8 +577,8 @@ function KpiCard({
         {label}
       </div>
       <div
-        className={`mt-1.5 text-[22px] font-semibold tracking-tight tabular-nums leading-none ${
-          highlight ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-900 dark:text-slate-100'
+        className={`mt-1.5 text-[22px] tracking-tight tabular-nums leading-none ${
+          highlight ? 'font-bold text-emerald-600 dark:text-emerald-400' : 'font-semibold text-slate-900 dark:text-slate-100'
         }`}
       >
         {value}
@@ -665,7 +665,7 @@ function CostTrendChart({
   const barW = data.length <= 7 ? 28 : data.length <= 30 ? 14 : 6;
 
   const config = Object.fromEntries(
-    providers.map((p) => [p, { label: providerLabel(p), color: PROVIDER_COLORS[p] ?? '#94a3b8' }]),
+    providers.map((p, i) => [p, { label: providerLabel(p), color: CHART_COLORS[i % CHART_COLORS.length] }]),
   ) satisfies ChartConfig;
 
   return (
@@ -697,7 +697,7 @@ function CostTrendChart({
                 key={p}
                 dataKey={p}
                 stackId="cost"
-                fill={PROVIDER_COLORS[p] ?? '#94a3b8'}
+                fill={CHART_COLORS[i % CHART_COLORS.length]}
                 radius={i === providers.length - 1 ? [3, 3, 0, 0] : [0, 0, 0, 0]}
               />
             ))}
@@ -706,9 +706,9 @@ function CostTrendChart({
       </ChartContainer>
       {providers.length > 1 && (
         <ChartLegend
-          items={providers.map((p) => ({
+          items={providers.map((p, i) => ({
             label: providerLabel(p),
-            color: PROVIDER_COLORS[p] ?? '#94a3b8',
+            color: CHART_COLORS[i % CHART_COLORS.length],
           }))}
         />
       )}
@@ -815,9 +815,9 @@ function FlowChart({ data }: { data?: SankeyGraph }) {
   const sankeyData = transformSankey(data);
   if (!sankeyData) return <EmptyState label="No flow data" />;
   const nodeCount = sankeyData.nodes.length;
-  const height = Math.max(320, nodeCount * 36);
+  const minHeight = Math.max(320, nodeCount * 36);
   return (
-    <div style={{ height }} className="w-full">
+    <div style={{ minHeight }} className="h-full w-full">
       <ResponsiveContainer width="100%" height="100%">
         <Sankey
           data={sankeyData}
@@ -1221,11 +1221,13 @@ export function App() {
 
           {/* ── Flow & Share ── */}
           <div className="fade-up grid gap-4 lg:grid-cols-5" style={{ animationDelay: '300ms' }}>
-            <div className="card p-6 lg:col-span-3">
+            <div className="card flex flex-col p-6 lg:col-span-3">
               <SectionHeader title={t.tokenFlow} />
-              <ChartBoundary name="Token Flow">
-                <FlowChart data={overview?.sankey} />
-              </ChartBoundary>
+              <div className="min-h-0 flex-1">
+                <ChartBoundary name="Token Flow">
+                  <FlowChart data={overview?.sankey} />
+                </ChartBoundary>
+              </div>
             </div>
             <div className="card flex flex-col p-6 lg:col-span-2">
               <ChartBoundary name="Share">
@@ -1250,10 +1252,15 @@ export function App() {
                   />
                   <div className="my-5 border-t border-slate-100 dark:border-slate-800" />
                   <DonutSection
-                    title={t.channelShare}
-                    data={overview?.channelCostShare ?? []}
-                    colors={['#1e3a5f', '#3b6fa0', '#6b9fd0', '#a8c5e2', '#cddff0', '#e8f0f8']}
-                    centerLabel={formatNumber(overview?.totalEvents ?? 0)}
+                    title={t.deviceShare}
+                    data={(overview?.filters.options.devices ?? []).map((d) => ({
+                      value: d.value,
+                      label: d.label,
+                      estimatedCostUsd: d.estimatedCostUsd,
+                      eventCount: d.eventCount,
+                    }))}
+                    colors={CHART_COLORS}
+                    centerLabel={formatUsd(overview?.totalCostUsd ?? 0)}
                   />
                 </div>
               </ChartBoundary>
