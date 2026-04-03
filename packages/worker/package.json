@@ -10,7 +10,7 @@
   "type": "module",
   "scripts": {
     "dev": "pnpm --filter @aiusage/dashboard build && wrangler dev",
-    "build": "wrangler deploy --dry-run --outdir dist",
+    "build": "tsc --noEmit",
     "deploy": "wrangler deploy",
     "lint": "tsc --noEmit",
     "types": "wrangler types",
