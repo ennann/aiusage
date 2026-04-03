@@ -35,6 +35,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      CI: true
     steps:
       - uses: actions/checkout@v4
 
@@ -53,8 +54,12 @@ jobs:
       - name: Copy assets
         run: cp -r packages/dashboard/dist packages/worker/public
 
+      - name: Verify assets
+        run: ls -la packages/worker/public/
+
       - name: Deploy worker
-        run: pnpm --filter @aiusage/worker exec wrangler deploy --force
+        working-directory: packages/worker
+        run: npx wrangler deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
