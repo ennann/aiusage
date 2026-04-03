@@ -12,7 +12,7 @@ import { EmptyState } from './chart-helpers';
 
 export function TokenCompositionChart({ data, locale }: { data: OverviewPayload['tokenComposition']; locale: Locale }) {
   if (!data.length) return <EmptyState label="No data" />;
-  const barW = data.length <= 7 ? 28 : data.length <= 30 ? 14 : 6;
+  const barW = data.length <= 7 ? 52 : data.length <= 30 ? 26 : 11;
   return (
     <ChartContainer config={TOKEN_CONFIG} className="h-[280px] w-full">
       <ResponsiveContainer width="100%" height="100%">

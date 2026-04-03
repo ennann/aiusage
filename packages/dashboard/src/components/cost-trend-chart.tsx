@@ -25,7 +25,7 @@ export function CostTrendChart({
     [data, providerTrend],
   );
 
-  const barW = data.length <= 7 ? 28 : data.length <= 30 ? 14 : 6;
+  const barW = data.length <= 7 ? 52 : data.length <= 30 ? 26 : 11;
 
   const config = Object.fromEntries(
     providers.map((p, i) => [p, { label: providerLabel(p), color: CHART_COLORS[i % CHART_COLORS.length] }]),
