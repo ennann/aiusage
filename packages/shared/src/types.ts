@@ -88,6 +88,7 @@ export interface OverviewResponse {
   totalCostUsd: number;
   averageDailyCostUsd: number;
   dailyTrend: DailyTrendItem[];
+  providerDailyTrend: ProviderDailyTrendItem[];
   tokenComposition: TokenCompositionItem[];
   modelCostShare: ShareItem[];
   channelCostShare: ShareItem[];
@@ -98,6 +99,12 @@ export interface OverviewResponse {
 export interface DailyTrendItem {
   usageDate: string;
   eventCount: number;
+  estimatedCostUsd: number;
+}
+
+export interface ProviderDailyTrendItem {
+  usageDate: string;
+  provider: string;
   estimatedCostUsd: number;
 }
 

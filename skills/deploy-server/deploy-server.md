@@ -1,3 +1,14 @@
+---
+name: deploy-server
+description: Deploy the AIUsage server stack (Cloudflare Worker + D1 Database + Dashboard) to the user's Cloudflare account.
+trigger: when the user asks to deploy, set up, or install the AIUsage server
+tools:
+  - Bash
+  - Read
+  - Write
+  - Edit
+---
+
 # AIUsage Server Deployment Skill
 
 You are deploying the AIUsage server stack (Cloudflare Worker + D1 Database + Dashboard) for the user.
@@ -131,7 +142,7 @@ After deployment, give the user these values — they'll need them to connect de
 | **SITE_ID** | `site_a1b2c3d4e5f6` | Deployment identifier |
 | **ENROLL_TOKEN** | `a1b2c3d4...` | Device registration secret |
 
-Then guide the user to set up the controller on each device (see `skills/setup-controller.md`).
+Then guide the user to set up the controller on each device (see `skills/setup-controller/setup-controller.md`).
 
 ## Troubleshooting
 

@@ -28,7 +28,7 @@
 ### 支持的工具
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Claude_Code-191919?style=for-the-badge&logo=anthropic&logoColor=white" alt="Claude Code" />
+  <img src="https://img.shields.io/badge/Claude_Code-D97757?style=for-the-badge&logo=anthropic&logoColor=white" alt="Claude Code" />
   <img src="https://img.shields.io/badge/Codex_CLI-412991?style=for-the-badge&logo=openai&logoColor=white" alt="Codex CLI" />
   <img src="https://img.shields.io/badge/Copilot_CLI-000?style=for-the-badge&logo=githubcopilot&logoColor=white" alt="Copilot CLI" />
   <img src="https://img.shields.io/badge/Gemini_CLI-8E75B2?style=for-the-badge&logo=googlegemini&logoColor=white" alt="Gemini CLI" />
@@ -66,9 +66,9 @@ graph LR
 复制以下提示词，粘贴给你的 AI 编程代理（Claude Code、Codex、Copilot、Gemini 等）：
 
 ```text
-克隆 https://github.com/ennann/aiusage.git，阅读 skills/deploy-server.md，
+克隆 https://github.com/ennann/aiusage.git，阅读 skills/deploy-server/deploy-server.md，
 帮我把 AIUsage 部署到我的 Cloudflare 账户。
-部署完成后，按照 skills/setup-controller.md 把这台设备接入。
+部署完成后，按照 skills/setup-controller/setup-controller.md 把这台设备接入。
 ```
 
 ### 或手动部署
@@ -87,11 +87,25 @@ npm i -g @aiusage/cli
 aiusage report --range 7d
 ```
 
+## 保持更新
+
+AIUsage 采用 **Fork 更新模式** — Fork 本仓库，将你的 Fork 连接到 Cloudflare Workers 的 Git 集成，后续更新自动部署。
+
+1. **Fork** 本仓库到你的 GitHub 账户
+2. **连接** 你的 Fork 到 Cloudflare Workers（Git 集成）
+3. 通过 GitHub 的 "Sync fork" 按钮或 `git merge upstream/main` **同步**上游更新
+4. Cloudflare 在每次推送到你的 Fork 时**自动重新部署**
+
+CLI 更新需单独执行：`npm update -g @aiusage/cli`
+
+详见 [**更新指南**](./docs/update-guide.md)，包含通过 GitHub Actions 实现全自动同步的方案。
+
 ## 文档
 
 | 文档 | 说明 |
 |------|------|
 | [**部署指南**](./docs/deployment-guide.md) | 完整部署流程、CLI 参考、API 文档 |
+| [**更新指南**](./docs/update-guide.md) | Fork 更新机制与自动部署设置 |
 | [**CLI README**](./packages/cli/README.md) | CLI 工具详情与全部命令 |
 
 
