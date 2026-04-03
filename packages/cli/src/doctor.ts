@@ -1,4 +1,4 @@
-import { stat } from 'node:fs/promises';
+import { readdir, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { readConfig, getConfigPath } from './config.js';
@@ -25,7 +25,9 @@ const msgs = {
     server: 'Server',
     lastSync: 'Last sync',
     lastSyncNone: 'No record',
-    noUsage: 'No usage detected',
+    notInstalled: 'Not installed',
+    installedNoData: 'Installed, no usage data yet',
+    hasData: (n: number) => `${n} session${n > 1 ? 's' : ''} found`,
     schedule: 'Schedule',
     scheduleEvery: 'every',
     scheduleEnabled: 'Enabled',
@@ -43,13 +45,47 @@ const msgs = {
     server: '服务端',
     lastSync: '上次同步',
     lastSyncNone: '暂无记录',
-    noUsage: '未检测到使用记录',
+    notInstalled: '未安装',
+    installedNoData: '已安装，暂无使用数据',
+    hasData: (n: number) => `发现 ${n} 个会话`,
     schedule: '定时同步',
     scheduleEvery: '每',
     scheduleEnabled: '已启用',
     scheduleOff: '未启用，可执行 aiusage schedule on',
   },
 } as const;
+
+/** 递归统计目录下指定扩展名的文件数（含子目录），上限 cap */
+async function countFiles(dir: string, exts: string[], cap = 1000): Promise<number> {
+  let count = 0;
+  const queue = [dir];
+  while (queue.length > 0 && count < cap) {
+    const current = queue.pop()!;
+    let entries;
+    try {
+      entries = await readdir(current, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const e of entries) {
+      if (count >= cap) break;
+      const full = join(current, e.name);
+      if (e.isDirectory()) {
+        queue.push(full);
+      } else if (exts.some(ext => e.name.endsWith(ext))) {
+        count++;
+      }
+    }
+  }
+  return count;
+}
+
+// 每个工具的数据目录、检测的文件扩展名
+interface ToolDef {
+  dir: string;
+  label: string;
+  exts: string[];
+}
 
 export async function runDoctor(lang: Lang = 'zh'): Promise<Check[]> {
   const s = msgs[lang];
@@ -101,26 +137,33 @@ export async function runDoctor(lang: Lang = 'zh'): Promise<Check[]> {
     }
   }
 
-  // 扫描目录 — 覆盖全部支持的工具
+  // 扫描工具 — 三态检测：未安装 / 已安装无数据 / 有数据
   const home = homedir();
-  const scannerDirs: Array<[string, string]> = [
-    [join(home, '.claude', 'projects'), 'Claude Code'],
-    [join(home, '.codex'), 'Codex CLI'],
-    [join(home, '.copilot', 'session-state'), 'Copilot CLI'],
-    [join(home, '.gemini', 'tmp'), 'Gemini CLI'],
-    [join(home, '.qwen', 'tmp'), 'Qwen Code'],
-    [join(home, '.kimi', 'sessions'), 'Kimi Code'],
-    [join(home, '.local', 'share', 'amp', 'threads'), 'Amp'],
-    [join(home, '.factory', 'sessions'), 'Droid'],
-    [join(home, '.local', 'share', 'opencode'), 'OpenCode'],
-    [join(home, '.pi', 'agent', 'sessions'), 'Pi'],
+  const tools: ToolDef[] = [
+    { dir: join(home, '.claude', 'projects'), label: 'Claude Code', exts: ['.jsonl'] },
+    { dir: join(home, '.codex'), label: 'Codex CLI', exts: ['.jsonl'] },
+    { dir: join(home, '.copilot', 'session-state'), label: 'Copilot CLI', exts: ['.jsonl'] },
+    { dir: join(home, '.gemini', 'tmp'), label: 'Gemini CLI', exts: ['.json'] },
+    { dir: join(home, '.qwen', 'tmp'), label: 'Qwen Code', exts: ['.jsonl'] },
+    { dir: join(home, '.kimi', 'sessions'), label: 'Kimi Code', exts: ['.jsonl'] },
+    { dir: join(home, '.local', 'share', 'amp', 'threads'), label: 'Amp', exts: ['.json'] },
+    { dir: join(home, '.factory', 'sessions'), label: 'Droid', exts: ['.jsonl', '.json'] },
+    { dir: join(home, '.local', 'share', 'opencode'), label: 'OpenCode', exts: ['.json'] },
+    { dir: join(home, '.pi', 'agent', 'sessions'), label: 'Pi', exts: ['.jsonl'] },
   ];
-  for (const [dir, label] of scannerDirs) {
+
+  for (const tool of tools) {
     try {
-      await stat(dir);
-      checks.push({ name: label, status: 'ok', message: dir });
+      await stat(tool.dir);
     } catch {
-      checks.push({ name: label, status: 'warn', message: s.noUsage });
+      checks.push({ name: tool.label, status: 'warn', message: s.notInstalled });
+      continue;
+    }
+    const n = await countFiles(tool.dir, tool.exts);
+    if (n > 0) {
+      checks.push({ name: tool.label, status: 'ok', message: s.hasData(n) });
+    } else {
+      checks.push({ name: tool.label, status: 'warn', message: s.installedNoData });
     }
   }
 
