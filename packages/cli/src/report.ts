@@ -264,37 +264,43 @@ async function walkForGeminiJsonl(dir: string, result: string[]): Promise<void> 
 }
 
 async function discoverClaudeDates(dates: Set<string>): Promise<void> {
-  const baseDir = join(homedir(), '.claude', 'projects');
+  const home = homedir();
+  const baseDirs = [
+    join(home, '.config', 'claude', 'projects'),
+    join(home, '.claude', 'projects'),
+  ];
 
-  let projectDirs: string[];
-  try {
-    projectDirs = await readdir(baseDir);
-  } catch {
-    return;
-  }
-
-  for (const projectDir of projectDirs) {
-    const jsonlFiles: string[] = [];
+  for (const baseDir of baseDirs) {
+    let projectDirs: string[];
     try {
-      await walkForClaudeJsonl(join(baseDir, projectDir), jsonlFiles);
+      projectDirs = await readdir(baseDir);
     } catch {
       continue;
     }
 
-    for (const filePath of jsonlFiles) {
-      const content = await safeReadUtf8(filePath);
-      if (!content) continue;
+    for (const projectDir of projectDirs) {
+      const jsonlFiles: string[] = [];
+      try {
+        await walkForClaudeJsonl(join(baseDir, projectDir), jsonlFiles);
+      } catch {
+        continue;
+      }
 
-      for (const line of content.split('\n')) {
-        if (!line.trim()) continue;
-        let record: { timestamp?: string };
-        try {
-          record = JSON.parse(line);
-        } catch {
-          continue;
+      for (const filePath of jsonlFiles) {
+        const content = await safeReadUtf8(filePath);
+        if (!content) continue;
+
+        for (const line of content.split('\n')) {
+          if (!line.trim()) continue;
+          let record: { timestamp?: string };
+          try {
+            record = JSON.parse(line);
+          } catch {
+            continue;
+          }
+          const ts = parseTimestamp(record.timestamp);
+          if (ts) dates.add(toDateKey(ts));
         }
-        const ts = parseTimestamp(record.timestamp);
-        if (ts) dates.add(toDateKey(ts));
       }
     }
   }
@@ -441,6 +447,8 @@ function mergeTotals(target: Totals, source: Totals): Totals {
   return target;
 }
 
+const FAST_MULTIPLIER = 6;
+
 const CLAUDE_PRICING: Record<string, { input: number; cache_write_5m: number; cache_write_1h: number; cache_read: number; output: number }> = {
   'claude-opus-4-6': { input: 5, cache_write_5m: 6.25, cache_write_1h: 10, cache_read: 0.5, output: 25 },
   'claude-opus-4-5': { input: 5, cache_write_5m: 6.25, cache_write_1h: 10, cache_read: 0.5, output: 25 },
@@ -539,8 +547,16 @@ function toBreakdownTotals(breakdown: IngestBreakdown, warnings: Set<string>): T
 }
 
 function calculateBreakdownCost(breakdown: IngestBreakdown, warnings: Set<string>): number {
+  // 优先使用 Claude Code 预算的费用（costUSD）
+  if (breakdown.costUSD != null && breakdown.costUSD > 0) {
+    return breakdown.costUSD;
+  }
+
   if (breakdown.provider === 'anthropic' && breakdown.product === 'claude-code') {
-    const resolved = resolveModel(breakdown.model, CLAUDE_PRICING);
+    // 检测 fast 模式（model 名以 -fast 结尾）
+    const isFast = breakdown.model.endsWith('-fast');
+    const baseModel = isFast ? breakdown.model.replace(/-fast$/, '') : breakdown.model;
+    const resolved = resolveModel(baseModel, CLAUDE_PRICING);
     if (!resolved) {
       warnings.add(`Claude 模型 ${breakdown.model} 未配置公开单价，已跳过成本估算。`);
       return 0;
@@ -549,13 +565,13 @@ function calculateBreakdownCost(breakdown: IngestBreakdown, warnings: Set<string
       warnings.add(`${breakdown.model} 已按 ${resolved.model} 的公开单价估算。`);
     }
     const pricing = CLAUDE_PRICING[resolved.model];
-    return (
+    const baseCost =
       (breakdown.inputTokens / 1_000_000) * pricing.input +
       (((breakdown.cacheWrite5mTokens ?? breakdown.cacheWriteTokens) || 0) / 1_000_000) * pricing.cache_write_5m +
       ((breakdown.cacheWrite1hTokens ?? 0) / 1_000_000) * pricing.cache_write_1h +
       (breakdown.cachedInputTokens / 1_000_000) * pricing.cache_read +
-      (breakdown.outputTokens / 1_000_000) * pricing.output
-    );
+      (breakdown.outputTokens / 1_000_000) * pricing.output;
+    return isFast ? baseCost * FAST_MULTIPLIER : baseCost;
   }
 
   if (breakdown.provider === 'openai' && breakdown.product === 'codex') {

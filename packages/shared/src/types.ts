@@ -44,6 +44,7 @@ export interface IngestBreakdown {
   cacheWrite1hTokens?: number;
   outputTokens: number;
   reasoningOutputTokens: number;
+  costUSD?: number;
 }
 
 // ── API 响应 ──

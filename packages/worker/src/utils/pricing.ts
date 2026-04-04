@@ -631,6 +631,8 @@ interface CostResult {
   pricingVersion: string;
 }
 
+const FAST_MULTIPLIER = 6;
+
 export function calculateCost(
   provider: string,
   product: string,
@@ -654,14 +656,18 @@ export function calculateCost(
     return { estimatedCostUsd: 0, costStatus: 'exact', pricingVersion: catalog.version };
   }
 
-  const resolved = resolveModelPricing(provider, product, model);
+  // 检测 fast 模式（model 名以 -fast 结尾）
+  const isFast = model.endsWith('-fast');
+  const baseModel = isFast ? model.replace(/-fast$/, '') : model;
+
+  const resolved = resolveModelPricing(provider, product, baseModel);
 
   if (!resolved) {
     return { estimatedCostUsd: 0, costStatus: 'unavailable', pricingVersion: catalog.version };
   }
 
   const { resolvedModel, pricing } = resolved;
-  const costStatus: CostStatus = resolvedModel !== model ? 'estimated' : 'exact';
+  const costStatus: CostStatus = resolvedModel !== baseModel ? 'estimated' : 'exact';
 
   const cost =
     (tokens.inputTokens / 1_000_000) * pricing.input_per_million_usd +
@@ -670,8 +676,10 @@ export function calculateCost(
     ((tokens.cacheWrite1hTokens ?? 0) / 1_000_000) * pricing.cache_write_1h_per_million_usd +
     (tokens.outputTokens / 1_000_000) * pricing.output_per_million_usd;
 
+  const finalCost = isFast ? cost * FAST_MULTIPLIER : cost;
+
   return {
-    estimatedCostUsd: Math.round(cost * 10000) / 10000,
+    estimatedCostUsd: Math.round(finalCost * 10000) / 10000,
     costStatus,
     pricingVersion: catalog.version,
   };
