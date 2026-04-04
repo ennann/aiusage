@@ -76,8 +76,11 @@ try {
     } else if (sub === 'alias') {
       await runProjectAlias(argv.slice(2));
     } else {
-      console.error(`未知子命令: project ${sub}`);
-      console.log('可用: aiusage project list, aiusage project alias <项目名> <别名>');
+      const zh = (await readConfig()).lang === 'zh';
+      console.error(`${zh ? '未知子命令' : 'Unknown subcommand'}: project ${sub}`);
+      console.log(zh
+        ? '可用: aiusage project list, aiusage project alias <项目名> <别名>'
+        : 'Available: aiusage project list, aiusage project alias <name> <alias>');
       process.exitCode = 1;
     }
   } else if (command === 'setup') {
@@ -104,7 +107,8 @@ try {
 
 async function runScan(date: string, isJson: boolean) {
   const config = await readConfig();
-  if (!isJson) console.log(`扫描日期: ${date}\n`);
+  const zh = config.lang === 'zh';
+  if (!isJson) console.log(`${zh ? '扫描日期' : 'Scan date'}: ${date}\n`);
 
   const result = await scanDate(date, { projectAliases: config.projectAliases });
 
@@ -114,7 +118,7 @@ async function runScan(date: string, isJson: boolean) {
   }
 
   if (result.breakdowns.length === 0) {
-    console.log('该日无数据。');
+    console.log(zh ? '该日无数据。' : 'No data for this date.');
     return;
   }
 
@@ -460,13 +464,17 @@ async function runProjectList(flags: Record<string, string | boolean> = {}) {
 }
 
 async function runProjectAlias(args: string[]) {
+  const config = await readConfig();
+  const zh = config.lang === 'zh';
+
   if (args.length === 0) {
-    const config = await readConfig();
     const aliases = config.projectAliases ?? {};
     const entries = Object.entries(aliases);
     if (entries.length === 0) {
-      console.log('尚未设置任何项目别名。');
-      console.log('用法: aiusage project alias <项目名> <别名>');
+      console.log(zh ? '尚未设置任何项目别名。' : 'No project aliases configured.');
+      console.log(zh
+        ? '用法: aiusage project alias <项目名> <别名>'
+        : 'Usage: aiusage project alias <name> <alias>');
       return;
     }
     for (const [from, to] of entries) {
@@ -477,31 +485,31 @@ async function runProjectAlias(args: string[]) {
 
   if (args[0] === '--remove') {
     const name = args.slice(1).join(' ').trim();
-    if (!name) throw new Error('请指定要移除别名的项目名');
-    const config = await readConfig();
+    if (!name) throw new Error(zh ? '请指定要移除别名的项目名' : 'Please specify the project name to remove');
     const aliases = { ...(config.projectAliases ?? {}) };
     if (!(name in aliases)) {
-      throw new Error(`项目 "${name}" 未设置别名`);
+      throw new Error(zh ? `项目 "${name}" 未设置别名` : `No alias set for "${name}"`);
     }
     delete aliases[name];
     config.projectAliases = Object.keys(aliases).length > 0 ? aliases : undefined;
     await writeConfig(config);
-    console.log(`已移除 "${name}" 的别名。`);
+    console.log(zh ? `已移除 "${name}" 的别名。` : `Removed alias for "${name}".`);
     return;
   }
 
   if (args.length < 2) {
-    throw new Error('用法: aiusage project alias <项目名> <别名>');
+    throw new Error(zh
+      ? '用法: aiusage project alias <项目名> <别名>'
+      : 'Usage: aiusage project alias <name> <alias>');
   }
 
   const name = args[0];
   const alias = args.slice(1).join(' ').trim();
-  if (!alias) throw new Error('别名不能为空');
+  if (!alias) throw new Error(zh ? '别名不能为空' : 'Alias cannot be empty');
 
-  const config = await readConfig();
   config.projectAliases = { ...(config.projectAliases ?? {}), [name]: alias };
   await writeConfig(config);
-  console.log(`已设置: ${name} → ${alias}`);
+  console.log(zh ? `已设置: ${name} → ${alias}` : `Set: ${name} → ${alias}`);
 }
 
 function printHelp() {
