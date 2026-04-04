@@ -1,8 +1,12 @@
-import { readdir, readFile } from 'node:fs/promises';
+import { readdir, open } from 'node:fs/promises';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
+import { createInterface } from 'node:readline';
 import type { IngestBreakdown } from '@aiusage/shared';
-import { normalizeModelName } from './utils.js';
+import { normalizeModelName, runWithConcurrency } from './utils.js';
+
+const FILE_CONCURRENCY = 16;
+const MAX_LINE_BYTES = 64 * 1024 * 1024; // 64 MB
 
 interface CodexRecord {
   type?: string;
@@ -51,21 +55,46 @@ export async function scanCodexDates(
     return new Map([...targetDateSet].map((targetDate) => [targetDate, []]));
   }
 
-  for (const filePath of sessionFiles) {
-    let content: string;
-    try {
-      content = await readFile(filePath, 'utf-8');
-    } catch {
-      continue;
-    }
+  // 并发流式处理文件
+  await runWithConcurrency(sessionFiles, FILE_CONCURRENCY, async (filePath) => {
+    await processCodexFile(filePath, targetDateSet, projectAliases, groupedByDate);
+  });
 
-    const lines = content.split('\n');
+  return new Map(
+    [...groupedByDate.entries()].map(([usageDate, grouped]) => [usageDate, [...grouped.values()]]),
+  );
+}
+
+/** 流式逐行读取单个 Codex JSONL 文件 */
+async function processCodexFile(
+  filePath: string,
+  targetDateSet: Set<string>,
+  projectAliases: Record<string, string> | undefined,
+  groupedByDate: Map<string, Map<string, IngestBreakdown>>,
+): Promise<void> {
+  let fh;
+  try {
+    fh = await open(filePath, 'r');
+  } catch {
+    return;
+  }
+
+  try {
+    const rl = createInterface({
+      input: fh.createReadStream({ encoding: 'utf-8' }),
+      crlfDelay: Infinity,
+    });
+
     let currentModel = 'unknown';
     let currentProject = 'unknown';
     let lastTotalSignature = '';
 
-    for (const line of lines) {
-      if (!line.trim()) continue;
+    for await (const line of rl) {
+      if (!line) continue;
+
+      // 大行保护
+      if (Buffer.byteLength(line) > MAX_LINE_BYTES) continue;
+
       let record: CodexRecord;
       try {
         record = JSON.parse(line);
@@ -74,7 +103,11 @@ export async function scanCodexDates(
       }
 
       if (record.type === 'turn_context') {
-        currentModel = normalizeModelName(record.payload?.model ?? currentModel);
+        const rawModel = record.payload?.model ?? currentModel;
+        // 过滤合成消息
+        if (rawModel !== '<synthetic>') {
+          currentModel = normalizeModelName(rawModel);
+        }
         if (record.payload?.cwd) {
           currentProject = extractProject(record.payload.cwd, projectAliases);
         }
@@ -126,11 +159,9 @@ export async function scanCodexDates(
         });
       }
     }
+  } finally {
+    await fh.close();
   }
-
-  return new Map(
-    [...groupedByDate.entries()].map(([usageDate, grouped]) => [usageDate, [...grouped.values()]]),
-  );
 }
 
 async function collectSessionFiles(baseDir: string): Promise<string[]> {

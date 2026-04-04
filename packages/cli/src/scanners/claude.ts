@@ -1,8 +1,13 @@
-import { readdir, readFile } from 'node:fs/promises';
+import { readdir, open } from 'node:fs/promises';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
+import { createReadStream } from 'node:fs';
+import { createInterface } from 'node:readline';
 import type { IngestBreakdown } from '@aiusage/shared';
-import { normalizeModelName } from './utils.js';
+import { normalizeModelName, runWithConcurrency } from './utils.js';
+
+const FILE_CONCURRENCY = 16;
+const MAX_LINE_BYTES = 64 * 1024 * 1024; // 64 MB
 
 interface ClaudeRecord {
   timestamp?: string;
@@ -76,6 +81,9 @@ export async function scanClaudeDates(
 
   const deduped = new Map<string, DeduplicatedUsage>();
 
+  // 收集所有 { filePath, project } 对
+  const fileJobs: { filePath: string; project: string }[] = [];
+
   for (const baseDir of baseDirs) {
     let projectDirs: string[];
     try {
@@ -96,74 +104,15 @@ export async function scanClaudeDates(
       }
 
       for (const filePath of jsonlFiles) {
-        let content: string;
-        try {
-          content = await readFile(filePath, 'utf-8');
-        } catch {
-          continue;
-        }
-
-        for (const line of content.split('\n')) {
-          if (!line.trim()) continue;
-          let record: ClaudeRecord;
-          try {
-            record = JSON.parse(line);
-          } catch {
-            continue;
-          }
-
-          const ts = parseTimestamp(record.timestamp);
-          if (!ts) continue;
-          const usageDate = toDateKey(ts);
-          if (!targetDateSet.has(usageDate)) continue;
-
-          const message = record.message;
-          if (!message?.usage) continue;
-
-          const requestId = record.requestId ?? message.id ?? record.uuid;
-          if (!requestId) continue;
-
-          const usage = message.usage;
-          let model = normalizeModelName(message.model ?? 'unknown');
-          if (usage.speed === 'fast') model = `${model}-fast`;
-          const recordProject = record.cwd ? resolveProject(record.cwd, projectAliases) : project;
-          const costUSD = record.costUSD ?? 0;
-
-          const cacheCreation = usage.cache_creation;
-          let cache5m = cacheCreation?.ephemeral_5m_input_tokens ?? 0;
-          const cache1h = cacheCreation?.ephemeral_1h_input_tokens ?? 0;
-          // 无明细时退化到总量
-          if (cache5m === 0 && cache1h === 0 && (usage.cache_creation_input_tokens ?? 0) > 0) {
-            cache5m = usage.cache_creation_input_tokens!;
-          }
-
-          const dedupeKey = `${usageDate}|${requestId}`;
-          const existing = deduped.get(dedupeKey);
-          if (existing) {
-            // 分别取 max（流式场景下同一 requestId 可能多次出现）
-            existing.model = model;
-            existing.inputTokens = Math.max(existing.inputTokens, usage.input_tokens ?? 0);
-            existing.cacheWrite5mTokens = Math.max(existing.cacheWrite5mTokens, cache5m);
-            existing.cacheWrite1hTokens = Math.max(existing.cacheWrite1hTokens, cache1h);
-            existing.cachedInputTokens = Math.max(existing.cachedInputTokens, usage.cache_read_input_tokens ?? 0);
-            existing.outputTokens = Math.max(existing.outputTokens, usage.output_tokens ?? 0);
-            existing.costUSD = Math.max(existing.costUSD, costUSD);
-          } else {
-            deduped.set(dedupeKey, {
-              model,
-              project: recordProject,
-              inputTokens: usage.input_tokens ?? 0,
-              cacheWrite5mTokens: cache5m,
-              cacheWrite1hTokens: cache1h,
-              cachedInputTokens: usage.cache_read_input_tokens ?? 0,
-              outputTokens: usage.output_tokens ?? 0,
-              costUSD,
-            });
-          }
-        }
+        fileJobs.push({ filePath, project });
       }
     }
   }
+
+  // 并发流式处理文件
+  await runWithConcurrency(fileJobs, FILE_CONCURRENCY, async (job) => {
+    await processJsonlFile(job.filePath, job.project, targetDateSet, projectAliases, deduped);
+  });
 
   // 按 日期 + model + project 聚合
   for (const [dedupeKey, usage] of deduped.entries()) {
@@ -208,6 +157,98 @@ export async function scanClaudeDates(
   );
 }
 
+/** 流式逐行读取单个 JSONL 文件，避免全量加载到内存 */
+async function processJsonlFile(
+  filePath: string,
+  fallbackProject: string,
+  targetDateSet: Set<string>,
+  projectAliases: Record<string, string> | undefined,
+  deduped: Map<string, DeduplicatedUsage>,
+): Promise<void> {
+  let fh;
+  try {
+    fh = await open(filePath, 'r');
+  } catch {
+    return;
+  }
+
+  try {
+    const rl = createInterface({
+      input: fh.createReadStream({ encoding: 'utf-8' }),
+      crlfDelay: Infinity,
+    });
+
+    for await (const line of rl) {
+      if (!line) continue;
+
+      // 大行保护
+      if (Buffer.byteLength(line) > MAX_LINE_BYTES) continue;
+
+      let record: ClaudeRecord;
+      try {
+        record = JSON.parse(line);
+      } catch {
+        continue;
+      }
+
+      const ts = parseTimestamp(record.timestamp);
+      if (!ts) continue;
+      const usageDate = toDateKey(ts);
+      if (!targetDateSet.has(usageDate)) continue;
+
+      const message = record.message;
+      if (!message?.usage) continue;
+
+      // 过滤合成消息
+      const rawModel = message.model ?? 'unknown';
+      if (rawModel === '<synthetic>') continue;
+
+      const requestId = record.requestId ?? message.id ?? record.uuid;
+      if (!requestId) continue;
+
+      const usage = message.usage;
+      let model = normalizeModelName(rawModel);
+      if (usage.speed === 'fast') model = `${model}-fast`;
+      const recordProject = record.cwd ? resolveProject(record.cwd, projectAliases) : fallbackProject;
+      const costUSD = record.costUSD ?? 0;
+
+      const cacheCreation = usage.cache_creation;
+      let cache5m = cacheCreation?.ephemeral_5m_input_tokens ?? 0;
+      const cache1h = cacheCreation?.ephemeral_1h_input_tokens ?? 0;
+      // 无明细时退化到总量
+      if (cache5m === 0 && cache1h === 0 && (usage.cache_creation_input_tokens ?? 0) > 0) {
+        cache5m = usage.cache_creation_input_tokens!;
+      }
+
+      const dedupeKey = `${usageDate}|${requestId}`;
+      const existing = deduped.get(dedupeKey);
+      if (existing) {
+        // 分别取 max（流式场景下同一 requestId 可能多次出现）
+        existing.model = model;
+        existing.inputTokens = Math.max(existing.inputTokens, usage.input_tokens ?? 0);
+        existing.cacheWrite5mTokens = Math.max(existing.cacheWrite5mTokens, cache5m);
+        existing.cacheWrite1hTokens = Math.max(existing.cacheWrite1hTokens, cache1h);
+        existing.cachedInputTokens = Math.max(existing.cachedInputTokens, usage.cache_read_input_tokens ?? 0);
+        existing.outputTokens = Math.max(existing.outputTokens, usage.output_tokens ?? 0);
+        existing.costUSD = Math.max(existing.costUSD, costUSD);
+      } else {
+        deduped.set(dedupeKey, {
+          model,
+          project: recordProject,
+          inputTokens: usage.input_tokens ?? 0,
+          cacheWrite5mTokens: cache5m,
+          cacheWrite1hTokens: cache1h,
+          cachedInputTokens: usage.cache_read_input_tokens ?? 0,
+          outputTokens: usage.output_tokens ?? 0,
+          costUSD,
+        });
+      }
+    }
+  } finally {
+    await fh.close();
+  }
+}
+
 function parseTimestamp(value?: string): Date | null {
   if (!value) return null;
   try {
@@ -225,14 +266,7 @@ function toDateKey(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-function extractProjectName(dirName: string): string {
-  // 目录名格式: -Users-Ethan-Projects-AIUsage → AIUsage
-  const parts = dirName.split('-').filter(Boolean);
-  return parts[parts.length - 1] || 'unknown';
-}
-
 function extractProjectFromCwd(cwd: string): string {
-  // /Users/Ethan/Projects/AIUsage → AIUsage
   const parts = cwd.split('/').filter(Boolean);
   return parts[parts.length - 1] || 'unknown';
 }
