@@ -40,12 +40,13 @@
     "build": "rm -rf dist && node build.mjs",
     "dev": "tsc --watch",
     "lint": "tsc --noEmit",
-    "test": "echo 'no tests yet'"
+    "test": "vitest run"
   },
   "devDependencies": {
     "@aiusage/shared": "workspace:*",
     "@types/node": "^22",
     "esbuild": "^0.27.4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.2"
   }
 }
