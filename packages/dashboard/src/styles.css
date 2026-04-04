@@ -16,6 +16,7 @@
 
 html, body, #root {
   min-height: 100%;
+  overflow-x: hidden;
 }
 
 /* Smooth theme transition */
@@ -44,6 +45,7 @@ body {
 
 * {
   box-sizing: border-box;
+  min-width: 0;
 }
 
 ::selection {
@@ -67,9 +69,10 @@ body {
   border-color: rgba(255, 255, 255, 0.08);
 }
 
-/* Charts need visible overflow for tooltips */
+/* Charts need visible overflow for tooltips, min-w-0 prevents grid blowout */
 .card:has(.recharts-wrapper) {
   overflow: visible;
+  min-width: 0;
 }
 
 /* Entrance animation */

@@ -221,7 +221,7 @@ export function App() {
   }, [overview, t, locale, isDark]);
 
   return (
-    <main className="mx-auto max-w-[1200px] px-4 pb-16 sm:px-6 lg:px-8">
+    <main className="mx-auto w-full max-w-[1200px] px-4 pb-16 sm:px-6 lg:px-8">
 
       {/* ── Header ── */}
       <header className="fade-up relative z-20 py-6 sm:py-8">

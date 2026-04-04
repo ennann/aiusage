@@ -37,7 +37,7 @@ export function ChartContainer({
     <ChartContext.Provider value={{ config }}>
       <div
         className={cn(
-          'w-full tabular-nums text-xs [&_.recharts-cartesian-axis-tick_text]:fill-slate-500 [&_.recharts-cartesian-grid_horizontal_line]:stroke-slate-200/80 [&_.recharts-cartesian-grid_vertical_line]:stroke-slate-200/60 [&_.recharts-curve.recharts-tooltip-cursor]:stroke-slate-300 [&_.recharts-rectangle.recharts-tooltip-cursor]:fill-slate-100/70 [&_.recharts-reference-line_line]:stroke-slate-300 [&_.recharts-sector:focus]:outline-none [&_.recharts-surface]:overflow-visible',
+          'w-full [contain:inline-size] tabular-nums text-xs [&_.recharts-cartesian-axis-tick_text]:fill-slate-500 [&_.recharts-cartesian-grid_horizontal_line]:stroke-slate-200/80 [&_.recharts-cartesian-grid_vertical_line]:stroke-slate-200/60 [&_.recharts-curve.recharts-tooltip-cursor]:stroke-slate-300 [&_.recharts-rectangle.recharts-tooltip-cursor]:fill-slate-100/70 [&_.recharts-reference-line_line]:stroke-slate-300 [&_.recharts-sector:focus]:outline-none [&_.recharts-surface]:overflow-visible',
           className,
         )}
         style={{ ...cssVariables, ...style }}
