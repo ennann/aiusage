@@ -68,7 +68,10 @@ try {
     await runConfigSet(argv.slice(2));
   } else if (command === 'project') {
     const sub = argv[1];
-    if (sub === 'list' || sub === undefined) {
+    if (sub === 'list') {
+      const parsed = parseArgs(argv.slice(2));
+      await runProjectList(parsed.flags);
+    } else if (sub === undefined) {
       await runProjectList();
     } else if (sub === 'alias') {
       await runProjectAlias(argv.slice(2));
@@ -86,10 +89,13 @@ try {
   } else if (command === '--help' || command === '-h' || command === 'help') {
     printHelp();
   } else {
+    const config = await readConfig();
+    const lang = config.lang || 'en';
+    const zh = lang === 'zh';
     if (command) {
-      console.error(`未知命令: "${command}"\n`);
+      console.error(`${zh ? '未知命令' : 'Unknown command'}: "${command}"\n`);
     }
-    printUsageHint();
+    printUsageHint(zh);
   }
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
@@ -414,35 +420,43 @@ async function runConfigSet(args: string[]) {
   console.log(JSON.stringify({ configPath: getConfigPath(), updated: keyPath }, null, 2));
 }
 
-async function runProjectList() {
+async function runProjectList(flags: Record<string, string | boolean> = {}) {
   const config = await readConfig();
+  const lang = (typeof flags.lang === 'string' ? flags.lang : config.lang) || 'en';
+  const zh = lang === 'zh';
   const projects = await discoverProjects(config.projectAliases);
 
   if (projects.length === 0) {
-    console.log('未发现任何项目。');
+    console.log(zh ? '未发现任何项目。' : 'No projects found.');
     return;
   }
 
-  // 计算列宽
-  const nameWidth = Math.max(6, ...projects.map(p => p.name.length));
-  const aliasWidth = Math.max(4, ...projects.map(p => (p.alias ?? '-').length));
+  // 计算列宽（考虑全角字符占 2 个显示宽度）
+  const dw = (s: string) => [...s].reduce((w, c) => w + (c.charCodeAt(0) > 0x7f ? 2 : 1), 0);
+  const pad = (s: string, width: number) => s + ' '.repeat(Math.max(0, width - dw(s)));
 
-  console.log(
-    '项目'.padEnd(nameWidth + 2) +
-    '别名'.padEnd(aliasWidth + 2) +
-    '来源'
-  );
+  const hName = zh ? '项目' : 'Project';
+  const hAlias = zh ? '别名' : 'Alias';
+  const hSource = zh ? '来源' : 'Source';
+
+  const nameWidth = Math.max(dw(hName), ...projects.map(p => dw(p.name)));
+  const aliasWidth = Math.max(dw(hAlias), ...projects.map(p => dw(p.alias ?? '-')));
+
+  console.log(pad(hName, nameWidth + 2) + pad(hAlias, aliasWidth + 2) + hSource);
   console.log('-'.repeat(nameWidth + aliasWidth + 20));
 
+  // 在 . 前插入零宽空格，阻止终端将文本识别为 URL 并自动添加 <> 导致错位
+  const breakUrl = (s: string) => s.replace(/\./g, '\u200B.');
+
   for (const p of projects) {
-    console.log(
-      p.name.padEnd(nameWidth + 2) +
-      (p.alias ?? '-').padEnd(aliasWidth + 2) +
-      p.sources.join(', ')
-    );
+    const line =
+      pad(p.name, nameWidth + 2) +
+      pad(p.alias ?? '-', aliasWidth + 2) +
+      p.sources.join(', ');
+    console.log(breakUrl(line));
   }
 
-  console.log(`\n共 ${projects.length} 个项目`);
+  console.log(`\n${zh ? '共' : 'Total:'} ${projects.length} ${zh ? '个项目' : 'projects'}`);
 }
 
 async function runProjectAlias(args: string[]) {
@@ -511,19 +525,33 @@ function printHelp() {
   console.log(`配置文件: ${getConfigPath()}${initialized ? '' : ' (尚未初始化)'}`);
 }
 
-function printUsageHint() {
+function printUsageHint(zh = false) {
   console.log(`aiusage v${getVersion()}\n`);
-  console.log('常用命令:');
-  console.log('  scan [--date YYYY-MM-DD]           扫描某日用量明细');
-  console.log('  report [--range 7d|1m|3m|all]      本地用量报告');
-  console.log('  project [list]                     列出本机所有项目');
-  console.log('  project alias <名称> <别名>         设置项目别名');
-  console.log('  sync                               上传用量到服务端');
-  console.log('  schedule [on|off|status]            定时同步');
-  console.log('  doctor                             诊断检查');
-  console.log('  config set <key> <value>           修改配置');
-  console.log('');
-  console.log(`配置文件: ${getConfigPath()}`);
+  if (zh) {
+    console.log('常用命令:');
+    console.log('  scan [--date YYYY-MM-DD]           扫描某日用量明细');
+    console.log('  report [--range 7d|1m|3m|all]      本地用量报告');
+    console.log('  project [list]                     列出本机所有项目');
+    console.log('  project alias <名称> <别名>         设置项目别名');
+    console.log('  sync                               上传用量到服务端');
+    console.log('  schedule [on|off|status]            定时同步');
+    console.log('  doctor                             诊断检查');
+    console.log('  config set <key> <value>           修改配置');
+    console.log('');
+    console.log(`配置文件: ${getConfigPath()}`);
+  } else {
+    console.log('Commands:');
+    console.log('  scan [--date YYYY-MM-DD]           Scan daily usage breakdown');
+    console.log('  report [--range 7d|1m|3m|all]      Local usage report');
+    console.log('  project [list]                     List all projects');
+    console.log('  project alias <name> <alias>       Set project alias');
+    console.log('  sync                               Upload usage to server');
+    console.log('  schedule [on|off|status]            Scheduled sync');
+    console.log('  doctor                             Diagnostics');
+    console.log('  config set <key> <value>           Update config');
+    console.log('');
+    console.log(`Config: ${getConfigPath()}`);
+  }
 }
 
 function parseArgs(args: string[]): { flags: Record<string, string | boolean>; positionals: string[] } {
