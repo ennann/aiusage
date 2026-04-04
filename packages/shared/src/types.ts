@@ -36,6 +36,8 @@ export interface IngestBreakdown {
   channel: Channel;
   model: string;
   project: string;
+  projectDisplay?: string;
+  projectAlias?: string;
   eventCount: number;
   inputTokens: number;
   cachedInputTokens: number;

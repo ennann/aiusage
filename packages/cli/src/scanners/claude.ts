@@ -4,7 +4,7 @@ import { homedir } from 'node:os';
 import { createReadStream } from 'node:fs';
 import { createInterface } from 'node:readline';
 import type { IngestBreakdown } from '@aiusage/shared';
-import { normalizeModelName, runWithConcurrency } from './utils.js';
+import { normalizeModelName, runWithConcurrency, type ProjectFields } from './utils.js';
 
 const FILE_CONCURRENCY = 16;
 const MAX_LINE_BYTES = 64 * 1024 * 1024; // 64 MB
@@ -36,6 +36,8 @@ interface ClaudeRecord {
 interface DeduplicatedUsage {
   model: string;
   project: string;
+  projectDisplay: string;
+  projectAlias?: string;
   inputTokens: number;
   cacheWrite5mTokens: number;
   cacheWrite1hTokens: number;
@@ -81,8 +83,8 @@ export async function scanClaudeDates(
 
   const deduped = new Map<string, DeduplicatedUsage>();
 
-  // 收集所有 { filePath, project } 对
-  const fileJobs: { filePath: string; project: string }[] = [];
+  // 收集所有 { filePath, projectFields } 对
+  const fileJobs: { filePath: string; projectFields: ProjectFields }[] = [];
 
   for (const baseDir of baseDirs) {
     let projectDirs: string[];
@@ -94,7 +96,7 @@ export async function scanClaudeDates(
 
     for (const projDir of projectDirs) {
       const projectPath = join(baseDir, projDir);
-      const project = resolveProject(projectPath, projectAliases);
+      const fields = resolveProject(projectPath, projectAliases);
 
       const jsonlFiles: string[] = [];
       try {
@@ -104,14 +106,14 @@ export async function scanClaudeDates(
       }
 
       for (const filePath of jsonlFiles) {
-        fileJobs.push({ filePath, project });
+        fileJobs.push({ filePath, projectFields: fields });
       }
     }
   }
 
   // 并发流式处理文件
   await runWithConcurrency(fileJobs, FILE_CONCURRENCY, async (job) => {
-    await processJsonlFile(job.filePath, job.project, targetDateSet, projectAliases, deduped);
+    await processJsonlFile(job.filePath, job.projectFields, targetDateSet, projectAliases, deduped);
   });
 
   // 按 日期 + model + project 聚合
@@ -139,6 +141,8 @@ export async function scanClaudeDates(
         channel: 'cli',
         model: usage.model,
         project: usage.project,
+        projectDisplay: usage.projectDisplay,
+        projectAlias: usage.projectAlias,
         eventCount: 1,
         inputTokens: usage.inputTokens,
         cachedInputTokens: usage.cachedInputTokens,
@@ -160,7 +164,7 @@ export async function scanClaudeDates(
 /** 流式逐行读取单个 JSONL 文件，避免全量加载到内存 */
 async function processJsonlFile(
   filePath: string,
-  fallbackProject: string,
+  fallbackFields: ProjectFields,
   targetDateSet: Set<string>,
   projectAliases: Record<string, string> | undefined,
   deduped: Map<string, DeduplicatedUsage>,
@@ -209,7 +213,7 @@ async function processJsonlFile(
       const usage = message.usage;
       let model = normalizeModelName(rawModel);
       if (usage.speed === 'fast') model = `${model}-fast`;
-      const recordProject = record.cwd ? resolveProject(record.cwd, projectAliases) : fallbackProject;
+      const recordFields = record.cwd ? resolveProject(record.cwd, projectAliases) : fallbackFields;
       const costUSD = record.costUSD ?? 0;
 
       const cacheCreation = usage.cache_creation;
@@ -234,7 +238,9 @@ async function processJsonlFile(
       } else {
         deduped.set(dedupeKey, {
           model,
-          project: recordProject,
+          project: recordFields.project,
+          projectDisplay: recordFields.projectDisplay,
+          projectAlias: recordFields.projectAlias,
           inputTokens: usage.input_tokens ?? 0,
           cacheWrite5mTokens: cache5m,
           cacheWrite1hTokens: cache1h,
@@ -271,9 +277,10 @@ function extractProjectFromCwd(cwd: string): string {
   return parts[parts.length - 1] || 'unknown';
 }
 
-function resolveProject(rawPath: string, aliases?: Record<string, string>): string {
+function resolveProject(rawPath: string, aliases?: Record<string, string>): ProjectFields {
   const project = extractProjectFromCwd(rawPath);
-  return aliases?.[rawPath] ?? aliases?.[project] ?? project;
+  const alias = aliases?.[rawPath] ?? aliases?.[project];
+  return { project: rawPath, projectDisplay: project, projectAlias: alias };
 }
 
 async function walkForJsonl(dir: string, result: string[]): Promise<void> {

@@ -18,6 +18,26 @@ export function projectFromPath(raw: string, aliases?: Record<string, string>): 
   return aliases?.[raw] ?? aliases?.[name] ?? name;
 }
 
+export interface ProjectFields {
+  project: string;
+  projectDisplay: string;
+  projectAlias?: string;
+}
+
+export function resolveProjectFields(
+  rawPath: string,
+  aliases?: Record<string, string>,
+): ProjectFields {
+  const parts = rawPath.split('/').filter(Boolean);
+  const display = parts[parts.length - 1] || 'unknown';
+  const alias = aliases?.[rawPath] ?? aliases?.[display];
+  return {
+    project: rawPath || 'unknown',
+    projectDisplay: display,
+    projectAlias: alias,
+  };
+}
+
 export async function walkFiles(dir: string, ext: string): Promise<string[]> {
   const result: string[] = [];
   await walk(dir, ext, result);

@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { createInterface } from 'node:readline';
 import type { IngestBreakdown } from '@aiusage/shared';
-import { normalizeModelName, runWithConcurrency } from './utils.js';
+import { normalizeModelName, runWithConcurrency, resolveProjectFields, type ProjectFields } from './utils.js';
 
 const FILE_CONCURRENCY = 16;
 const MAX_LINE_BYTES = 64 * 1024 * 1024; // 64 MB
@@ -90,7 +90,7 @@ async function processCodexFile(
     });
 
     let currentModel = 'unknown';
-    let currentProject = 'unknown';
+    let currentProjectFields: ProjectFields = { project: 'unknown', projectDisplay: 'unknown' };
     let previousTotal: TokenUsage = {};
 
     for await (const line of rl) {
@@ -113,7 +113,7 @@ async function processCodexFile(
           currentModel = normalizeModelName(rawModel);
         }
         if (record.payload?.cwd) {
-          currentProject = extractProject(record.payload.cwd, projectAliases);
+          currentProjectFields = resolveProjectFields(record.payload.cwd, projectAliases);
         }
         continue;
       }
@@ -150,7 +150,7 @@ async function processCodexFile(
 
       const grouped = groupedByDate.get(usageDate);
       if (!grouped) continue;
-      const key = `${currentModel}|${currentProject}`;
+      const key = `${currentModel}|${currentProjectFields.project}`;
 
       const existing = grouped.get(key);
       if (existing) {
@@ -165,7 +165,9 @@ async function processCodexFile(
           product: 'codex',
           channel: 'cli',
           model: currentModel,
-          project: currentProject,
+          project: currentProjectFields.project,
+          projectDisplay: currentProjectFields.projectDisplay,
+          projectAlias: currentProjectFields.projectAlias,
           eventCount: 1,
           inputTokens: nonCachedInput,
           cachedInputTokens: last.cached_input_tokens ?? 0,
@@ -233,8 +235,3 @@ function toDateKey(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-function extractProject(cwd: string, aliases?: Record<string, string>): string {
-  const parts = cwd.split('/').filter(Boolean);
-  const project = parts[parts.length - 1] || 'unknown';
-  return aliases?.[cwd] ?? aliases?.[project] ?? project;
-}

@@ -133,7 +133,7 @@ async function runScan(date: string, isJson: boolean) {
   for (const [provider, breakdowns] of byProvider) {
     console.log(`── ${provider} ──`);
     for (const b of breakdowns.sort((a, c) => c.inputTokens - a.inputTokens)) {
-      console.log(`  ${b.model} | ${b.project}`);
+      console.log(`  ${b.model} | ${b.projectAlias ?? b.projectDisplay ?? b.project}`);
       console.log(`    事件: ${b.eventCount}  输入: ${fmt(b.inputTokens)}  缓存读: ${fmt(b.cachedInputTokens)}  缓存写: ${fmt(b.cacheWriteTokens)}  输出: ${fmt(b.outputTokens)}  推理: ${fmt(b.reasoningOutputTokens)}`);
     }
     console.log();

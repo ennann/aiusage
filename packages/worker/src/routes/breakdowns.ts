@@ -10,7 +10,7 @@ const SORT_FIELDS: Record<string, string> = {
   product: 'b.product',
   channel: 'b.channel',
   model: 'b.model',
-  project: 'b.project',
+  project: 'COALESCE(b.project_alias, b.project_display)',
   event_count: 'b.event_count',
   input_tokens: 'b.input_tokens',
   cached_input_tokens: 'b.cached_input_tokens',
@@ -77,7 +77,7 @@ export async function handleBreakdowns(url: URL, env: Env): Promise<Response> {
     params.push(channel);
   }
   if (project) {
-    conditions.push('b.project = ?');
+    conditions.push('COALESCE(b.project_alias, b.project_display) = ?');
     params.push(project);
   }
 
@@ -98,7 +98,7 @@ export async function handleBreakdowns(url: URL, env: Env): Promise<Response> {
       b.product,
       b.channel,
       b.model,
-      b.project,
+      COALESCE(b.project_alias, b.project_display) AS project,
       b.event_count,
       b.input_tokens,
       b.cached_input_tokens,

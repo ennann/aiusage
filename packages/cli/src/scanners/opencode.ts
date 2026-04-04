@@ -5,7 +5,7 @@ import type { IngestBreakdown } from '@aiusage/shared';
 import {
   parseTs,
   dateKey,
-  projectFromPath,
+  resolveProjectFields,
   walkFiles,
   initDateMap,
   accumulate,
@@ -85,19 +85,21 @@ export async function scanOpencodeDates(
     const reasoning = tokens.reasoning ?? 0;
 
     const rootPath = msg.path?.root;
-    const project = rootPath
-      ? projectFromPath(rootPath, projectAliases)
-      : 'unknown';
+    const fields = rootPath
+      ? resolveProjectFields(rootPath, projectAliases)
+      : { project: 'unknown', projectDisplay: 'unknown' };
 
     accumulate(
       dayMap,
-      `${model}|${project}`,
+      `${model}|${fields.project}`,
       {
         provider: 'opencode',
         product: 'opencode',
         channel: 'cli',
         model,
-        project,
+        project: fields.project,
+        projectDisplay: fields.projectDisplay,
+        projectAlias: fields.projectAlias,
         inputTokens: 0,
         cachedInputTokens: 0,
         cacheWriteTokens: 0,

@@ -108,6 +108,7 @@ export async function scanGeminiDates(
           channel: 'cli',
           model,
           project: 'unknown',
+          projectDisplay: 'unknown',
           inputTokens: 0,
           cachedInputTokens: 0,
           cacheWriteTokens: 0,

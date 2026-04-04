@@ -5,12 +5,13 @@ import type { IngestBreakdown } from '@aiusage/shared';
 import {
   parseTs,
   dateKey,
-  projectFromPath,
   walkFiles,
   initDateMap,
   accumulate,
   finalize,
   emptyResult,
+  resolveProjectFields,
+  type ProjectFields,
 } from './utils.js';
 
 /**
@@ -63,7 +64,7 @@ export async function scanCopilotDates(
       continue;
     }
 
-    let sessionProject = 'unknown';
+    let sessionProjectFields: ProjectFields = { project: 'unknown', projectDisplay: 'unknown' };
 
     const lines = content.split('\n');
     for (const line of lines) {
@@ -79,7 +80,7 @@ export async function scanCopilotDates(
       if (obj.type === 'session.start' || obj.type === 'session.resume') {
         const ctx = obj.data?.context;
         const raw = ctx?.gitRoot ?? ctx?.cwd;
-        if (raw) sessionProject = projectFromPath(raw, projectAliases);
+        if (raw) sessionProjectFields = resolveProjectFields(raw, projectAliases);
       }
 
       // 仅从 session.shutdown 提取 token
@@ -105,13 +106,15 @@ export async function scanCopilotDates(
 
         accumulate(
           dayMap,
-          `${model}|${sessionProject}`,
+          `${model}|${sessionProjectFields.project}`,
           {
             provider: 'github',
             product: 'copilot-cli',
             channel: 'cli',
             model,
-            project: sessionProject,
+            project: sessionProjectFields.project,
+            projectDisplay: sessionProjectFields.projectDisplay,
+            projectAlias: sessionProjectFields.projectAlias,
             inputTokens: 0,
             cachedInputTokens: 0,
             cacheWriteTokens: 0,

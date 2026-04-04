@@ -5,7 +5,7 @@ import type { IngestBreakdown } from '@aiusage/shared';
 import {
   parseTs,
   dateKey,
-  projectFromPath,
+  resolveProjectFields,
   walkFiles,
   initDateMap,
   accumulate,
@@ -89,9 +89,9 @@ export async function scanQwenDates(
       if (!u) continue;
 
       const model = obj.model ?? 'unknown';
-      const project = obj.cwd
-        ? projectFromPath(obj.cwd, projectAliases)
-        : projectFromPath(projectId, projectAliases);
+      const fields = obj.cwd
+        ? resolveProjectFields(obj.cwd, projectAliases)
+        : resolveProjectFields(projectId, projectAliases);
 
       const cached = u.cachedContentTokenCount ?? 0;
       const input = Math.max((u.promptTokenCount ?? 0) - cached, 0);
@@ -100,13 +100,15 @@ export async function scanQwenDates(
 
       accumulate(
         dayMap,
-        `${model}|${project}`,
+        `${model}|${fields.project}`,
         {
           provider: 'alibaba',
           product: 'qwen-code',
           channel: 'cli',
           model,
-          project,
+          project: fields.project,
+          projectDisplay: fields.projectDisplay,
+          projectAlias: fields.projectAlias,
           inputTokens: 0,
           cachedInputTokens: 0,
           cacheWriteTokens: 0,
