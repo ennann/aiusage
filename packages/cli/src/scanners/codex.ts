@@ -55,9 +55,12 @@ export async function scanCodexDates(
     return new Map([...targetDateSet].map((targetDate) => [targetDate, []]));
   }
 
+  // 跨文件全局签名去重
+  const globalSeenSigs = new Set<string>();
+
   // 并发流式处理文件
   await runWithConcurrency(sessionFiles, FILE_CONCURRENCY, async (filePath) => {
-    await processCodexFile(filePath, targetDateSet, projectAliases, groupedByDate);
+    await processCodexFile(filePath, targetDateSet, projectAliases, groupedByDate, globalSeenSigs);
   });
 
   return new Map(
@@ -71,6 +74,7 @@ async function processCodexFile(
   targetDateSet: Set<string>,
   projectAliases: Record<string, string> | undefined,
   groupedByDate: Map<string, Map<string, IngestBreakdown>>,
+  globalSeenSigs: Set<string>,
 ): Promise<void> {
   let fh;
   try {
@@ -87,7 +91,6 @@ async function processCodexFile(
 
     let currentModel = 'unknown';
     let currentProject = 'unknown';
-    let lastTotalSignature = '';
 
     for await (const line of rl) {
       if (!line) continue;
@@ -125,11 +128,11 @@ async function processCodexFile(
       const usageDate = toDateKey(ts);
       if (!targetDateSet.has(usageDate)) continue;
 
-      // 按 total_token_usage 签名去重
+      // 按 total_token_usage 签名跨文件全局去重
       const total = info.total_token_usage;
       const signature = `${total.input_tokens ?? 0}|${total.cached_input_tokens ?? 0}|${total.output_tokens ?? 0}|${total.reasoning_output_tokens ?? 0}|${total.total_tokens ?? 0}`;
-      if (signature === lastTotalSignature) continue;
-      lastTotalSignature = signature;
+      if (globalSeenSigs.has(signature)) continue;
+      globalSeenSigs.add(signature);
 
       const last = info.last_token_usage;
       const grouped = groupedByDate.get(usageDate);
