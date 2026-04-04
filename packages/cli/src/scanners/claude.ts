@@ -45,17 +45,6 @@ interface ClaudeRecord {
   };
 }
 
-interface DeduplicatedUsage {
-  model: string;
-  project: string;
-  inputTokens: number;
-  cacheWrite5mTokens: number;
-  cacheWrite1hTokens: number;
-  cachedInputTokens: number;
-  outputTokens: number;
-  costUSD: number;
-}
-
 function getClaudeProjectDirs(claudeDir?: string): string[] {
   if (claudeDir) return [claudeDir];
 
@@ -91,7 +80,12 @@ export async function scanClaudeDates(
 
   const baseDirs = getClaudeProjectDirs(claudeDir);
 
-  const deduped = new Map<string, DeduplicatedUsage>();
+  // Global dedup set: compound key messageId:requestId (slopmeter approach).
+  // Only deduplicates when both IDs are present; entries missing either ID are
+  // counted without dedup. This mirrors how Claude Code session files are
+  // re-written on restart — the same completed request appears in multiple
+  // JSONL files with identical token counts.
+  const processedHashes = new Set<string>();
 
   // 收集所有 { filePath, project } 对
   const fileJobs: { filePath: string; project: string }[] = [];
@@ -121,48 +115,10 @@ export async function scanClaudeDates(
     }
   }
 
-  // 并发流式处理文件
+  // 并发流式处理文件，直接聚合到 groupedByDate
   await runWithConcurrency(fileJobs, FILE_CONCURRENCY, async (job) => {
-    await processJsonlFile(job.filePath, job.project, targetDateSet, projectAliases, deduped);
+    await processJsonlFile(job.filePath, job.project, targetDateSet, projectAliases, groupedByDate, processedHashes);
   });
-
-  // 按 日期 + model + project 聚合
-  for (const [dedupeKey, usage] of deduped.entries()) {
-    const [usageDate] = dedupeKey.split('|', 1);
-    const grouped = groupedByDate.get(usageDate);
-    if (!grouped) continue;
-
-    const cacheWriteTokens = usage.cacheWrite5mTokens + usage.cacheWrite1hTokens;
-    const key = `${usage.model}|${usage.project}`;
-    const existing = grouped.get(key);
-    if (existing) {
-      existing.eventCount += 1;
-      existing.inputTokens += usage.inputTokens;
-      existing.cachedInputTokens += usage.cachedInputTokens;
-      existing.cacheWriteTokens += cacheWriteTokens;
-      existing.cacheWrite5mTokens = (existing.cacheWrite5mTokens ?? 0) + usage.cacheWrite5mTokens;
-      existing.cacheWrite1hTokens = (existing.cacheWrite1hTokens ?? 0) + usage.cacheWrite1hTokens;
-      existing.outputTokens += usage.outputTokens;
-      existing.costUSD = (existing.costUSD ?? 0) + usage.costUSD;
-    } else {
-      grouped.set(key, {
-        provider: 'anthropic',
-        product: 'claude-code',
-        channel: 'cli',
-        model: usage.model,
-        project: usage.project,
-        eventCount: 1,
-        inputTokens: usage.inputTokens,
-        cachedInputTokens: usage.cachedInputTokens,
-        cacheWriteTokens,
-        cacheWrite5mTokens: usage.cacheWrite5mTokens,
-        cacheWrite1hTokens: usage.cacheWrite1hTokens,
-        outputTokens: usage.outputTokens,
-        reasoningOutputTokens: 0,
-        costUSD: usage.costUSD,
-      });
-    }
-  }
 
   // For dates that have no JSONL data, fall back to stats-cache.json.
   // This covers the period before Claude Code's JSONL rotation window.
@@ -191,7 +147,8 @@ async function processJsonlFile(
   fallbackProject: string,
   targetDateSet: Set<string>,
   projectAliases: Record<string, string> | undefined,
-  deduped: Map<string, DeduplicatedUsage>,
+  groupedByDate: Map<string, Map<string, IngestBreakdown>>,
+  processedHashes: Set<string>,
 ): Promise<void> {
   let fh;
   try {
@@ -231,8 +188,17 @@ async function processJsonlFile(
       const rawModel = message.model ?? 'unknown';
       if (rawModel === '<synthetic>') continue;
 
-      const requestId = record.requestId ?? message.id ?? record.uuid;
-      if (!requestId) continue;
+      // Compound dedup key (slopmeter approach): only skip when BOTH the
+      // Anthropic message ID and the Claude Code request ID are present.
+      // Session files are rewritten on restart, so the same completed request
+      // appears in multiple files with identical token counts.
+      const messageId = message.id;
+      const requestId = record.requestId;
+      if (messageId && requestId) {
+        const hash = `${messageId}:${requestId}`;
+        if (processedHashes.has(hash)) continue;
+        processedHashes.add(hash);
+      }
 
       const usage = message.usage;
       let model = normalizeModelName(rawModel);
@@ -248,26 +214,36 @@ async function processJsonlFile(
         cache5m = usage.cache_creation_input_tokens!;
       }
 
-      const dedupeKey = `${usageDate}|${requestId}`;
-      const existing = deduped.get(dedupeKey);
+      const grouped = groupedByDate.get(usageDate);
+      if (!grouped) continue;
+
+      const cacheWriteTokens = cache5m + cache1h;
+      const key = `${model}|${recordProject}`;
+      const existing = grouped.get(key);
       if (existing) {
-        // 分别取 max（流式场景下同一 requestId 可能多次出现）
-        existing.model = model;
-        existing.inputTokens = Math.max(existing.inputTokens, usage.input_tokens ?? 0);
-        existing.cacheWrite5mTokens = Math.max(existing.cacheWrite5mTokens, cache5m);
-        existing.cacheWrite1hTokens = Math.max(existing.cacheWrite1hTokens, cache1h);
-        existing.cachedInputTokens = Math.max(existing.cachedInputTokens, usage.cache_read_input_tokens ?? 0);
-        existing.outputTokens = Math.max(existing.outputTokens, usage.output_tokens ?? 0);
-        existing.costUSD = Math.max(existing.costUSD, costUSD);
+        existing.eventCount += 1;
+        existing.inputTokens += usage.input_tokens ?? 0;
+        existing.cachedInputTokens += usage.cache_read_input_tokens ?? 0;
+        existing.cacheWriteTokens += cacheWriteTokens;
+        existing.cacheWrite5mTokens = (existing.cacheWrite5mTokens ?? 0) + cache5m;
+        existing.cacheWrite1hTokens = (existing.cacheWrite1hTokens ?? 0) + cache1h;
+        existing.outputTokens += usage.output_tokens ?? 0;
+        existing.costUSD = (existing.costUSD ?? 0) + costUSD;
       } else {
-        deduped.set(dedupeKey, {
+        grouped.set(key, {
+          provider: 'anthropic',
+          product: 'claude-code',
+          channel: 'cli',
           model,
           project: recordProject,
+          eventCount: 1,
           inputTokens: usage.input_tokens ?? 0,
+          cachedInputTokens: usage.cache_read_input_tokens ?? 0,
+          cacheWriteTokens,
           cacheWrite5mTokens: cache5m,
           cacheWrite1hTokens: cache1h,
-          cachedInputTokens: usage.cache_read_input_tokens ?? 0,
           outputTokens: usage.output_tokens ?? 0,
+          reasoningOutputTokens: 0,
           costUSD,
         });
       }

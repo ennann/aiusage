@@ -96,20 +96,24 @@ describe('JSONL scanning', () => {
     expect(b.cacheWriteTokens).toBe(3000);
   });
 
-  it('deduplicates streaming records with the same requestId by taking max', async () => {
+  it('deduplicates repeated records with the same messageId+requestId (first-seen wins)', async () => {
     const projectDir = join(tmpDir, 'projects', '-Users-test-project');
-    // Same requestId emitted 3× (streaming pattern): output grows 10 → 50 → 200
-    await writeJsonl(projectDir, 'session.jsonl', [
-      claudeRecord({ timestamp: '2026-01-15T10:00:00.000Z', requestId: 'req_001', model: 'claude-sonnet-4-5-20250929', inputTokens: 500, outputTokens: 10 }),
-      claudeRecord({ timestamp: '2026-01-15T10:00:01.000Z', requestId: 'req_001', model: 'claude-sonnet-4-5-20250929', inputTokens: 500, outputTokens: 50 }),
-      claudeRecord({ timestamp: '2026-01-15T10:00:02.000Z', requestId: 'req_001', model: 'claude-sonnet-4-5-20250929', inputTokens: 500, outputTokens: 200 }),
+    // Same messageId+requestId in 3 files (session replay pattern): identical token counts
+    await writeJsonl(projectDir, 'session1.jsonl', [
+      claudeRecord({ timestamp: '2026-01-15T10:00:00.000Z', requestId: 'req_001', model: 'claude-sonnet-4-5-20250929', inputTokens: 500, outputTokens: 200 }),
+    ]);
+    await writeJsonl(projectDir, 'session2.jsonl', [
+      claudeRecord({ timestamp: '2026-01-15T10:00:00.000Z', requestId: 'req_001', model: 'claude-sonnet-4-5-20250929', inputTokens: 500, outputTokens: 200 }),
+    ]);
+    await writeJsonl(projectDir, 'session3.jsonl', [
+      claudeRecord({ timestamp: '2026-01-15T10:00:00.000Z', requestId: 'req_001', model: 'claude-sonnet-4-5-20250929', inputTokens: 500, outputTokens: 200 }),
     ]);
 
     const result = await scanClaudeDates(['2026-01-15'], join(tmpDir, 'projects'));
     const [b] = result.get('2026-01-15')!;
-    expect(b.outputTokens).toBe(200); // max, not sum
+    expect(b.outputTokens).toBe(200); // counted once, not 3×
     expect(b.inputTokens).toBe(500);
-    expect(b.eventCount).toBe(1);     // counted as a single event
+    expect(b.eventCount).toBe(1);     // single event despite 3 files
   });
 
   it('returns empty array for a date with no JSONL data and no stats-cache', async () => {
