@@ -1,12 +1,10 @@
 import { useRef, useEffect } from 'react';
 
 const MIN_SCALE = 0.92;
-const MIN_MEDIA_OPACITY = 0.7;
 const SIGMA = 0.4;
 
-// Target cards as whole units — they contain KPIs, charts, and section headers
-const TEXT_SELECTOR = '.card, .fade-up, [class*="rounded-xl"]';
-const MEDIA_SELECTOR = '.recharts-wrapper, img, picture, video, canvas';
+// Target only .card elements — the leaf visual blocks of the dashboard
+const MORPH_SELECTOR = '.card';
 
 function getProximity(rect: DOMRect, viewCenter: number, sigmaPixels: number): number {
   const elCenter = rect.top + rect.height / 2;
@@ -25,12 +23,10 @@ export function useScrollMorph() {
 
     let rafId = 0;
     let lastScrollY = window.scrollY;
-    let cachedTextEls: HTMLElement[] = [];
-    let cachedMediaEls: HTMLElement[] = [];
+    let cachedEls: HTMLElement[] = [];
 
     const refreshCache = () => {
-      cachedTextEls = Array.from(container.querySelectorAll<HTMLElement>(TEXT_SELECTOR));
-      cachedMediaEls = Array.from(container.querySelectorAll<HTMLElement>(MEDIA_SELECTOR));
+      cachedEls = Array.from(container.querySelectorAll<HTMLElement>(MORPH_SELECTOR));
     };
     refreshCache();
 
@@ -39,24 +35,15 @@ export function useScrollMorph() {
       const viewCenter = viewportH / 2;
       const sigmaPixels = viewportH * SIGMA;
 
-      for (let i = 0; i < cachedTextEls.length; i++) {
-        const el = cachedTextEls[i];
-        const rect = el.getBoundingClientRect();
-        if (rect.bottom < -100 || rect.top > viewportH + 100) continue;
-
-        const proximity = getProximity(rect, viewCenter, sigmaPixels);
-        el.style.setProperty('--morph-scale', (MIN_SCALE + (1 - MIN_SCALE) * proximity).toFixed(3));
-      }
-
-      for (let i = 0; i < cachedMediaEls.length; i++) {
-        const el = cachedMediaEls[i];
-        if (el.tagName === 'IMG' && el.closest('picture')) continue;
+      for (let i = 0; i < cachedEls.length; i++) {
+        const el = cachedEls[i];
         if (el.closest('[data-morph-ignore]')) continue;
         const rect = el.getBoundingClientRect();
         if (rect.bottom < -100 || rect.top > viewportH + 100) continue;
 
         const proximity = getProximity(rect, viewCenter, sigmaPixels);
-        el.style.setProperty('--morph-opacity', (MIN_MEDIA_OPACITY + (1 - MIN_MEDIA_OPACITY) * proximity).toFixed(3));
+        const scale = MIN_SCALE + (1 - MIN_SCALE) * proximity;
+        el.style.setProperty('--morph-scale', scale.toFixed(3));
       }
     };
 
@@ -90,8 +77,7 @@ export function useScrollMorph() {
       window.removeEventListener('scroll', onScroll);
       window.removeEventListener('resize', onResize);
       observer.disconnect();
-      for (const el of cachedTextEls) el.style.removeProperty('--morph-scale');
-      for (const el of cachedMediaEls) el.style.removeProperty('--morph-opacity');
+      for (const el of cachedEls) el.style.removeProperty('--morph-scale');
     };
   }, []);
 

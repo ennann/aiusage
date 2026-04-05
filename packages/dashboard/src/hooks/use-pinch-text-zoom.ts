@@ -4,8 +4,8 @@ const MIN_ZOOM = 0.8;
 const MAX_ZOOM = 2.0;
 const ZOOM_STEP = 0.05;
 
-// For dashboard: zoom all cards and section blocks as units
-const ZOOM_TARGETS = '.card, .fade-up, [class*="rounded-xl"]';
+// Only target .card — the leaf visual blocks (not grid wrappers like .fade-up)
+const ZOOM_TARGETS = '.card';
 
 function findAnchorElement(container: HTMLElement): { el: HTMLElement; top: number } | null {
   const viewCenter = window.innerHeight / 2;

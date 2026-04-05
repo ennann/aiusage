@@ -137,24 +137,12 @@ body.embed-transparent .card {
   border-color: rgba(255, 255, 255, 0.06);
 }
 
-/* ── Scroll morph (fisheye) ── */
-/* Cards and section blocks: scale morph via Gaussian proximity + zoom */
-.prose-immersive .card,
-.prose-immersive .fade-up,
-.prose-immersive [class*="rounded-xl"] {
+/* ── Scroll morph (fisheye) + pinch zoom ── */
+/* Only .card elements — the leaf visual blocks, not grid wrappers */
+.prose-immersive .card {
   transform: scale(calc(var(--morph-scale, 1) * var(--zoom-scale, 1)));
   transform-origin: center center;
   transition: transform 0.15s ease-out;
-}
-
-/* Charts/media inside cards: opacity morph (avoids distortion) */
-.prose-immersive .recharts-wrapper,
-.prose-immersive img,
-.prose-immersive picture,
-.prose-immersive video,
-.prose-immersive canvas {
-  opacity: var(--morph-opacity, 1);
-  transition: opacity 0.15s ease-out;
 }
 
 /* Prevent native pinch zoom on mobile — must be in CSS for iOS Safari */
@@ -164,12 +152,8 @@ html, body {
 
 /* prefers-reduced-motion override */
 @media (prefers-reduced-motion: reduce) {
-  .prose-immersive .card,
-  .prose-immersive .fade-up,
-  .prose-immersive .recharts-wrapper,
-  .prose-immersive img {
+  .prose-immersive .card {
     transform: none !important;
-    opacity: 1 !important;
     transition: none !important;
   }
 }
