@@ -668,14 +668,18 @@ function parseArgs(args: string[]): { flags: Record<string, string | boolean>; p
   return { flags, positionals };
 }
 
+function localDateKey(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 function getYesterdayDate(): string {
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
-  return yesterday.toISOString().split('T')[0];
+  return localDateKey(yesterday);
 }
 
 function getTodayDate(): string {
-  return new Date().toISOString().split('T')[0];
+  return localDateKey(new Date());
 }
 
 function buildDateRange(from: string, to: string): string[] {
@@ -702,7 +706,7 @@ function getClosedDates(lookbackDays: number): string[] {
   for (let offset = lookbackDays; offset >= 1; offset -= 1) {
     const day = new Date();
     day.setDate(day.getDate() - offset);
-    dates.push(day.toISOString().split('T')[0]);
+    dates.push(localDateKey(day));
   }
   return dates;
 }
