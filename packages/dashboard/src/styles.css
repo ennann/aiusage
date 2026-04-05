@@ -137,6 +137,26 @@ body.embed-transparent .card {
   border-color: rgba(255, 255, 255, 0.06);
 }
 
+/* ── Scroll morph ── */
+.immersive-morph .card {
+  transform: scale(var(--morph-scale, 1));
+  transform-origin: center center;
+  transition: transform 0.15s ease-out;
+}
+
+.immersive-morph .card .recharts-wrapper,
+.immersive-morph .card img,
+.immersive-morph .card picture,
+.immersive-morph .card video {
+  opacity: var(--morph-opacity, 1);
+  transition: opacity 0.15s ease-out;
+}
+
+/* iOS: prevent native pinch zoom */
+html.immersive-zoom {
+  touch-action: pan-x pan-y;
+}
+
 /* Dark-mode Recharts tooltip override */
 .dark .recharts-tooltip-wrapper .recharts-default-tooltip,
 .dark [class*="ChartTooltipContent"] {

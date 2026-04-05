@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { RotateCw, Github, Heart, Sun, Moon, Monitor } from 'lucide-react';
+import { RotateCw, Github, Heart, Sun, Moon, Monitor, ZoomIn, ZoomOut } from 'lucide-react';
+import { useScrollMorph } from './hooks/use-scroll-morph';
+import { usePinchTextZoom } from './hooks/use-pinch-text-zoom';
 import type { Locale, T } from './i18n';
 import { I18N, getStoredLocale } from './i18n';
 import type { ThemeMode } from './theme';
@@ -194,6 +196,20 @@ export function App() {
   useCurrencyStore(); // subscribe to re-render on toggle
   const isDark = useIsDark();
 
+  // Immersive reading
+  const scrollMorphRef = useScrollMorph();
+  const { containerRef: pinchRef, zoomLevel, resetZoom } = usePinchTextZoom();
+  const mainRef = useCallback((node: HTMLElement | null) => {
+    scrollMorphRef.current = node;
+    pinchRef.current = node;
+  }, [scrollMorphRef, pinchRef]);
+
+  // Add immersive-zoom class to html for CSS touch-action
+  useEffect(() => {
+    document.documentElement.classList.add('immersive-zoom');
+    return () => document.documentElement.classList.remove('immersive-zoom');
+  }, []);
+
   // Theme
   const [theme, setThemeState] = useState<ThemeMode>(getStoredTheme);
   const isFirstRender = useRef(true);
@@ -238,7 +254,7 @@ export function App() {
   }), [overview, unavailable]);
 
   return (
-    <main className="mx-auto w-full max-w-[1200px] px-4 pb-16 sm:px-6 lg:px-8">
+    <main ref={mainRef} className="immersive-morph mx-auto w-full max-w-[1200px] px-4 pb-16 sm:px-6 lg:px-8">
 
       {/* ── Header ── */}
       <header className="fade-up relative z-20 py-6 sm:py-8">
@@ -252,6 +268,16 @@ export function App() {
           <div className="flex flex-wrap items-center gap-2">
             <ThemeToggle value={theme} onChange={setTheme} locale={locale} />
             <LangToggle value={locale} onChange={setLocale} />
+            {zoomLevel > 1 && (
+              <button
+                onClick={resetZoom}
+                className="inline-flex items-center gap-1 rounded-md bg-slate-100/80 px-2 py-1 text-[11px] font-medium text-slate-500 transition-colors hover:text-slate-700 dark:bg-[#1a1a1a]/80 dark:text-slate-400 dark:hover:text-slate-200"
+                aria-label="Reset zoom"
+              >
+                <ZoomOut className="h-3.5 w-3.5" />
+                {Math.round(zoomLevel * 100)}%
+              </button>
+            )}
             <button
               onClick={refresh}
               className="hidden sm:inline-flex items-center justify-center rounded-md bg-slate-100/80 p-1.5 text-slate-400 transition-colors hover:text-slate-600 dark:bg-[#1a1a1a]/80 dark:text-slate-500 dark:hover:text-slate-300"
