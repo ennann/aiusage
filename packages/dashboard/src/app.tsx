@@ -1,8 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { RotateCw, Github, Heart, Sun, Moon, Monitor } from 'lucide-react';
-import { useScrollMorph } from './hooks/use-scroll-morph';
-import { usePinchTextZoom } from './hooks/use-pinch-text-zoom';
-import { ZoomIndicator } from './components/zoom-indicator';
 import type { Locale, T } from './i18n';
 import { I18N, getStoredLocale } from './i18n';
 import type { ThemeMode } from './theme';
@@ -255,13 +252,6 @@ export function App() {
     return () => mq.removeEventListener('change', h);
   }, []);
 
-  // Immersive reading
-  const { containerRef: morphRef } = useScrollMorph();
-  const { containerRef: zoomRef, zoomLevel, isGesturing, gesturePosition } = usePinchTextZoom();
-  const mainRef = useCallback((node: HTMLElement | null) => {
-    (morphRef as React.MutableRefObject<HTMLElement | null>).current = node;
-    (zoomRef as React.MutableRefObject<HTMLElement | null>).current = node;
-  }, [morphRef, zoomRef]);
 
   // Theme
   const [theme, setThemeState] = useState<ThemeMode>(getStoredTheme);
@@ -307,7 +297,7 @@ export function App() {
   }), [overview, unavailable]);
 
   return (
-    <main ref={mainRef} className="prose-immersive mx-auto w-full max-w-[1200px] px-4 pb-16 sm:px-6 lg:px-8">
+    <main className="mx-auto w-full max-w-[1200px] px-4 pb-16 sm:px-6 lg:px-8">
 
       {/* ── Header ── */}
       <header className="fade-up relative z-20 py-6 sm:py-8">
@@ -669,7 +659,6 @@ export function App() {
           </div>
         </div>
       </footer>
-      <ZoomIndicator zoomLevel={zoomLevel} isVisible={isGesturing} position={gesturePosition} />
     </main>
   );
 }
