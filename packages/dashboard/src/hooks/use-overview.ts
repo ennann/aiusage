@@ -3,6 +3,7 @@ import type { OverviewResponse } from '@aiusage/shared';
 import { DEMO_OVERVIEW, DEMO_HEALTH } from '../demo-data';
 import { arrSum } from '../utils/format';
 import { buildQuery, padMonth } from '../utils/data';
+import { getMetricAvailability } from '../utils/metric-availability';
 
 // ── Types ──
 
@@ -83,6 +84,19 @@ export function useOverview(filters: FiltersState) {
     return { totalTokens, inputTokens, outputTokens, cachedTokens, cacheHitRate, costPerSession };
   }, [overview]);
 
+  const metricAvailability = useMemo(() => {
+    if (!overview || !kpis) {
+      return { mode: 'standard' as const, tokenMetricsUnavailable: false };
+    }
+
+    return getMetricAvailability({
+      selectedProduct: overview.filters.selection.product,
+      productOptions: overview.filters.options.products,
+      totalEvents: overview.totalEvents,
+      totalTokens: kpis.totalTokens,
+    });
+  }, [overview, kpis]);
+
   // Filter options
   const fOpts = useMemo(() => ({
     devices: overview?.filters.options.devices ?? [],
@@ -91,5 +105,15 @@ export function useOverview(filters: FiltersState) {
 
   const refresh = () => setTick((n) => n + 1);
 
-  return { overview, health, kpis, fOpts, loading, error, isDemo, refresh };
+  return {
+    overview,
+    health,
+    kpis,
+    metricAvailability,
+    fOpts,
+    loading,
+    error,
+    isDemo,
+    refresh,
+  };
 }

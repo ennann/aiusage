@@ -21,6 +21,7 @@ import { TokenCompositionChart } from './components/token-composition-chart';
 import { FlowChart } from './components/flow-chart';
 import { DonutSection } from './components/donut-section';
 import { ActivityHeatmap } from './components/activity-heatmap';
+import { buildActivityHeatmapData } from './utils/activity-heatmap-data';
 
 // ────────────────────────────────────────
 // Constants
@@ -178,7 +179,17 @@ export function App() {
     range: '30d', deviceId: '', product: '',
   });
 
-  const { overview, health, kpis, fOpts, loading, error, isDemo, refresh } = useOverview(filters);
+  const {
+    overview,
+    health,
+    kpis,
+    metricAvailability,
+    fOpts,
+    loading,
+    error,
+    isDemo,
+    refresh,
+  } = useOverview(filters);
   useFetchCnyRate();
   useCurrencyStore(); // subscribe to re-render on toggle
   const isDark = useIsDark();
@@ -219,6 +230,12 @@ export function App() {
       value: formatCompact(arrSum(tc.map((d) => Number(d[s.key] || 0))), locale),
     }));
   }, [overview, t, locale, isDark]);
+  const unavailable = metricAvailability.tokenMetricsUnavailable;
+  const activityHeatmap = useMemo(() => buildActivityHeatmapData({
+    heatmap: overview?.heatmap ?? [],
+    dailyTrend: overview?.dailyTrend ?? [],
+    tokenMetricsUnavailable: unavailable,
+  }), [overview, unavailable]);
 
   return (
     <main className="mx-auto w-full max-w-[1200px] px-4 pb-16 sm:px-6 lg:px-8">
@@ -330,19 +347,22 @@ export function App() {
             style={{ animationDelay: '50ms' }}
           >
             <div className="card col-span-2 sm:col-span-1">
-              <CostKpiCard label={t.estimatedCost} value={formatUsd(overview?.totalCostUsd ?? 0)} />
+              <CostKpiCard
+                label={t.estimatedCost}
+                value={unavailable ? t.unavailable : formatUsd(overview?.totalCostUsd ?? 0)}
+              />
             </div>
             <div className="card">
-              <KpiCard label={t.totalTokens} value={formatCompact(kpis?.totalTokens ?? 0, locale)} />
+              <KpiCard label={t.totalTokens} value={unavailable ? t.unavailable : formatCompact(kpis?.totalTokens ?? 0, locale)} />
             </div>
             <div className="card">
-              <KpiCard label={t.inputTokens} value={formatCompact(kpis?.inputTokens ?? 0, locale)} />
+              <KpiCard label={t.inputTokens} value={unavailable ? t.unavailable : formatCompact(kpis?.inputTokens ?? 0, locale)} />
             </div>
             <div className="card">
-              <KpiCard label={t.outputTokens} value={formatCompact(kpis?.outputTokens ?? 0, locale)} />
+              <KpiCard label={t.outputTokens} value={unavailable ? t.unavailable : formatCompact(kpis?.outputTokens ?? 0, locale)} />
             </div>
             <div className="card">
-              <KpiCard label={t.cachedTokens} value={formatCompact(kpis?.cachedTokens ?? 0, locale)} />
+              <KpiCard label={t.cachedTokens} value={unavailable ? t.unavailable : formatCompact(kpis?.cachedTokens ?? 0, locale)} />
             </div>
           </div>
 
@@ -362,94 +382,124 @@ export function App() {
               <KpiCard label={t.sessions} value={formatNumber(overview?.totalEvents ?? 0)} />
             </div>
             <div className="card">
-              <KpiCard label={t.costPerSession} value={formatUsd(kpis?.costPerSession ?? 0)} />
+              <KpiCard label={t.costPerSession} value={unavailable ? t.unavailable : formatUsd(kpis?.costPerSession ?? 0)} />
             </div>
             <div className="card">
-              <KpiCard label={t.avgDailyCost} value={formatUsd(overview?.averageDailyCostUsd ?? 0)} />
+              <KpiCard label={t.avgDailyCost} value={unavailable ? t.unavailable : formatUsd(overview?.averageDailyCostUsd ?? 0)} />
             </div>
             <div className="card">
-              <KpiCard label={t.cacheHitRate} value={formatPercent(kpis?.cacheHitRate ?? 0)} />
+              <KpiCard label={t.cacheHitRate} value={unavailable ? t.unavailable : formatPercent(kpis?.cacheHitRate ?? 0)} />
             </div>
           </div>
+
+          {unavailable && (
+            <div className="fade-up rounded-xl border border-amber-200/80 bg-amber-50/70 px-4 py-3 text-[13px] text-amber-900 dark:border-amber-950/60 dark:bg-amber-950/20 dark:text-amber-200">
+              <span className="font-medium">{t.eventOnlySource}.</span> {t.eventOnlyNotice}
+            </div>
+          )}
 
           {/* ── Activity Heatmap ── */}
           <div className="card fade-up p-6" style={{ animationDelay: '120ms' }}>
             <SectionHeader title={locale === 'zh' ? '年度活跃热力图' : 'Activity Heatmap'} />
-            <ActivityHeatmap days={overview?.heatmap ?? []} />
+            <ActivityHeatmap days={activityHeatmap.days} metricLabel={activityHeatmap.metricLabel} />
           </div>
 
           {/* ── Cost Trend ── */}
           <div className="card fade-up p-6" style={{ animationDelay: '150ms' }}>
-            <SectionHeader title={t.costTrend} stat={formatUsd(overview?.totalCostUsd ?? 0)} />
-            <ChartBoundary name="Cost Trend">
-              <CostTrendChart
-                data={overview?.dailyTrend ?? []}
-                providerTrend={overview?.providerDailyTrend ?? []}
-              />
-            </ChartBoundary>
+            <SectionHeader title={t.costTrend} stat={unavailable ? t.unavailable : formatUsd(overview?.totalCostUsd ?? 0)} />
+            {unavailable ? (
+              <EmptyState label={t.costUnavailable} />
+            ) : (
+              <ChartBoundary name="Cost Trend">
+                <CostTrendChart
+                  data={overview?.dailyTrend ?? []}
+                  providerTrend={overview?.providerDailyTrend ?? []}
+                />
+              </ChartBoundary>
+            )}
           </div>
 
           {/* ── Token Trend ── */}
           <div className="card fade-up p-6" style={{ animationDelay: '200ms' }}>
-            <SectionHeader title={t.tokenTrend} stat={formatCompact(kpis?.totalTokens ?? 0, locale)} />
-            <ChartBoundary name="Token Trend">
-              <TokenTrendChart data={overview?.tokenComposition ?? []} locale={locale} />
-            </ChartBoundary>
-            <ChartLegend items={tokenLegend} />
+            <SectionHeader title={t.tokenTrend} stat={unavailable ? t.unavailable : formatCompact(kpis?.totalTokens ?? 0, locale)} />
+            {unavailable ? (
+              <EmptyState label={t.tokenUnavailable} />
+            ) : (
+              <>
+                <ChartBoundary name="Token Trend">
+                  <TokenTrendChart data={overview?.tokenComposition ?? []} locale={locale} />
+                </ChartBoundary>
+                <ChartLegend items={tokenLegend} />
+              </>
+            )}
           </div>
 
           {/* ── Token Composition ── */}
           <div className="card fade-up p-6" style={{ animationDelay: '250ms' }}>
-            <SectionHeader title={t.tokenComposition} />
-            <ChartBoundary name="Token Composition">
-              <TokenCompositionChart data={overview?.tokenComposition ?? []} locale={locale} />
-            </ChartBoundary>
-            <ChartLegend items={tokenLegend} />
+            <SectionHeader title={t.tokenComposition} stat={unavailable ? t.unavailable : undefined} />
+            {unavailable ? (
+              <EmptyState label={t.tokenUnavailable} />
+            ) : (
+              <>
+                <ChartBoundary name="Token Composition">
+                  <TokenCompositionChart data={overview?.tokenComposition ?? []} locale={locale} />
+                </ChartBoundary>
+                <ChartLegend items={tokenLegend} />
+              </>
+            )}
           </div>
 
           {/* ── Flow & Share ── */}
           <div className="fade-up grid gap-4 lg:grid-cols-5" style={{ animationDelay: '300ms' }}>
             <div className="card p-6 lg:col-span-3">
               <SectionHeader title={t.tokenFlow} />
-              <ChartBoundary name="Token Flow">
-                <FlowChart data={overview?.sankey} />
-              </ChartBoundary>
+              {unavailable ? (
+                <EmptyState label={t.tokenUnavailable} />
+              ) : (
+                <ChartBoundary name="Token Flow">
+                  <FlowChart data={overview?.sankey} />
+                </ChartBoundary>
+              )}
             </div>
             <div className="card flex flex-col p-6 lg:col-span-2">
-              <ChartBoundary name="Share">
-                <div className="flex flex-1 flex-col">
-                  <DonutSection
-                    title={t.providerShare}
-                    data={(overview?.filters.options.providers ?? []).map((p) => ({
-                      value: p.value,
-                      label: providerLabel(p.value),
-                      estimatedCostUsd: p.estimatedCostUsd,
-                      eventCount: p.eventCount,
-                    }))}
-                    colors={getChartColors(isDark)}
-                    centerLabel={formatUsd(overview?.totalCostUsd ?? 0)}
-                  />
-                  <div className="my-5 border-t border-slate-100 dark:border-white/[0.08]" />
-                  <DonutSection
-                    title={t.modelShare}
-                    data={(overview?.modelCostShare ?? []).map((m) => ({ ...m, label: formatModelName(m.label) }))}
-                    colors={getChartColors(isDark)}
-                    centerLabel={formatUsd(overview?.totalCostUsd ?? 0)}
-                  />
-                  <div className="my-5 border-t border-slate-100 dark:border-white/[0.08]" />
-                  <DonutSection
-                    title={t.deviceShare}
-                    data={(overview?.filters.options.devices ?? []).map((d) => ({
-                      value: d.value,
-                      label: d.label,
-                      estimatedCostUsd: d.estimatedCostUsd,
-                      eventCount: d.eventCount,
-                    }))}
-                    colors={getChartColors(isDark)}
-                    centerLabel={formatUsd(overview?.totalCostUsd ?? 0)}
-                  />
-                </div>
-              </ChartBoundary>
+              {unavailable ? (
+                <EmptyState label={t.shareUnavailable} />
+              ) : (
+                <ChartBoundary name="Share">
+                  <div className="flex flex-1 flex-col">
+                    <DonutSection
+                      title={t.providerShare}
+                      data={(overview?.filters.options.providers ?? []).map((p) => ({
+                        value: p.value,
+                        label: providerLabel(p.value),
+                        estimatedCostUsd: p.estimatedCostUsd,
+                        eventCount: p.eventCount,
+                      }))}
+                      colors={getChartColors(isDark)}
+                      centerLabel={formatUsd(overview?.totalCostUsd ?? 0)}
+                    />
+                    <div className="my-5 border-t border-slate-100 dark:border-white/[0.08]" />
+                    <DonutSection
+                      title={t.modelShare}
+                      data={(overview?.modelCostShare ?? []).map((m) => ({ ...m, label: formatModelName(m.label) }))}
+                      colors={getChartColors(isDark)}
+                      centerLabel={formatUsd(overview?.totalCostUsd ?? 0)}
+                    />
+                    <div className="my-5 border-t border-slate-100 dark:border-white/[0.08]" />
+                    <DonutSection
+                      title={t.deviceShare}
+                      data={(overview?.filters.options.devices ?? []).map((d) => ({
+                        value: d.value,
+                        label: d.label,
+                        estimatedCostUsd: d.estimatedCostUsd,
+                        eventCount: d.eventCount,
+                      }))}
+                      colors={getChartColors(isDark)}
+                      centerLabel={formatUsd(overview?.totalCostUsd ?? 0)}
+                    />
+                  </div>
+                </ChartBoundary>
+              )}
             </div>
           </div>
 
