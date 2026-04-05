@@ -69,6 +69,7 @@ export async function handleOverview(url: URL, env: Env): Promise<Response> {
       SELECT
         COUNT(DISTINCT b.usage_date) AS active_days,
         COALESCE(SUM(b.event_count), 0) AS total_events,
+        COALESCE(SUM(b.session_count), 0) AS total_sessions,
         COALESCE(SUM(CASE WHEN b.estimated_cost_usd > 0 THEN b.event_count ELSE 0 END), 0) AS cost_bearing_events,
         COALESCE(SUM(b.estimated_cost_usd), 0) AS total_cost_usd
       FROM daily_usage_breakdown b
@@ -76,6 +77,7 @@ export async function handleOverview(url: URL, env: Env): Promise<Response> {
     `).bind(...where.params).first<{
       active_days: number;
       total_events: number;
+      total_sessions: number;
       cost_bearing_events: number;
       total_cost_usd: number;
     }>(),
@@ -196,6 +198,7 @@ export async function handleOverview(url: URL, env: Env): Promise<Response> {
 
   const activeDays = Number(summary?.active_days ?? 0);
   const totalEvents = Number(summary?.total_events ?? 0);
+  const totalSessions = Number(summary?.total_sessions ?? 0);
   const costBearingEvents = Number(summary?.cost_bearing_events ?? 0);
   const totalCostUsd = roundUsd(summary?.total_cost_usd ?? 0);
 
@@ -203,6 +206,7 @@ export async function handleOverview(url: URL, env: Env): Promise<Response> {
     totalDays: activeDays,
     activeDays,
     totalEvents,
+    totalSessions,
     costBearingEvents,
     totalCostUsd,
     averageDailyCostUsd: activeDays > 0 ? roundUsd(totalCostUsd / activeDays) : 0,

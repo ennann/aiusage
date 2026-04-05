@@ -37,6 +37,7 @@ export interface IngestBreakdown {
   model: string;
   project: string;
   eventCount: number;
+  sessionCount?: number;
   inputTokens: number;
   cachedInputTokens: number;
   cacheWriteTokens: number;
@@ -86,6 +87,7 @@ export interface OverviewResponse {
   totalDays: number;
   activeDays: number;
   totalEvents: number;
+  totalSessions: number;
   costBearingEvents: number;
   totalCostUsd: number;
   averageDailyCostUsd: number;

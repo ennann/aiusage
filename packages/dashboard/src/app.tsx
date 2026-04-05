@@ -379,7 +379,11 @@ export function App() {
               />
             </div>
             <div className="card">
-              <KpiCard label={t.sessions} value={formatNumber(overview?.totalEvents ?? 0)} />
+              <KpiCard
+                label={t.sessions}
+                value={formatNumber((overview?.totalSessions ?? 0) > 0 ? overview!.totalSessions : (overview?.totalEvents ?? 0))}
+                suffix={(overview?.totalSessions ?? 0) > 0 && overview!.totalSessions !== overview!.totalEvents ? ` / ${formatNumber(overview!.totalEvents)}` : undefined}
+              />
             </div>
             <div className="card">
               <KpiCard label={t.costPerSession} value={unavailable ? t.unavailable : formatUsd(kpis?.costPerSession ?? 0)} />

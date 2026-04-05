@@ -13,6 +13,7 @@ interface ClaudeRecord {
   timestamp?: string;
   requestId?: string;
   uuid?: string;
+  sessionId?: string;
   type?: string;
   cwd?: string;
   costUSD?: number;
@@ -36,6 +37,7 @@ interface ClaudeRecord {
 interface DeduplicatedUsage {
   model: string;
   project: string;
+  sessionId: string;
   inputTokens: number;
   cacheWrite5mTokens: number;
   cacheWrite1hTokens: number;
@@ -115,6 +117,7 @@ export async function scanClaudeDates(
   });
 
   // 按 日期 + model + project 聚合
+  const sessionSets = new Map<string, Set<string>>(); // "date|model|project" → sessionIds
   for (const [dedupeKey, usage] of deduped.entries()) {
     const [usageDate] = dedupeKey.split('|', 1);
     const grouped = groupedByDate.get(usageDate);
@@ -122,6 +125,10 @@ export async function scanClaudeDates(
 
     const cacheWriteTokens = usage.cacheWrite5mTokens + usage.cacheWrite1hTokens;
     const key = `${usage.model}|${usage.project}`;
+    const sessionSetKey = `${usageDate}|${key}`;
+    if (!sessionSets.has(sessionSetKey)) sessionSets.set(sessionSetKey, new Set());
+    sessionSets.get(sessionSetKey)!.add(usage.sessionId);
+
     const existing = grouped.get(key);
     if (existing) {
       existing.eventCount += 1;
@@ -152,6 +159,14 @@ export async function scanClaudeDates(
     }
   }
 
+  // Assign session counts
+  for (const [usageDate, grouped] of groupedByDate.entries()) {
+    for (const [key, breakdown] of grouped.entries()) {
+      const sessionSetKey = `${usageDate}|${key}`;
+      breakdown.sessionCount = sessionSets.get(sessionSetKey)?.size ?? 0;
+    }
+  }
+
   return new Map(
     [...groupedByDate.entries()].map(([usageDate, grouped]) => [usageDate, [...grouped.values()]]),
   );
@@ -165,6 +180,8 @@ async function processJsonlFile(
   projectAliases: Record<string, string> | undefined,
   deduped: Map<string, DeduplicatedUsage>,
 ): Promise<void> {
+  // Derive fallback sessionId from filename (e.g. "abc-123.jsonl" → "abc-123")
+  const fallbackSessionId = filePath.replace(/^.*[\\/]/, '').replace(/\.jsonl$/, '');
   let fh;
   try {
     fh = await open(filePath, 'r');
@@ -210,6 +227,7 @@ async function processJsonlFile(
       let model = normalizeModelName(rawModel);
       if (usage.speed === 'fast') model = `${model}-fast`;
       const recordProject = record.cwd ? resolveProject(record.cwd, projectAliases) : fallbackProject;
+      const sessionId = record.sessionId ?? fallbackSessionId;
       const costUSD = record.costUSD ?? 0;
 
       const cacheCreation = usage.cache_creation;
@@ -235,6 +253,7 @@ async function processJsonlFile(
         deduped.set(dedupeKey, {
           model,
           project: recordProject,
+          sessionId,
           inputTokens: usage.input_tokens ?? 0,
           cacheWrite5mTokens: cache5m,
           cacheWrite1hTokens: cache1h,

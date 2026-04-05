@@ -114,13 +114,14 @@ export async function handleIngest(request: Request, env: Env): Promise<Response
       await env.DB.prepare(`
         INSERT INTO daily_usage_breakdown
           (device_id, usage_date, provider, product, channel, model, project,
-           event_count, input_tokens, cached_input_tokens, cache_write_tokens,
+           event_count, session_count, input_tokens, cached_input_tokens, cache_write_tokens,
            output_tokens, reasoning_output_tokens, estimated_cost_usd, cost_status,
            pricing_version, extra_metrics_json, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT (device_id, usage_date, provider, product, channel, model, project)
         DO UPDATE SET
           event_count = excluded.event_count,
+          session_count = excluded.session_count,
           input_tokens = excluded.input_tokens,
           cached_input_tokens = excluded.cached_input_tokens,
           cache_write_tokens = excluded.cache_write_tokens,
@@ -135,7 +136,7 @@ export async function handleIngest(request: Request, env: Env): Promise<Response
         .bind(
           tokenPayload.deviceId, day.usageDate,
           b.provider, b.product, b.channel, b.model || 'unknown', b.project || 'unknown',
-          b.eventCount, b.inputTokens, b.cachedInputTokens, b.cacheWriteTokens,
+          b.eventCount, b.sessionCount ?? 0, b.inputTokens, b.cachedInputTokens, b.cacheWriteTokens,
           b.outputTokens, b.reasoningOutputTokens,
           cost.estimatedCostUsd, cost.costStatus, cost.pricingVersion,
           JSON.stringify({
