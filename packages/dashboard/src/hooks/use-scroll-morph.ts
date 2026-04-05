@@ -20,6 +20,8 @@ export function useScrollMorph() {
     if (!container) return;
 
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    // Disable on mobile — cards fill the viewport so morph looks jittery
+    if (window.innerWidth < 640) return;
 
     let rafId = 0;
     let lastScrollY = window.scrollY;
