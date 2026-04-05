@@ -151,7 +151,7 @@ async function runScan(date: string, isJson: boolean) {
 
 async function runReport(flags: Record<string, string | boolean>) {
   const config = await readConfig();
-  const range = parseReportRange(flags.range);
+  const range = parseReportRange(flags.range, flags.today === true);
   const report = await buildLocalReport(range, { projectAliases: config.projectAliases });
 
   if (flags.json) {

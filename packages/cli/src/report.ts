@@ -4,7 +4,7 @@ import { basename, join } from 'node:path';
 import type { IngestBreakdown } from '@aiusage/shared';
 import { scanDates } from './scan.js';
 
-export type ReportRange = '7d' | '1m' | '3m' | 'all';
+export type ReportRange = '7d' | '1m' | '3m' | 'all' | 'today';
 
 interface Totals {
   eventCount: number;
@@ -54,6 +54,8 @@ export async function buildLocalReport(
 ): Promise<LocalReport> {
   const requestedDates = range === 'all'
     ? await discoverAllDates()
+    : range === 'today'
+    ? [toDateKey(getTodayLocalDate())]
     : buildPresetDates(range);
 
   const daily: DailySummary[] = [];
@@ -113,10 +115,11 @@ export async function buildLocalReport(
   };
 }
 
-export function parseReportRange(value: string | boolean | undefined): ReportRange {
+export function parseReportRange(value: string | boolean | undefined, today?: boolean): ReportRange {
+  if (today) return 'today';
   if (value === undefined || value === true) return '7d';
-  if (value === '7d' || value === '1m' || value === '3m' || value === 'all') return value;
-  throw new Error('--range 仅支持 7d、1m、3m、all');
+  if (value === '7d' || value === '1m' || value === '3m' || value === 'all' || value === 'today') return value;
+  throw new Error('--range 仅支持 7d、1m、3m、all、today');
 }
 
 function getRangeLabel(range: ReportRange): string {
