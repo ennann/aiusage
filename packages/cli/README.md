@@ -165,10 +165,17 @@ Manage local settings.
 ```bash
 aiusage config set lang zh                              # default language: en or zh
 aiusage config set emoji false                          # disable emoji in report title
-aiusage config set device.alias "MacBook Pro 工作机"
-aiusage config set privacy.projectVisibility masked
-aiusage config set project.alias MyApp "我的应用"  # prefer: aiusage project alias
+aiusage config set device.alias "MacBook Pro 工作机"      # device display name on dashboard
+aiusage config set privacy.projectVisibility masked     # hidden | masked | plain
+aiusage config set project.alias MyApp "我的应用"        # prefer: aiusage project alias
 aiusage config set anthropic-admin-key sk-ant-admin...  # for aiusage import
+```
+
+**Device alias** is shown on the dashboard to distinguish multiple devices. Set it to something recognizable (e.g. your machine name or emoji):
+
+```bash
+aiusage config set device.alias "💻 MacBook Pro"
+aiusage config set device.alias "🖥️ iMac Studio"
 ```
 
 CLI flags (`--lang`, `--no-emoji`) override config values for a single run.

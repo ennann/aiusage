@@ -162,10 +162,17 @@ aiusage doctor
 ```bash
 aiusage config set lang zh                              # 默认语言: en 或 zh
 aiusage config set emoji false                          # 禁用报告标题 emoji
-aiusage config set device.alias "MacBook Pro 工作机"
-aiusage config set privacy.projectVisibility masked
+aiusage config set device.alias "MacBook Pro 工作机"      # Dashboard 上显示的设备名称
+aiusage config set privacy.projectVisibility masked     # hidden | masked | plain
 aiusage config set project.alias MyApp "我的应用"        # 推荐用 aiusage project alias
 aiusage config set anthropic-admin-key sk-ant-admin...  # 用于 aiusage import
+```
+
+**设备别名**会在 Dashboard 上显示，用于区分多台设备。建议设置为容易辨认的名称：
+
+```bash
+aiusage config set device.alias "💻 MacBook Pro"
+aiusage config set device.alias "🖥️ iMac Studio"
 ```
 
 CLI 标志（`--lang`、`--no-emoji`）会覆盖配置值（仅当次生效）。
