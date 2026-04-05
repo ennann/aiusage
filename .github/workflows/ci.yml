@@ -16,13 +16,17 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
+          registry-url: https://registry.npmjs.org
 
       - run: pnpm install --frozen-lockfile
 
       - name: Lint & Build
         run: pnpm turbo build
 
-      - name: Deploy
+      - name: Test CLI
+        run: cd packages/cli && npx vitest run
+
+      - name: Deploy Worker
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: |
           pnpm --filter @aiusage/dashboard build
@@ -31,3 +35,17 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Publish CLI
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          LOCAL_VERSION=$(node -p "require('./packages/cli/package.json').version")
+          NPM_VERSION=$(npm view @aiusage/cli version 2>/dev/null || echo "0.0.0")
+          if [ "$LOCAL_VERSION" != "$NPM_VERSION" ]; then
+            echo "Publishing @aiusage/cli@${LOCAL_VERSION} (npm has ${NPM_VERSION})"
+            cd packages/cli && npm publish --access public
+          else
+            echo "CLI v${LOCAL_VERSION} already published, skipping"
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
