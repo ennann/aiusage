@@ -151,17 +151,17 @@ async function runScan(date: string, isJson: boolean) {
 
 async function runReport(flags: Record<string, string | boolean>) {
   const config = await readConfig();
-  const range = parseReportRange(flags.range, flags.today === true);
-  const report = await buildLocalReport(range, { projectAliases: config.projectAliases });
+
+  // 日期解析：--from/--start, --to/--end, --date, --today, --range, --lookback
+  const { dates, range } = resolveDateParams(flags, config);
+  const report = await buildLocalReport(range, { projectAliases: config.projectAliases, dates });
 
   if (flags.json) {
     console.log(JSON.stringify(report, null, 2));
     return;
   }
 
-  const lang = (typeof flags.lang === 'string' ? flags.lang : config.lang) || 'en';
-  if (lang !== 'en' && lang !== 'zh') throw new Error('--lang only supports en or zh');
-
+  const lang = resolveGlobalLang(flags, config);
   const emoji = flags['no-emoji'] === true ? false : (config.emoji ?? true);
   const detail = flags.detail === true;
 
@@ -261,24 +261,8 @@ async function runSync(flags: Record<string, string | boolean>) {
     ? [findTargetOrThrow(config, targetName)]
     : allTargets;
 
-  // ── 日期解析（保持现有逻辑不变） ──
-  const requestedDate = typeof flags.date === 'string' ? flags.date : undefined;
-  const fromDate = typeof flags.from === 'string' ? flags.from : undefined;
-  const toDate = typeof flags.to === 'string' ? flags.to : undefined;
-  let targetDates: string[];
-  if (requestedDate) {
-    targetDates = [requestedDate];
-  } else if (fromDate) {
-    targetDates = buildDateRange(fromDate, toDate ?? getTodayDate());
-  } else if (flags.today === true) {
-    targetDates = [getTodayDate()];
-  } else {
-    const lookbackDays = typeof flags.lookback === 'string'
-      ? parsePositiveInt(flags.lookback, '--lookback')
-      : defaultLookbackDays(config);
-    targetDates = getClosedDates(lookbackDays);
-    targetDates.push(getTodayDate());
-  }
+  // ── 日期解析 ──
+  const { dates: targetDates } = resolveDateParams(flags, config);
 
   // 扫描一次，所有 target 共享结果
   console.log(`扫描 ${targetDates.length} 天 (${targetDates[0]} ~ ${targetDates[targetDates.length - 1]}) ...`);
@@ -632,9 +616,9 @@ function printHelp(zh = false) {
   console.log(`aiusage v${getVersion()}\n`);
   const cmds = zh ? [
     ['scan [--date YYYY-MM-DD] [--json]',                    '扫描某日用量明细'],
-    ['report [--range 7d|1m|3m|all] [--detail] [--json]',    '本地用量报告'],
-    ['sync [--today] [--lookback N] [--date YYYY-MM-DD]',    '上传用量到服务端'],
-    ['sync --from YYYY-MM-DD [--to YYYY-MM-DD]',             '上传指定日期范围'],
+    ['report [--today] [--range 7d|1m|3m|all] [--detail] [--json]', '本地用量报告'],
+    ['sync [--today] [--range 7d|1m|3m|all]',                     '上传用量到服务端'],
+    ['report/sync --from YYYY-MM-DD [--to YYYY-MM-DD]',           '指定日期范围（--start/--end 同义）'],
     ['project [list|alias]',                                  '项目管理与别名设置'],
     ['schedule [on|off|status] [--every 5m]',                '定时同步管理'],
     ['doctor',                                               '诊断检查'],
@@ -644,9 +628,9 @@ function printHelp(zh = false) {
     ['health [--server URL]',                                '测试服务端连通性'],
   ] : [
     ['scan [--date YYYY-MM-DD] [--json]',                    'Scan daily usage breakdown'],
-    ['report [--range 7d|1m|3m|all] [--detail] [--json]',    'Local usage report'],
-    ['sync [--today] [--lookback N] [--date YYYY-MM-DD]',    'Upload usage to server'],
-    ['sync --from YYYY-MM-DD [--to YYYY-MM-DD]',             'Upload specific date range'],
+    ['report [--today] [--range 7d|1m|3m|all] [--detail] [--json]', 'Local usage report'],
+    ['sync [--today] [--range 7d|1m|3m|all]',                     'Upload usage to server'],
+    ['report/sync --from YYYY-MM-DD [--to YYYY-MM-DD]',           'Date range (--start/--end aliases)'],
     ['project [list|alias]',                                 'Project management & aliases'],
     ['schedule [on|off|status] [--every 5m]',                'Scheduled sync management'],
     ['doctor',                                               'Run diagnostics'],
@@ -671,16 +655,16 @@ function printUsageHint(zh = false) {
   console.log(`aiusage v${getVersion()}\n`);
   const cmds = zh ? [
     ['scan [--date YYYY-MM-DD]',              '扫描某日用量明细'],
-    ['report [--range 7d|1m|3m|all]',         '本地用量报告'],
-    ['sync [--today]',                        '上传用量到服务端'],
+    ['report [--today] [--range 7d|1m|3m|all]', '本地用量报告'],
+    ['sync [--today] [--range 7d|1m|3m|all]',  '上传用量到服务端'],
     ['project [list|alias]',                  '项目管理与别名设置'],
     ['schedule [on|off|status]',              '定时同步管理'],
     ['doctor',                                '诊断检查'],
     ['config set <key> <value>',              '修改配置'],
   ] : [
     ['scan [--date YYYY-MM-DD]',              'Scan daily usage breakdown'],
-    ['report [--range 7d|1m|3m|all]',         'Local usage report'],
-    ['sync [--today]',                        'Upload usage to server'],
+    ['report [--today] [--range 7d|1m|3m|all]', 'Local usage report'],
+    ['sync [--today] [--range 7d|1m|3m|all]',  'Upload usage to server'],
     ['project [list|alias]',                  'Project management & aliases'],
     ['schedule [on|off|status]',              'Scheduled sync management'],
     ['doctor',                                'Run diagnostics'],
@@ -738,6 +722,53 @@ function getYesterdayDate(): string {
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
   return localDateKey(yesterday);
+}
+
+// ── 通用日期/语言参数解析 ──
+
+interface DateParams {
+  dates?: string[];
+  range: import('./report.js').ReportRange;
+}
+
+function resolveDateParams(flags: Record<string, string | boolean>, config: { lookbackDays?: number }): DateParams {
+  const requestedDate = typeof flags.date === 'string' ? flags.date : undefined;
+  // --from/--start 和 --to/--end 互为别名
+  const fromDate = typeof flags.from === 'string' ? flags.from : typeof flags.start === 'string' ? flags.start : undefined;
+  const toDate = typeof flags.to === 'string' ? flags.to : typeof flags.end === 'string' ? flags.end : undefined;
+
+  if (requestedDate) {
+    return { dates: [requestedDate], range: 'today' };
+  }
+  if (fromDate) {
+    return { dates: buildDateRange(fromDate, toDate ?? getTodayDate()), range: 'all' };
+  }
+  if (flags.today === true) {
+    return { dates: [getTodayDate()], range: 'today' };
+  }
+  // --range 优先（report 惯用）
+  const rangeFlag = flags.range;
+  if (typeof rangeFlag === 'string') {
+    return { range: parseReportRange(rangeFlag) };
+  }
+  // --lookback
+  if (typeof flags.lookback === 'string') {
+    const lookbackDays = parsePositiveInt(flags.lookback, '--lookback');
+    const dates = getClosedDates(lookbackDays);
+    dates.push(getTodayDate());
+    return { dates, range: '7d' };
+  }
+  // 默认：最近 7 天 + 今天
+  const lookbackDays = defaultLookbackDays(config);
+  const dates = getClosedDates(lookbackDays);
+  dates.push(getTodayDate());
+  return { dates, range: '7d' };
+}
+
+function resolveGlobalLang(flags: Record<string, string | boolean>, config: { lang?: string }): 'en' | 'zh' {
+  const lang = (typeof flags.lang === 'string' ? flags.lang : config.lang) || 'en';
+  if (lang !== 'en' && lang !== 'zh') throw new Error('--lang only supports en or zh');
+  return lang;
 }
 
 function getTodayDate(): string {

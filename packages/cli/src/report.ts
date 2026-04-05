@@ -46,13 +46,17 @@ export interface LocalReport {
 
 interface BuildReportOptions {
   projectAliases?: Record<string, string>;
+  /** 直接传入日期列表时忽略 range 参数 */
+  dates?: string[];
 }
 
 export async function buildLocalReport(
   range: ReportRange,
   options: BuildReportOptions = {},
 ): Promise<LocalReport> {
-  const requestedDates = range === 'all'
+  const requestedDates = options.dates
+    ? options.dates
+    : range === 'all'
     ? await discoverAllDates()
     : range === 'today'
     ? [toDateKey(getTodayLocalDate())]
