@@ -377,7 +377,7 @@ export function App() {
           />
           {overview && fOpts.products.length > 1 && (
             <FilterChips
-              label={t.product ?? 'Product'}
+              label=""
               value={filters.product}
               options={fOpts.products}
               allLabel={t.all}
@@ -386,7 +386,7 @@ export function App() {
           )}
           {overview && fOpts.devices.length >= 1 && (
             <FilterChips
-              label={t.device ?? 'Device'}
+              label=""
               value={filters.deviceId}
               options={fOpts.devices}
               allLabel={t.all}
