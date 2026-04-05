@@ -86,6 +86,7 @@ export interface OverviewResponse {
   totalDays: number;
   activeDays: number;
   totalEvents: number;
+  costBearingEvents: number;
   totalCostUsd: number;
   averageDailyCostUsd: number;
   dailyTrend: DailyTrendItem[];

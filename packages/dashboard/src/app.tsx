@@ -398,6 +398,12 @@ export function App() {
             </div>
           )}
 
+          {!unavailable && (filters.product === '' || filters.product === 'claude-code') && ['all', '90d'].includes(filters.range) && (
+            <div className="fade-up rounded-xl border border-blue-200/80 bg-blue-50/70 px-4 py-3 text-[13px] text-blue-900 dark:border-blue-900/60 dark:bg-blue-950/20 dark:text-blue-200">
+              {t.claudeCodeDataNotice}
+            </div>
+          )}
+
           {/* ── Activity Heatmap ── */}
           <div className="card fade-up p-6" style={{ animationDelay: '120ms' }}>
             <SectionHeader title={locale === 'zh' ? '年度活跃热力图' : 'Activity Heatmap'} />

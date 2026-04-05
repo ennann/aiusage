@@ -10,6 +10,7 @@ export const DEMO_OVERVIEW: OverviewResponse & { ok: boolean } = {
   "totalDays": 400,
   "activeDays": 173,
   "totalEvents": 101362,
+  "costBearingEvents": 78450,
   "totalCostUsd": 7593.4274,
   "averageDailyCostUsd": 43.8926,
   "dailyTrend": [
