@@ -75,15 +75,16 @@ body {
   min-width: 0;
 }
 
-/* Entrance animation */
+/* Entrance animation — uses `translate` (not `transform`) so it doesn't
+   override scroll-morph's `transform: scale(--morph-scale)` on .card elements */
 @keyframes fade-up {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    translate: 0 8px;
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    translate: 0 0;
   }
 }
 
