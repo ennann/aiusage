@@ -137,24 +137,81 @@ body.embed-transparent .card {
   border-color: rgba(255, 255, 255, 0.06);
 }
 
-/* ── Scroll morph ── */
-.immersive-morph .card {
+/* ── Scroll morph (fisheye) ── */
+/* Text elements: scale-only morph (preserves highlight colors) */
+.prose-immersive p,
+.prose-immersive h1,
+.prose-immersive h2,
+.prose-immersive h3,
+.prose-immersive h4,
+.prose-immersive h5,
+.prose-immersive h6,
+.prose-immersive li,
+.prose-immersive pre,
+.prose-immersive span.kpi-value,
+.prose-immersive .section-header,
+.prose-immersive [data-zoom-text] {
   transform: scale(var(--morph-scale, 1));
-  transform-origin: center center;
+  transform-origin: left center;
   transition: transform 0.15s ease-out;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
-.immersive-morph .card .recharts-wrapper,
-.immersive-morph .card img,
-.immersive-morph .card picture,
-.immersive-morph .card video {
+/* Prevent Safari text autosizing mismatch on children */
+.prose-immersive p *,
+.prose-immersive li * {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* Media/chart elements: opacity-only morph (avoids distortion) */
+.prose-immersive img,
+.prose-immersive picture,
+.prose-immersive figure,
+.prose-immersive video,
+.prose-immersive iframe,
+.prose-immersive canvas,
+.prose-immersive hr,
+.prose-immersive .recharts-wrapper {
   opacity: var(--morph-opacity, 1);
   transition: opacity 0.15s ease-out;
 }
 
-/* iOS: prevent native pinch zoom */
-html.immersive-zoom {
+/* Prevent native pinch zoom on mobile — must be in CSS for iOS Safari */
+html, body {
   touch-action: pan-x pan-y;
+}
+
+/* prefers-reduced-motion override */
+@media (prefers-reduced-motion: reduce) {
+  .prose-immersive p,
+  .prose-immersive h1,
+  .prose-immersive h2,
+  .prose-immersive h3,
+  .prose-immersive h4,
+  .prose-immersive h5,
+  .prose-immersive h6,
+  .prose-immersive li,
+  .prose-immersive pre,
+  .prose-immersive img,
+  .prose-immersive .recharts-wrapper {
+    transform: none !important;
+    opacity: 1 !important;
+    transition: none !important;
+  }
+}
+
+/* Zoom badge animation */
+@keyframes zoom-badge-enter {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.5);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
 }
 
 /* Dark-mode Recharts tooltip override */

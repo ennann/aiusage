@@ -1,91 +1,98 @@
-import { useEffect, useRef } from 'react';
-
-/**
- * Scroll-morph fisheye: elements near viewport center scale to 1,
- * elements far from center scale down to MIN_SCALE.
- *
- * Text elements get scale-only morph (preserves highlight colors).
- * Media/chart elements get opacity-only morph (avoids distortion).
- */
-
-const TEXT_SELECTOR = 'h1, h2, h3, h4, h5, h6, p, li, span.kpi-value, .section-header';
-const MEDIA_SELECTOR = '.recharts-wrapper, img, picture, video, svg.chart-icon';
-const CARD_SELECTOR = '.card';
+import { useRef, useEffect } from 'react';
 
 const MIN_SCALE = 0.92;
-const MIN_OPACITY = 0.7;
+const MIN_MEDIA_OPACITY = 0.7;
+const SIGMA = 0.4;
 
-function clamp(v: number, min: number, max: number) {
-  return Math.min(Math.max(v, min), max);
+const TEXT_SELECTOR = 'p, h1, h2, h3, h4, h5, h6, li, span.kpi-value, .section-header, pre';
+const MEDIA_SELECTOR = 'img, picture, figure, video, iframe, canvas, hr, .recharts-wrapper, svg[class*="chart"]';
+
+function getProximity(rect: DOMRect, viewCenter: number, sigmaPixels: number): number {
+  const elCenter = rect.top + rect.height / 2;
+  const distance = Math.abs(elCenter - viewCenter);
+  return Math.exp(-0.5 * (distance / sigmaPixels) ** 2);
 }
 
-export function useScrollMorph(enabled = true) {
+export function useScrollMorph() {
   const containerRef = useRef<HTMLElement | null>(null);
-  const cachedCards = useRef<HTMLElement[]>([]);
-  const rafId = useRef(0);
 
   useEffect(() => {
-    if (!enabled) return;
-
     const container = containerRef.current;
     if (!container) return;
 
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+    let rafId = 0;
+    let lastScrollY = window.scrollY;
+    let cachedTextEls: HTMLElement[] = [];
+    let cachedMediaEls: HTMLElement[] = [];
+
     const refreshCache = () => {
-      cachedCards.current = Array.from(
-        container.querySelectorAll<HTMLElement>(CARD_SELECTOR)
-      );
+      cachedTextEls = Array.from(container.querySelectorAll<HTMLElement>(TEXT_SELECTOR));
+      cachedMediaEls = Array.from(container.querySelectorAll<HTMLElement>(MEDIA_SELECTOR));
+    };
+    refreshCache();
+
+    const update = () => {
+      const viewportH = window.innerHeight;
+      const viewCenter = viewportH / 2;
+      const sigmaPixels = viewportH * SIGMA;
+
+      for (let i = 0; i < cachedTextEls.length; i++) {
+        const el = cachedTextEls[i];
+        const rect = el.getBoundingClientRect();
+        if (rect.bottom < -100 || rect.top > viewportH + 100) continue;
+
+        const proximity = getProximity(rect, viewCenter, sigmaPixels);
+        el.style.setProperty('--morph-scale', (MIN_SCALE + (1 - MIN_SCALE) * proximity).toFixed(3));
+      }
+
+      for (let i = 0; i < cachedMediaEls.length; i++) {
+        const el = cachedMediaEls[i];
+        if (el.tagName === 'IMG' && el.closest('picture')) continue;
+        if (el.closest('[data-morph-ignore]')) continue;
+        const rect = el.getBoundingClientRect();
+        if (rect.bottom < -100 || rect.top > viewportH + 100) continue;
+
+        const proximity = getProximity(rect, viewCenter, sigmaPixels);
+        el.style.setProperty('--morph-opacity', (MIN_MEDIA_OPACITY + (1 - MIN_MEDIA_OPACITY) * proximity).toFixed(3));
+      }
     };
 
-    refreshCache();
+    const onScroll = () => {
+      const currentY = window.scrollY;
+      if (Math.abs(currentY - lastScrollY) < 2) return;
+      lastScrollY = currentY;
+      cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(update);
+    };
+
+    rafId = requestAnimationFrame(update);
+
+    window.addEventListener('scroll', onScroll, { passive: true });
+
+    const onResize = () => {
+      cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(update);
+    };
+    window.addEventListener('resize', onResize);
 
     const observer = new MutationObserver(() => {
       refreshCache();
-      requestAnimationFrame(update);
+      cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(update);
     });
     observer.observe(container, { childList: true, subtree: true });
 
-    function update() {
-      const vh = window.innerHeight;
-      const center = vh / 2;
-
-      for (const card of cachedCards.current) {
-        if (card.hasAttribute('data-morph-ignore')) continue;
-
-        const rect = card.getBoundingClientRect();
-        const elCenter = rect.top + rect.height / 2;
-        const dist = Math.abs(elCenter - center);
-        const maxDist = vh * 0.8;
-        const ratio = clamp(1 - dist / maxDist, 0, 1);
-
-        // Cards get a subtle scale
-        const scale = MIN_SCALE + (1 - MIN_SCALE) * ratio;
-        card.style.setProperty('--morph-scale', String(scale));
-
-        // Media inside cards gets opacity
-        const opacity = MIN_OPACITY + (1 - MIN_OPACITY) * ratio;
-        card.style.setProperty('--morph-opacity', String(opacity));
-      }
-    }
-
-    function onScroll() {
-      cancelAnimationFrame(rafId.current);
-      rafId.current = requestAnimationFrame(update);
-    }
-
-    window.addEventListener('scroll', onScroll, { passive: true });
-    // Initial paint
-    requestAnimationFrame(update);
-
     return () => {
+      cancelAnimationFrame(rafId);
       window.removeEventListener('scroll', onScroll);
-      cancelAnimationFrame(rafId.current);
+      window.removeEventListener('resize', onResize);
       observer.disconnect();
-      for (const card of cachedCards.current) {
-        card.style.removeProperty('--morph-scale');
-        card.style.removeProperty('--morph-opacity');
-      }
+      for (const el of cachedTextEls) el.style.removeProperty('--morph-scale');
+      for (const el of cachedMediaEls) el.style.removeProperty('--morph-opacity');
     };
-  }, [enabled]);
+  }, []);
 
-  return containerRef;
+  return { containerRef };
 }
