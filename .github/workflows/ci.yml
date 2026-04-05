@@ -7,7 +7,50 @@ on:
     branches: [main]
 
 jobs:
-  ci:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v5
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm turbo build
+
+      - name: Test
+        run: cd packages/cli && npx vitest run
+
+  deploy:
+    needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v5
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build Dashboard & Deploy Worker
+        run: |
+          pnpm --filter @aiusage/dashboard build
+          cp -r packages/dashboard/dist packages/worker/public
+          cd packages/worker && npx wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+  publish:
+    needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -20,24 +63,10 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Lint & Build
-        run: pnpm turbo build
+      - name: Build CLI
+        run: pnpm turbo build --filter @aiusage/cli
 
-      - name: Test CLI
-        run: cd packages/cli && npx vitest run
-
-      - name: Deploy Worker
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-        run: |
-          pnpm --filter @aiusage/dashboard build
-          cp -r packages/dashboard/dist packages/worker/public
-          cd packages/worker && npx wrangler deploy
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-
-      - name: Publish CLI
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      - name: Publish CLI (if version changed)
         run: |
           LOCAL_VERSION=$(node -p "require('./packages/cli/package.json').version")
           NPM_VERSION=$(npm view @aiusage/cli version 2>/dev/null || echo "0.0.0")
