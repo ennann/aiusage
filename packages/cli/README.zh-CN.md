@@ -3,7 +3,7 @@
 `@aiusage/cli` 是 AIUsage 命令行工具，用于：
 
 - 发现和管理本机 AI 工具项目
-- 扫描本地 AI 编程工具的 Token 用量（Claude Code、Codex、Copilot CLI、Gemini CLI 等）
+- 扫描本地 AI 编程工具的 Token 用量（Claude Code、Codex、Cursor、Copilot CLI、Copilot VS Code、Gemini CLI、Antigravity、Amp、Kimi Code、Qwen Code、Droid、OpenCode、Pi）
 - 通过 Anthropic Admin API 导入历史用量
 - 生成本地用量报告（最近 7 天、30 天、90 天或全部历史）
 - 定时自动同步数据到 AIUsage Worker
@@ -41,7 +41,7 @@ aiusage project alias                   # 查看所有已配置的别名
 aiusage project alias --remove myapp    # 移除别名
 ```
 
-扫描 Claude Code、Codex、Copilot CLI、Gemini CLI 的数据目录，列出发现的项目及其别名和来源。
+扫描所有已支持 AI 工具的数据目录，列出发现的项目及其别名和来源。
 
 项目别名在上传前本地解析。两台设备对各自项目目录设置相同的别名，服务端会将其合并为一个项目。
 
