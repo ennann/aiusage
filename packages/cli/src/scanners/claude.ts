@@ -1,13 +1,25 @@
-import { readdir, open } from 'node:fs/promises';
+import { readdir, open, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
-import { createReadStream } from 'node:fs';
 import { createInterface } from 'node:readline';
 import type { IngestBreakdown } from '@aiusage/shared';
 import { normalizeModelName, runWithConcurrency } from './utils.js';
 
 const FILE_CONCURRENCY = 16;
 const MAX_LINE_BYTES = 64 * 1024 * 1024; // 64 MB
+
+// Stats-cache fallback: Claude Code stores rolling daily token totals in
+// ~/.claude/stats-cache.json. When JSONL session files have been rotated away,
+// this is the only remaining source for historical token counts.
+// The dailyModelTokens field tracks (input + output) tokens per model per day
+// (cache tokens are NOT included). We distribute using the model's all-time
+// input/output ratio from modelUsage, and fall back to 70/30 if unavailable.
+const STATS_CACHE_DEFAULT_INPUT_RATIO = 0.7;
+
+interface StatsCache {
+  dailyModelTokens?: Array<{ date: string; tokensByModel: Record<string, number> }>;
+  modelUsage?: Record<string, { inputTokens?: number; outputTokens?: number }>;
+}
 
 interface ClaudeRecord {
   timestamp?: string;
@@ -32,18 +44,6 @@ interface ClaudeRecord {
       speed?: 'standard' | 'fast';
     };
   };
-}
-
-interface DeduplicatedUsage {
-  model: string;
-  project: string;
-  sessionId: string;
-  inputTokens: number;
-  cacheWrite5mTokens: number;
-  cacheWrite1hTokens: number;
-  cachedInputTokens: number;
-  outputTokens: number;
-  costUSD: number;
 }
 
 function getClaudeProjectDirs(claudeDir?: string): string[] {
@@ -81,7 +81,15 @@ export async function scanClaudeDates(
 
   const baseDirs = getClaudeProjectDirs(claudeDir);
 
-  const deduped = new Map<string, DeduplicatedUsage>();
+  // Global dedup set: compound key messageId:requestId (slopmeter approach).
+  // Only deduplicates when both IDs are present; entries missing either ID are
+  // counted without dedup. This mirrors how Claude Code session files are
+  // re-written on restart — the same completed request appears in multiple
+  // JSONL files with identical token counts.
+  const processedHashes = new Set<string>();
+
+  // Track distinct sessions per "date|model|project" group
+  const sessionSets = new Map<string, Set<string>>();
 
   // 收集所有 { filePath, project } 对
   const fileJobs: { filePath: string; project: string }[] = [];
@@ -111,55 +119,28 @@ export async function scanClaudeDates(
     }
   }
 
-  // 并发流式处理文件
+  // 并发流式处理文件，直接聚合到 groupedByDate
   await runWithConcurrency(fileJobs, FILE_CONCURRENCY, async (job) => {
-    await processJsonlFile(job.filePath, job.project, targetDateSet, projectAliases, deduped);
+    await processJsonlFile(job.filePath, job.project, targetDateSet, projectAliases, groupedByDate, processedHashes, sessionSets);
   });
 
-  // 按 日期 + model + project 聚合
-  const sessionSets = new Map<string, Set<string>>(); // "date|model|project" → sessionIds
-  for (const [dedupeKey, usage] of deduped.entries()) {
-    const [usageDate] = dedupeKey.split('|', 1);
-    const grouped = groupedByDate.get(usageDate);
-    if (!grouped) continue;
-
-    const cacheWriteTokens = usage.cacheWrite5mTokens + usage.cacheWrite1hTokens;
-    const key = `${usage.model}|${usage.project}`;
-    const sessionSetKey = `${usageDate}|${key}`;
-    if (!sessionSets.has(sessionSetKey)) sessionSets.set(sessionSetKey, new Set());
-    sessionSets.get(sessionSetKey)!.add(usage.sessionId);
-
-    const existing = grouped.get(key);
-    if (existing) {
-      existing.eventCount += 1;
-      existing.inputTokens += usage.inputTokens;
-      existing.cachedInputTokens += usage.cachedInputTokens;
-      existing.cacheWriteTokens += cacheWriteTokens;
-      existing.cacheWrite5mTokens = (existing.cacheWrite5mTokens ?? 0) + usage.cacheWrite5mTokens;
-      existing.cacheWrite1hTokens = (existing.cacheWrite1hTokens ?? 0) + usage.cacheWrite1hTokens;
-      existing.outputTokens += usage.outputTokens;
-      existing.costUSD = (existing.costUSD ?? 0) + usage.costUSD;
-    } else {
-      grouped.set(key, {
-        provider: 'anthropic',
-        product: 'claude-code',
-        channel: 'cli',
-        model: usage.model,
-        project: usage.project,
-        eventCount: 1,
-        inputTokens: usage.inputTokens,
-        cachedInputTokens: usage.cachedInputTokens,
-        cacheWriteTokens,
-        cacheWrite5mTokens: usage.cacheWrite5mTokens,
-        cacheWrite1hTokens: usage.cacheWrite1hTokens,
-        outputTokens: usage.outputTokens,
-        reasoningOutputTokens: 0,
-        costUSD: usage.costUSD,
-      });
+  // For dates that have no JSONL data, fall back to stats-cache.json.
+  // This covers the period before Claude Code's JSONL rotation window.
+  const missingDates = [...targetDateSet].filter(d => groupedByDate.get(d)?.size === 0);
+  if (missingDates.length > 0) {
+    const remaining = new Set(missingDates);
+    for (const baseDir of baseDirs) {
+      if (remaining.size === 0) break;
+      const statsCachePath = join(baseDir, '..', 'stats-cache.json');
+      await fillFromStatsCache(statsCachePath, remaining, groupedByDate);
+      // Remove dates that were just filled
+      for (const d of remaining) {
+        if (groupedByDate.get(d)!.size > 0) remaining.delete(d);
+      }
     }
   }
 
-  // Assign session counts
+  // Assign session counts from collected sessionSets
   for (const [usageDate, grouped] of groupedByDate.entries()) {
     for (const [key, breakdown] of grouped.entries()) {
       const sessionSetKey = `${usageDate}|${key}`;
@@ -178,7 +159,9 @@ async function processJsonlFile(
   fallbackProject: string,
   targetDateSet: Set<string>,
   projectAliases: Record<string, string> | undefined,
-  deduped: Map<string, DeduplicatedUsage>,
+  groupedByDate: Map<string, Map<string, IngestBreakdown>>,
+  processedHashes: Set<string>,
+  sessionSets: Map<string, Set<string>>,
 ): Promise<void> {
   // Derive fallback sessionId from filename (e.g. "abc-123.jsonl" → "abc-123")
   const fallbackSessionId = filePath.replace(/^.*[\\/]/, '').replace(/\.jsonl$/, '');
@@ -220,8 +203,17 @@ async function processJsonlFile(
       const rawModel = message.model ?? 'unknown';
       if (rawModel === '<synthetic>') continue;
 
-      const requestId = record.requestId ?? message.id ?? record.uuid;
-      if (!requestId) continue;
+      // Compound dedup key (slopmeter approach): only skip when BOTH the
+      // Anthropic message ID and the Claude Code request ID are present.
+      // Session files are rewritten on restart, so the same completed request
+      // appears in multiple files with identical token counts.
+      const messageId = message.id;
+      const requestId = record.requestId;
+      if (messageId && requestId) {
+        const hash = `${messageId}:${requestId}`;
+        if (processedHashes.has(hash)) continue;
+        processedHashes.add(hash);
+      }
 
       const usage = message.usage;
       let model = normalizeModelName(rawModel);
@@ -238,33 +230,118 @@ async function processJsonlFile(
         cache5m = usage.cache_creation_input_tokens!;
       }
 
-      const dedupeKey = `${usageDate}|${requestId}`;
-      const existing = deduped.get(dedupeKey);
+      const grouped = groupedByDate.get(usageDate);
+      if (!grouped) continue;
+
+      const cacheWriteTokens = cache5m + cache1h;
+      const key = `${model}|${recordProject}`;
+
+      // Track distinct sessions per group
+      const sessionSetKey = `${usageDate}|${key}`;
+      if (!sessionSets.has(sessionSetKey)) sessionSets.set(sessionSetKey, new Set());
+      sessionSets.get(sessionSetKey)!.add(sessionId);
+
+      const existing = grouped.get(key);
       if (existing) {
-        // 分别取 max（流式场景下同一 requestId 可能多次出现）
-        existing.model = model;
-        existing.inputTokens = Math.max(existing.inputTokens, usage.input_tokens ?? 0);
-        existing.cacheWrite5mTokens = Math.max(existing.cacheWrite5mTokens, cache5m);
-        existing.cacheWrite1hTokens = Math.max(existing.cacheWrite1hTokens, cache1h);
-        existing.cachedInputTokens = Math.max(existing.cachedInputTokens, usage.cache_read_input_tokens ?? 0);
-        existing.outputTokens = Math.max(existing.outputTokens, usage.output_tokens ?? 0);
-        existing.costUSD = Math.max(existing.costUSD, costUSD);
+        existing.eventCount += 1;
+        existing.inputTokens += usage.input_tokens ?? 0;
+        existing.cachedInputTokens += usage.cache_read_input_tokens ?? 0;
+        existing.cacheWriteTokens += cacheWriteTokens;
+        existing.cacheWrite5mTokens = (existing.cacheWrite5mTokens ?? 0) + cache5m;
+        existing.cacheWrite1hTokens = (existing.cacheWrite1hTokens ?? 0) + cache1h;
+        existing.outputTokens += usage.output_tokens ?? 0;
+        existing.costUSD = (existing.costUSD ?? 0) + costUSD;
       } else {
-        deduped.set(dedupeKey, {
+        grouped.set(key, {
+          provider: 'anthropic',
+          product: 'claude-code',
+          channel: 'cli',
           model,
           project: recordProject,
-          sessionId,
+          eventCount: 1,
           inputTokens: usage.input_tokens ?? 0,
+          cachedInputTokens: usage.cache_read_input_tokens ?? 0,
+          cacheWriteTokens,
           cacheWrite5mTokens: cache5m,
           cacheWrite1hTokens: cache1h,
-          cachedInputTokens: usage.cache_read_input_tokens ?? 0,
           outputTokens: usage.output_tokens ?? 0,
+          reasoningOutputTokens: 0,
           costUSD,
         });
       }
     }
   } finally {
     await fh.close();
+  }
+}
+
+async function fillFromStatsCache(
+  statsCachePath: string,
+  missingDates: Set<string>,
+  groupedByDate: Map<string, Map<string, IngestBreakdown>>,
+): Promise<void> {
+  let raw: string;
+  try {
+    raw = await readFile(statsCachePath, 'utf-8');
+  } catch {
+    return;
+  }
+
+  let cache: StatsCache;
+  try {
+    cache = JSON.parse(raw);
+  } catch {
+    return;
+  }
+
+  // Build input ratio per model from all-time modelUsage aggregates.
+  // dailyModelTokens stores (input + output) only — no cache tokens.
+  const inputRatios: Record<string, number> = {};
+  for (const [model, usage] of Object.entries(cache.modelUsage ?? {})) {
+    const inp = usage.inputTokens ?? 0;
+    const out = usage.outputTokens ?? 0;
+    const total = inp + out;
+    if (total > 0) inputRatios[model] = inp / total;
+  }
+
+  for (const entry of cache.dailyModelTokens ?? []) {
+    const { date, tokensByModel } = entry;
+    if (!missingDates.has(date)) continue;
+
+    const grouped = groupedByDate.get(date);
+    if (!grouped) continue;
+
+    for (const [rawModel, totalTokens] of Object.entries(tokensByModel)) {
+      if (!totalTokens) continue;
+      const model = normalizeModelName(rawModel);
+      const ratio = inputRatios[rawModel] ?? inputRatios[model] ?? STATS_CACHE_DEFAULT_INPUT_RATIO;
+
+      const inputTokens = Math.round(totalTokens * ratio);
+      const outputTokens = totalTokens - inputTokens;
+
+      // stats-cache has no per-project breakdown
+      const key = `${model}|unknown`;
+      const existing = grouped.get(key);
+      if (existing) {
+        existing.eventCount += 1;
+        existing.inputTokens += inputTokens;
+        existing.outputTokens += outputTokens;
+      } else {
+        grouped.set(key, {
+          provider: 'anthropic',
+          product: 'claude-code',
+          channel: 'cli',
+          model,
+          project: 'unknown',
+          eventCount: 1,
+          inputTokens,
+          cachedInputTokens: 0,
+          cacheWriteTokens: 0,
+          outputTokens,
+          reasoningOutputTokens: 0,
+        });
+      }
+    }
   }
 }
 
