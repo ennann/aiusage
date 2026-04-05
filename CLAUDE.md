@@ -16,14 +16,6 @@ AIUsage — 跨设备 AI 工具用量统计平台。Monorepo 结构，pnpm works
 ## 目录约定
 
 - `docs/` — 面向用户的文档（部署指南、更新指南等）
-- `dev/` — 开发阶段文档（不面向用户）
-  - `dev/plans/` — 实现计划
-  - `dev/exec-plans/` — 执行计划
-  - `dev/design-docs/` — 架构设计文档
-  - `dev/product-specs/` — 产品规格
-  - `dev/references/` — 参考资料
-
-开发计划、架构设计等文档一律放 `dev/`，不要放入 `docs/`。
 
 ## 常用命令
 
