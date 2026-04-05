@@ -75,20 +75,31 @@ body {
   min-width: 0;
 }
 
-/* Entrance animation */
+/* Entrance animation — uses `translate` (not `transform`) so it doesn't
+   override scroll-morph's `transform: scale(--morph-scale)` on .card elements */
 @keyframes fade-up {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    translate: 0 8px;
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    translate: 0 0;
   }
 }
 
 .fade-up {
   animation: fade-up 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+}
+
+/* Hide scrollbar for horizontal filter tabs on mobile */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
 }
 
 /* Scrollbar */
@@ -135,6 +146,39 @@ body.embed-transparent .card {
 
 .dark body.embed-transparent .card {
   border-color: rgba(255, 255, 255, 0.06);
+}
+
+/* ── Scroll morph (fisheye) ── */
+/* Only .card elements — the leaf visual blocks, not grid wrappers */
+.prose-immersive .card {
+  transform: scale(var(--morph-scale, 1));
+  transform-origin: center center;
+  transition: transform 0.15s ease-out;
+}
+
+/* Prevent native pinch zoom on mobile — must be in CSS for iOS Safari */
+html, body {
+  touch-action: pan-x pan-y;
+}
+
+/* prefers-reduced-motion override */
+@media (prefers-reduced-motion: reduce) {
+  .prose-immersive .card {
+    transform: none !important;
+    transition: none !important;
+  }
+}
+
+/* Zoom badge animation */
+@keyframes zoom-badge-enter {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.5);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
 }
 
 /* Dark-mode Recharts tooltip override */
