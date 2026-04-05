@@ -1,5 +1,5 @@
 import { open, readdir, readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { homedir } from 'node:os';
 
 export interface DiscoveredProject {
@@ -40,8 +40,19 @@ export async function discoverProjects(
     // 首行 session.start 含 data.context.gitRoot / cwd
     discoverCopilotProjects().then(names => names.forEach(n => add(n, 'copilot'))),
 
+    // Cursor: ~/Library/Application Support/Cursor/User/globalStorage/storage.json
+    // 读取 workspace/profile 关联记录来发现近期项目
+    discoverCursorProjects().then(names => names.forEach(n => add(n, 'cursor'))),
+
+    // Copilot VS Code: VS Code 扩展日志中的 file:/// 工作区路径
+    discoverCopilotVscodeProjects().then(names => names.forEach(n => add(n, 'copilot-vscode'))),
+
     // Gemini CLI: ~/.gemini/projects.json 含 { projects: { path: name } }
     discoverGeminiProjects().then(names => names.forEach(n => add(n, 'gemini'))),
+
+    // Antigravity: ~/.gemini/antigravity/knowledge/*/metadata.json
+    // 仅读取知识项元数据标题，不读取对话内容
+    discoverAntigravityProjects().then(names => names.forEach(n => add(n, 'antigravity'))),
   ]);
 
   // ���建结果
@@ -114,6 +125,10 @@ async function extractCwdFromSessionMeta(filePath: string): Promise<string | und
 
 /** 递归查找目录下所有 .jsonl 文件 */
 async function walkJsonlFiles(dir: string): Promise<string[]> {
+  return walkFiles(dir, '.jsonl');
+}
+
+async function walkFiles(dir: string, ext: string): Promise<string[]> {
   const result: string[] = [];
   async function walk(d: string) {
     let entries;
@@ -125,7 +140,7 @@ async function walkJsonlFiles(dir: string): Promise<string[]> {
     for (const entry of entries) {
       const full = join(d, entry.name);
       if (entry.isDirectory()) await walk(full);
-      else if (entry.name.endsWith('.jsonl')) result.push(full);
+      else if (entry.name.endsWith(ext)) result.push(full);
     }
   }
   await walk(dir);
@@ -243,6 +258,103 @@ async function discoverGeminiProjects(): Promise<string[]> {
   }
 }
 
+async function discoverCursorProjects(): Promise<string[]> {
+  const storagePath = join(homedir(), 'Library', 'Application Support', 'Cursor', 'User', 'globalStorage', 'storage.json');
+  try {
+    const raw = await readFile(storagePath, 'utf-8');
+    const data = JSON.parse(raw) as {
+      profileAssociations?: { workspaces?: Record<string, string> };
+      backupWorkspaces?: { folders?: Array<{ folderUri?: string }> };
+    };
+
+    const projects = new Set<string>();
+    const workspaceUris = Object.keys(data.profileAssociations?.workspaces ?? {});
+    for (const uri of workspaceUris) {
+      const name = nameFromFileUri(uri);
+      if (name) projects.add(name);
+    }
+
+    for (const folder of data.backupWorkspaces?.folders ?? []) {
+      const name = nameFromFileUri(folder.folderUri);
+      if (name) projects.add(name);
+    }
+
+    return [...projects];
+  } catch {
+    return [];
+  }
+}
+
+async function discoverCopilotVscodeProjects(): Promise<string[]> {
+  const dir = join(homedir(), 'Library', 'Application Support', 'Code', 'logs');
+  const files = (await walkFiles(dir, '.log')).filter(filePath => filePath.endsWith('GitHub Copilot Chat.log'));
+  const projects = new Set<string>();
+
+  for (const filePath of files) {
+    let content: string;
+    try {
+      content = await readFile(filePath, 'utf-8');
+    } catch {
+      continue;
+    }
+
+    for (const line of content.split('\n')) {
+      const match = line.match(/file:\/\/\/[^\s]+/);
+      const name = nameFromFileUri(match?.[0]);
+      if (name) projects.add(name);
+    }
+  }
+
+  return [...projects];
+}
+
+async function discoverAntigravityProjects(): Promise<string[]> {
+  const dir = join(homedir(), '.gemini', 'antigravity', 'knowledge');
+  let entries;
+  try {
+    entries = await readdir(dir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+
+  const projects = new Set<string>();
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+
+    const metadataPath = join(dir, entry.name, 'metadata.json');
+    try {
+      const raw = await readFile(metadataPath, 'utf-8');
+      const data = JSON.parse(raw) as { title?: string };
+      const name = data.title?.trim() || entry.name.trim();
+      if (name && name !== 'unknown') projects.add(name);
+    } catch {
+      continue;
+    }
+  }
+
+  return [...projects];
+}
+
+function nameFromFileUri(raw?: string): string | undefined {
+  const path = pathFromFileUri(raw);
+  if (!path) return undefined;
+  const name = basename(path);
+  return name && name !== 'unknown' ? name : undefined;
+}
+
+function pathFromFileUri(raw?: string): string | undefined {
+  if (!raw) return undefined;
+  if (raw.startsWith('file:///')) {
+    const cleaned = raw.replace(/[.).,;:]+$/, '');
+    try {
+      return decodeURIComponent(cleaned.replace(/^file:\/\//, ''));
+    } catch {
+      return cleaned.replace(/^file:\/\//, '');
+    }
+  }
+  return raw;
+}
+
 function getClaudeDirs(): string[] {
   const envVar = process.env.CLAUDE_CONFIG_DIR?.trim();
   if (envVar) {
@@ -254,4 +366,3 @@ function getClaudeDirs(): string[] {
     join(home, '.claude', 'projects'),
   ];
 }
-

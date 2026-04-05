@@ -3,7 +3,7 @@
 `@aiusage/cli` is the AIUsage command-line tool for:
 
 - discovering and managing projects across AI tools
-- scanning local Claude Code, Codex, Copilot CLI, and Gemini CLI token usage
+- scanning local Claude Code, Codex, Cursor, Copilot CLI, Copilot for VS Code, Gemini CLI, and Antigravity usage
 - printing local usage summaries for the last 7 days, 30 days, 90 days, or all history
 - scheduling automatic sync to an AIUsage Worker
 - diagnosing configuration and connectivity issues
@@ -40,7 +40,7 @@ aiusage project alias                   # list all configured aliases
 aiusage project alias --remove myapp    # remove alias
 ```
 
-Scans data directories for Claude Code, Codex, Copilot CLI, and Gemini CLI, listing discovered projects with their aliases and sources.
+Scans data directories for Claude Code, Codex, Cursor, Copilot CLI, Copilot for VS Code, Gemini CLI, and Antigravity, listing discovered projects with their aliases and sources.
 
 Project aliases are applied locally before upload. If two devices set the same alias for their respective project directories, the server merges them into one project.
 
@@ -59,7 +59,7 @@ aiusage report --no-emoji               # disable emoji in title
 aiusage report --json                   # JSON output
 ```
 
-Reads data from `~/.claude/projects` (Claude Code) and `~/.codex` (Codex).
+Reads data from local tool data directories including `~/.claude/projects` (Claude Code), `~/.codex` (Codex), Cursor local state plus usage export, VS Code Copilot Chat logs, and `~/.gemini/antigravity` (Antigravity).
 
 **Compact mode** (default) shows Sources and Daily tables with merged Cache column and 2-decimal cost. **Detail mode** (`--detail`) expands all columns (CacheRead, CacheWrite, Reasoning), adds Top Models and Pricing Notes sections, and shows 4-decimal cost.
 

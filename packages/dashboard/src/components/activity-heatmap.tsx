@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { HeatmapDay } from '@aiusage/shared';
 import { useIsDark } from '../hooks/use-dark';
+import type { ActivityHeatmapDay } from '../utils/activity-heatmap-data';
 
 // ── 常量 ──
 
@@ -42,7 +42,7 @@ function addDays(d: Date, n: number): Date {
 
 // ── 数字格式 ──
 
-function fmtTokens(n: number): string {
+function fmtCompact(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
   return String(n);
@@ -68,8 +68,9 @@ function useContainerWidth(ref: React.RefObject<HTMLDivElement | null>): number 
 
 // ── 主组件 ──
 
-export function ActivityHeatmap({ days, className = '' }: {
-  days: HeatmapDay[];
+export function ActivityHeatmap({ days, metricLabel = 'tokens', className = '' }: {
+  days: ActivityHeatmapDay[];
+  metricLabel?: 'tokens' | 'sessions';
   className?: string;
 }) {
   const isDark = useIsDark();
@@ -81,11 +82,11 @@ export function ActivityHeatmap({ days, className = '' }: {
 
   const [tooltip, setTooltip] = useState<{
     x: number; y: number;
-    date: string; tokens: number; cost: number;
+    date: string; activityValue: number; cost: number;
   } | null>(null);
 
-  const { grid, monthMarks, maxTokens, activeDays, streak, totalTokens } = useMemo(() => {
-    const byDate = new Map<string, HeatmapDay>();
+  const { grid, monthMarks, maxActivity, activeDays, streak, totalActivity } = useMemo(() => {
+    const byDate = new Map<string, ActivityHeatmapDay>();
     for (const d of days) byDate.set(d.usageDate, d);
 
     // 右侧固定对齐今天所在周的周六
@@ -98,24 +99,24 @@ export function ActivityHeatmap({ days, className = '' }: {
     const endStr = toDateStr(endDate);
     const visibleDays = days.filter(d => d.usageDate >= startStr && d.usageDate <= endStr);
 
-    const maxTokens = Math.max(0, ...visibleDays.map(d => d.totalTokens));
-    const totalTokens = visibleDays.reduce((s, d) => s + d.totalTokens, 0);
-    const activeDays = visibleDays.filter(d => d.totalTokens > 0).length;
+    const maxActivity = Math.max(0, ...visibleDays.map(d => d.activityValue));
+    const totalActivity = visibleDays.reduce((s, d) => s + d.activityValue, 0);
+    const activeDays = visibleDays.filter(d => d.activityValue > 0).length;
 
     let streak = 0;
     for (let i = 0; i < weeks * DAYS; i++) {
       const ds = toDateStr(addDays(today, -i));
       const d = byDate.get(ds);
-      if (!d || d.totalTokens === 0) break;
+      if (!d || d.activityValue === 0) break;
       streak++;
     }
 
-    const grid: Array<Array<{ dateStr: string; data?: HeatmapDay }>> = [];
+    const grid: Array<Array<{ dateStr: string; data?: ActivityHeatmapDay }>> = [];
     const monthMarks: Array<{ weekIdx: number; label: string }> = [];
     let lastMonth = -1;
 
     for (let w = 0; w < weeks; w++) {
-      const col: Array<{ dateStr: string; data?: HeatmapDay }> = [];
+      const col: Array<{ dateStr: string; data?: ActivityHeatmapDay }> = [];
       for (let d = 0; d < DAYS; d++) {
         const date = addDays(startDate, w * DAYS + d);
         const ds = toDateStr(date);
@@ -128,7 +129,7 @@ export function ActivityHeatmap({ days, className = '' }: {
       grid.push(col);
     }
 
-    return { grid, monthMarks, maxTokens, activeDays, streak, totalTokens };
+    return { grid, monthMarks, maxActivity, activeDays, streak, totalActivity };
   }, [days, weeks]);
 
   // 内容宽度（格子部分，左对齐内坐标）
@@ -150,7 +151,7 @@ export function ActivityHeatmap({ days, className = '' }: {
           <span className="font-semibold text-slate-700 dark:text-slate-200">{streak}</span> day streak
         </span>
         <span>
-          <span className="font-semibold text-slate-700 dark:text-slate-200">{fmtTokens(totalTokens)}</span> tokens total
+          <span className="font-semibold text-slate-700 dark:text-slate-200">{fmtCompact(totalActivity)}</span> {metricLabel} total
         </span>
       </div>
 
@@ -183,9 +184,9 @@ export function ActivityHeatmap({ days, className = '' }: {
               <g transform={`translate(0, ${MONTH_ROW})`}>
                 {grid.map((col, wi) =>
                   col.map(({ dateStr, data }, di) => {
-                    const tokens = data?.totalTokens ?? 0;
+                    const activityValue = data?.activityValue ?? 0;
                     const cost = data?.estimatedCostUsd ?? 0;
-                    const fill = colorForValue(tokens, maxTokens, isDark);
+                    const fill = colorForValue(activityValue, maxActivity, isDark);
                     const x = wi * STEP;
                     const y = di * STEP;
                     return (
@@ -197,13 +198,13 @@ export function ActivityHeatmap({ days, className = '' }: {
                         height={CELL}
                         rx={2}
                         fill={fill}
-                        style={{ cursor: tokens > 0 ? 'pointer' : 'default' }}
+                        style={{ cursor: activityValue > 0 ? 'pointer' : 'default' }}
                         onMouseEnter={() => {
                           setTooltip({
                             x: offsetX + x + CELL / 2,
                             y: MONTH_ROW + y,
                             date: dateStr,
-                            tokens,
+                            activityValue,
                             cost,
                           });
                         }}
@@ -247,10 +248,12 @@ export function ActivityHeatmap({ days, className = '' }: {
             }}
           >
             <div className="font-medium text-slate-700 dark:text-slate-200">{tooltip.date}</div>
-            {tooltip.tokens > 0 ? (
+            {tooltip.activityValue > 0 ? (
               <>
-                <div className="text-slate-500 dark:text-slate-400">{fmtTokens(tooltip.tokens)} tokens</div>
-                <div className="text-slate-500 dark:text-slate-400">${tooltip.cost.toFixed(4)}</div>
+                <div className="text-slate-500 dark:text-slate-400">{fmtCompact(tooltip.activityValue)} {metricLabel}</div>
+                {metricLabel === 'tokens' && (
+                  <div className="text-slate-500 dark:text-slate-400">${tooltip.cost.toFixed(4)}</div>
+                )}
               </>
             ) : (
               <div className="text-slate-400 dark:text-slate-500">No activity</div>

@@ -1,5 +1,5 @@
 import { readFile, readdir } from 'node:fs/promises';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { homedir } from 'node:os';
 import type { IngestBreakdown } from '@aiusage/shared';
 import {
@@ -47,12 +47,20 @@ interface GeminiMessage {
 interface GeminiSession {
   model?: string;
   createTime?: string | number;
+  startTime?: string | number;
+  messages?: GeminiMessage[];
+  history?: GeminiMessage[];
   data?: {
     model?: string;
     createTime?: string | number;
     messages?: GeminiMessage[];
     history?: GeminiMessage[];
   };
+}
+
+interface GeminiLogEntry {
+  type?: string;
+  timestamp?: string | number;
 }
 
 export async function scanGeminiDates(
@@ -67,8 +75,11 @@ export async function scanGeminiDates(
   if (files.length === 0) return emptyResult(dates);
 
   const grouped = initDateMap(dates);
+  const tokenBackedDates = new Set<string>();
 
   for (const filePath of files) {
+    if (basename(filePath) === 'logs.json') continue;
+
     let content: string;
     try {
       content = await readFile(filePath, 'utf-8');
@@ -98,6 +109,7 @@ export async function scanGeminiDates(
       const dk = dateKey(ts);
       const dayMap = grouped.get(dk);
       if (!dayMap) continue;
+      tokenBackedDates.add(dk);
 
       accumulate(
         dayMap,
@@ -119,7 +131,65 @@ export async function scanGeminiDates(
     }
   }
 
+  const logFiles = files.filter((filePath) => basename(filePath) === 'logs.json');
+  for (const filePath of logFiles) {
+    await collectGeminiLogEvents(filePath, grouped, tokenBackedDates);
+  }
+
   return finalize(grouped);
+}
+
+async function collectGeminiLogEvents(
+  filePath: string,
+  grouped: Map<string, Map<string, IngestBreakdown>>,
+  tokenBackedDates: Set<string>,
+): Promise<void> {
+  let content: string;
+  try {
+    content = await readFile(filePath, 'utf-8');
+  } catch {
+    return;
+  }
+
+  let rows: GeminiLogEntry[];
+  try {
+    rows = JSON.parse(content) as GeminiLogEntry[];
+  } catch {
+    return;
+  }
+
+  if (!Array.isArray(rows)) return;
+
+  for (const row of rows) {
+    if (row.type && row.type !== 'user') continue;
+
+    const ts = parseTs(row.timestamp);
+    if (!ts) continue;
+
+    const dk = dateKey(ts);
+    if (tokenBackedDates.has(dk)) continue;
+
+    const dayMap = grouped.get(dk);
+    if (!dayMap) continue;
+
+    accumulate(
+      dayMap,
+      'unknown|unknown',
+      {
+        provider: 'google',
+        product: 'gemini-cli',
+        channel: 'cli',
+        model: 'unknown',
+        project: 'unknown',
+        inputTokens: 0,
+        cachedInputTokens: 0,
+        cacheWriteTokens: 0,
+        outputTokens: 0,
+        reasoningOutputTokens: 0,
+      },
+      { input: 0, cached: 0, cacheWrite: 0, output: 0, reasoning: 0 },
+    );
+  }
 }
 
 function extractTokens(
