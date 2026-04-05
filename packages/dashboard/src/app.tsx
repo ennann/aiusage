@@ -136,11 +136,13 @@ function FilterTabs({
   options,
   onChange,
   allLabel = 'All',
+  tooltips,
 }: {
   value: string;
   options: FacetOption[];
   onChange: (v: string) => void;
   allLabel?: string;
+  tooltips?: Record<string, string>;
 }) {
   if (!options.length) return null;
   const activeClass = 'bg-white text-slate-900 shadow-sm dark:bg-[#222222] dark:text-slate-300';
@@ -155,17 +157,26 @@ function FilterTabs({
       >
         {allLabel}
       </button>
-      {options.map((o) => (
-        <button
-          key={o.value}
-          onClick={() => onChange(o.value === value ? '' : o.value)}
-          className={`shrink-0 rounded-md px-2.5 py-1.5 text-[12px] font-medium whitespace-nowrap transition-all duration-150 ${
-            value === o.value ? activeClass : inactiveClass
-          }`}
-        >
-          {formatProductLabel(o.label)}
-        </button>
-      ))}
+      {options.map((o) => {
+        const tip = tooltips?.[o.value];
+        return (
+          <span key={o.value} className={tip ? 'group relative' : ''}>
+            <button
+              onClick={() => onChange(o.value === value ? '' : o.value)}
+              className={`shrink-0 rounded-md px-2.5 py-1.5 text-[12px] font-medium whitespace-nowrap transition-all duration-150 ${
+                value === o.value ? activeClass : inactiveClass
+              }`}
+            >
+              {formatProductLabel(o.label)}
+            </button>
+            {tip && (
+              <span className="pointer-events-none absolute left-1/2 top-full z-50 mt-2 w-64 -translate-x-1/2 rounded-lg bg-slate-800 px-3 py-2 text-[11px] leading-relaxed text-slate-200 opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 dark:bg-slate-700">
+                {tip}
+              </span>
+            )}
+          </span>
+        );
+      })}
     </div>
   );
 }
@@ -176,12 +187,14 @@ function FilterChips({
   options,
   onChange,
   allLabel = 'All',
+  tooltips,
 }: {
   label: string;
   value: string;
   options: FacetOption[];
   onChange: (v: string) => void;
   allLabel?: string;
+  tooltips?: Record<string, string>;
 }) {
   if (!options.length) return null;
   const active = 'bg-slate-900 text-white dark:bg-slate-200 dark:text-slate-900';
@@ -202,17 +215,26 @@ function FilterChips({
                 {allLabel}
               </button>
             )}
-            {options.map((o) => (
-              <button
-                key={o.value}
-                onClick={() => onChange(o.value === value ? '' : o.value)}
-                className={`shrink-0 rounded-full px-3 py-1 text-[12px] font-medium whitespace-nowrap transition-all duration-150 ${
-                  value === o.value ? active : inactive
-                }`}
-              >
-                {formatProductLabel(o.label)}
-              </button>
-            ))}
+            {options.map((o) => {
+              const tip = tooltips?.[o.value];
+              return (
+                <span key={o.value} className={tip ? 'group relative' : ''}>
+                  <button
+                    onClick={() => onChange(o.value === value ? '' : o.value)}
+                    className={`shrink-0 rounded-full px-3 py-1 text-[12px] font-medium whitespace-nowrap transition-all duration-150 ${
+                      value === o.value ? active : inactive
+                    }`}
+                  >
+                    {formatProductLabel(o.label)}
+                  </button>
+                  {tip && (
+                    <span className="pointer-events-none absolute left-1/2 top-full z-50 mt-2 w-64 -translate-x-1/2 rounded-lg bg-slate-800 px-3 py-2 text-[11px] leading-relaxed text-slate-200 opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 dark:bg-slate-700">
+                      {tip}
+                    </span>
+                  )}
+                </span>
+              );
+            })}
           </div>
         </div>
         <div className="pointer-events-none absolute inset-y-0 right-0 w-6 bg-gradient-to-l from-[#fafafa] dark:from-[#0a0a0a]" />
@@ -350,6 +372,7 @@ export function App() {
                 options={fOpts.products}
                 allLabel={t.all}
                 onChange={(v) => setFilters((f) => ({ ...f, product: v }))}
+                tooltips={{ 'claude-code': t.claudeCodeDataNotice }}
               />
             </>
           )}
@@ -382,6 +405,7 @@ export function App() {
               options={fOpts.products}
               allLabel={t.all}
               onChange={(v) => setFilters((f) => ({ ...f, product: v }))}
+              tooltips={{ 'claude-code': t.claudeCodeDataNotice }}
             />
           )}
           {overview && fOpts.devices.length >= 1 && (
@@ -483,12 +507,6 @@ export function App() {
           {unavailable && (
             <div className="fade-up rounded-xl border border-amber-200/80 bg-amber-50/70 px-4 py-3 text-[13px] text-amber-900 dark:border-amber-950/60 dark:bg-amber-950/20 dark:text-amber-200">
               <span className="font-medium">{t.eventOnlySource}.</span> {t.eventOnlyNotice}
-            </div>
-          )}
-
-          {!unavailable && (filters.product === '' || filters.product === 'claude-code') && (
-            <div className="fade-up rounded-xl border border-blue-200/80 bg-blue-50/70 px-4 py-3 text-[13px] text-blue-900 dark:border-blue-900/60 dark:bg-blue-950/20 dark:text-blue-200">
-              {t.claudeCodeDataNotice}
             </div>
           )}
 
