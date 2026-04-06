@@ -13,7 +13,7 @@ export interface FiltersState {
   product: string;
 }
 
-export interface HealthPayload { ok: boolean; siteId: string; version: string }
+export interface HealthPayload { ok: boolean; siteId: string; version: string; siteTitle?: string }
 export interface OverviewPayload extends OverviewResponse { ok: boolean }
 export interface FacetOption { value: string; label: string }
 

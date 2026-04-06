@@ -37,5 +37,6 @@
         "MAX_DEVICES": "10",
         "PUBLIC_PROJECT_VISIBILITY": "masked",
         "DEFAULT_TIMEZONE": "Asia/Shanghai",
+        "SITE_TITLE": "AI Usage",
     },
 }
