@@ -305,16 +305,18 @@ function renderPricingPage(): string {
       align-items: center;
       gap: 8px;
     }
-    .back-link {
-      font-size: 13px;
-      color: var(--muted);
+    .header-left a {
       text-decoration: none;
-      padding: 6px 12px;
+      color: inherit;
+      display: flex;
+      align-items: center;
+      gap: 12px;
       border-radius: 8px;
-      transition: color 0.15s, background 0.15s;
+      padding: 4px 8px;
+      margin: -4px -8px;
+      transition: background 0.15s;
     }
-    .back-link:hover {
-      color: var(--text);
+    .header-left a:hover {
       background: var(--card-border);
     }
 
@@ -579,13 +581,14 @@ function renderPricingPage(): string {
   <header class="header">
     <div class="container header-inner">
       <div class="header-left">
-        <svg class="logo-icon" viewBox="0 0 200 160" fill="none" width="32" height="26">
-          <path d="M22 112 C30 112 38 90 44 82 C50 74 54 78 58 88 C62 98 64 116 70 120 C76 124 80 108 86 84 C92 60 96 22 104 16 C112 10 116 36 120 64 C124 92 126 138 134 140 C142 142 146 108 152 72 C158 36 162 14 168 16 C174 18 178 50 182 68" stroke="currentColor" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-        <div class="logo-text">AI Usage<span>/ Pricing</span></div>
+        <a href="/">
+          <svg class="logo-icon" viewBox="0 0 200 160" fill="none" width="32" height="26">
+            <path d="M22 112 C30 112 38 90 44 82 C50 74 54 78 58 88 C62 98 64 116 70 120 C76 124 80 108 86 84 C92 60 96 22 104 16 C112 10 116 36 120 64 C124 92 126 138 134 140 C142 142 146 108 152 72 C158 36 162 14 168 16 C174 18 178 50 182 68" stroke="currentColor" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <div class="logo-text">AI Usage<span>/ Model Pricing</span></div>
+        </a>
       </div>
       <div class="header-right">
-        <a class="back-link" href="/">&larr; Dashboard</a>
         <div class="theme-toggle">
           <button class="theme-btn" data-theme="system" title="System">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>

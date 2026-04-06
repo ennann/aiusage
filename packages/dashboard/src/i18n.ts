@@ -32,7 +32,7 @@ export const I18N = {
     range7d: '7D', range30d: '30D', range90d: '90D',
     themeSystem: 'System', themeLight: 'Light', themeDark: 'Dark',
     refresh: 'Refresh',
-    pricing: 'Pricing', embedWidgets: 'Embed',
+    pricing: 'Model Pricing', embedWidgets: 'Embed',
   },
   zh: {
     estimatedCost: '预估费用', totalTokens: '总 Token',
@@ -60,7 +60,7 @@ export const I18N = {
     range7d: '7 天', range30d: '30 天', range90d: '90 天',
     themeSystem: '系统', themeLight: '日间', themeDark: '夜间',
     refresh: '刷新',
-    pricing: '定价说明', embedWidgets: '嵌入组件',
+    pricing: '模型定价', embedWidgets: '嵌入组件',
   },
 } as const;
 
