@@ -306,10 +306,8 @@ export function App() {
       <header className="fade-up relative z-20 py-6 sm:py-8">
         <div className="flex items-center justify-between">
           <h1 className="flex items-center gap-2 text-[22px] font-semibold tracking-tight text-slate-900 dark:text-slate-300">
-            <svg viewBox="0 0 200 160" fill="none" className="h-7 w-7" aria-hidden="true">
-              <path d="M22 112 C30 112 38 90 44 82 C50 74 54 78 58 88 C62 98 64 116 70 120 C76 124 80 108 86 84 C92 60 96 22 104 16 C112 10 116 36 120 64 C124 92 126 138 134 140 C142 142 146 108 152 72 C158 36 162 14 168 16 C174 18 178 50 182 68" stroke="currentColor" strokeWidth="20" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-            AI Usage
+            <img src="/avatar.png" alt="Joe" className="h-7 w-7 rounded-full" />
+            Joe's AI Usage
           </h1>
           <div className="flex items-center gap-1.5 sm:gap-2">
             <ThemeToggle value={theme} onChange={setTheme} locale={locale} />
@@ -608,10 +606,8 @@ export function App() {
         <div className="flex flex-col items-center gap-4">
           <div className="flex items-center gap-3 text-[12px] text-slate-400 dark:text-slate-500">
             <span className="flex items-center gap-1.5 font-medium text-slate-500 dark:text-slate-400">
-              <svg viewBox="0 0 200 160" fill="none" className="h-3.5 w-3.5" aria-hidden="true">
-                <path d="M22 112 C30 112 38 90 44 82 C50 74 54 78 58 88 C62 98 64 116 70 120 C76 124 80 108 86 84 C92 60 96 22 104 16 C112 10 116 36 120 64 C124 92 126 138 134 140 C142 142 146 108 152 72 C158 36 162 14 168 16 C174 18 178 50 182 68" stroke="currentColor" strokeWidth="20" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-              AI Usage
+              <img src="/avatar.png" alt="Joe" className="h-3.5 w-3.5 rounded-full" />
+              Joe's AI Usage
             </span>
             {health?.version && (
               <span className="rounded-full bg-slate-100 dark:bg-[#1a1a1a] px-2 py-0.5 text-[10px] font-medium text-slate-400 dark:text-slate-500">
