@@ -1,8 +1,8 @@
 import type { Env } from '../types.js';
 
-export function handleEmbedDocs(request: Request, _env: Env): Response {
+export function handleEmbedDocs(request: Request, env: Env): Response {
   const origin = new URL(request.url).origin;
-  return new Response(renderEmbedDocsPage(origin), {
+  return new Response(renderEmbedDocsPage(origin, env.SITE_TITLE || 'AI Usage'), {
     headers: {
       'Content-Type': 'text/html; charset=utf-8',
       'Cache-Control': 'no-store',
@@ -141,7 +141,7 @@ function renderWidgetCard(w: WidgetDef, origin: string): string {
 
 /* ── page rendering ── */
 
-function renderEmbedDocsPage(origin: string): string {
+function renderEmbedDocsPage(origin: string, siteTitle: string): string {
   const widgetCards = widgets.map((w) => renderWidgetCard(w, origin)).join('');
 
   return `<!DOCTYPE html>
@@ -149,7 +149,7 @@ function renderEmbedDocsPage(origin: string): string {
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>AI Usage - Embed Widgets</title>
+  <title>${escapeHtml(siteTitle)} - Embed Widgets</title>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg"/>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
@@ -167,8 +167,8 @@ function renderEmbedDocsPage(origin: string): string {
     }
 
     html.dark {
-      background: #0b0f1a;
-      color: #e2e8f0;
+      background: #0a0a0a;
+      color: #a1a1a1;
     }
 
     /* ── variables ── */
@@ -182,12 +182,12 @@ function renderEmbedDocsPage(origin: string): string {
       --row-border: rgba(226,232,240,0.5);
     }
     html.dark {
-      --bg: #0b0f1a;
-      --text: #e2e8f0;
+      --bg: #0a0a0a;
+      --text: #a1a1a1;
       --muted: #64748b;
-      --card-bg: #141929;
-      --card-border: rgba(51,65,85,0.5);
-      --row-border: rgba(51,65,85,0.4);
+      --card-bg: #111111;
+      --card-border: rgba(255,255,255,0.08);
+      --row-border: rgba(255,255,255,0.06);
     }
 
     body {
@@ -216,7 +216,7 @@ function renderEmbedDocsPage(origin: string): string {
       border-bottom: 1px solid var(--card-border);
     }
     html.dark .header {
-      background: rgba(11,15,26,0.85);
+      background: rgba(10,10,10,0.85);
     }
     .header-inner {
       display: flex;
@@ -541,7 +541,7 @@ function renderEmbedDocsPage(origin: string): string {
           <svg class="logo-icon" viewBox="0 0 200 160" fill="none" width="32" height="26">
             <path d="M22 112 C30 112 38 90 44 82 C50 74 54 78 58 88 C62 98 64 116 70 120 C76 124 80 108 86 84 C92 60 96 22 104 16 C112 10 116 36 120 64 C124 92 126 138 134 140 C142 142 146 108 152 72 C158 36 162 14 168 16 C174 18 178 50 182 68" stroke="currentColor" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
-          <div class="logo-text">AI Usage<span>/ Embed Widgets</span></div>
+          <div class="logo-text">${escapeHtml(siteTitle)}<span>/ Embed Widgets</span></div>
         </a>
       </div>
       <div class="header-right">
@@ -684,7 +684,7 @@ window.addEventListener('message', function(e) {
   </main>
 
   <footer class="footer">
-    <div class="container">AI Usage &middot; Embed Widgets Documentation</div>
+    <div class="container">${escapeHtml(siteTitle)} &middot; Embed Widgets Documentation</div>
   </footer>
 
   <script>
