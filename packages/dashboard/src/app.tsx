@@ -306,8 +306,10 @@ export function App() {
       <header className="fade-up relative z-20 py-6 sm:py-8">
         <div className="flex items-center justify-between">
           <h1 className="flex items-center gap-2 text-[22px] font-semibold tracking-tight text-slate-900 dark:text-slate-300">
-            <img src="/avatar.png" alt="Joe" className="h-7 w-7 rounded-full" />
-            Joe's AI Usage
+            <a href="https://hubeiqiao.com" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 transition-opacity hover:opacity-70">
+              <img src="/avatar.png" alt="Joe" className="h-7 w-7 rounded-full" />
+              Joe's AI Usage
+            </a>
           </h1>
           <div className="flex items-center gap-1.5 sm:gap-2">
             <ThemeToggle value={theme} onChange={setTheme} locale={locale} />
@@ -605,10 +607,10 @@ export function App() {
       <footer className="fade-up mt-16 border-t border-slate-100 dark:border-white/[0.08] pb-10 pt-8">
         <div className="flex flex-col items-center gap-4">
           <div className="flex items-center gap-3 text-[12px] text-slate-400 dark:text-slate-500">
-            <span className="flex items-center gap-1.5 font-medium text-slate-500 dark:text-slate-400">
+            <a href="https://hubeiqiao.com" target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 font-medium text-slate-500 transition-opacity hover:opacity-70 dark:text-slate-400">
               <img src="/avatar.png" alt="Joe" className="h-3.5 w-3.5 rounded-full" />
               Joe's AI Usage
-            </span>
+            </a>
             {health?.version && (
               <span className="rounded-full bg-slate-100 dark:bg-[#1a1a1a] px-2 py-0.5 text-[10px] font-medium text-slate-400 dark:text-slate-500">
                 v{health.version}
