@@ -106,7 +106,7 @@ function ParallaxLogo({ size }: { size: number }) {
       ref={containerRef}
       onMouseMove={onMove}
       onMouseLeave={onLeave}
-      className="group relative shrink-0 cursor-pointer overflow-hidden rounded-full border-2 border-white/50 shadow-md dark:border-[rgba(36,43,53,0.6)]"
+      className="group relative shrink-0 cursor-pointer overflow-hidden rounded-full border border-black/[0.08] shadow-md dark:border-white/[0.12]"
       style={{ width: size, height: size }}
     >
       <div

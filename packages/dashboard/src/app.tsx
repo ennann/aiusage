@@ -330,12 +330,12 @@ export function App() {
 
       {/* ── Header ── */}
       <header className="fade-up relative z-20 py-6 sm:py-8">
-        <div className="flex items-center justify-between">
-          <h1 className="flex items-center gap-2 text-[22px] font-semibold tracking-tight text-slate-900 dark:text-slate-300">
+        <div className="flex flex-wrap items-center justify-between gap-y-2">
+          <h1 className="flex items-center gap-2 text-[18px] sm:text-[22px] font-semibold tracking-tight text-slate-900 dark:text-slate-300">
             <HeaderLogo />
             {siteTitle}
           </h1>
-          <div className="flex items-center gap-1.5 sm:gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 ml-auto">
             <ThemeToggle value={theme} onChange={setTheme} locale={locale} />
             <LangToggle value={locale} onChange={setLocale} />
             <button
