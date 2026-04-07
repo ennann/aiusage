@@ -5,7 +5,7 @@ import { I18N, getStoredLocale } from '../i18n';
 import type { ThemeMode } from '../theme';
 import { getStoredTheme, applyTheme } from '../theme';
 import type { HealthPayload } from '../hooks/use-overview';
-import { HeaderLogo, FooterLogo } from './site-logo';
+import { HeaderLogo, FooterLogo, useFaviconFromLogo } from './site-logo';
 
 // ────────────────────────────────────────
 // Context
@@ -148,6 +148,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   }, []);
   const t: T = I18N[locale];
 
+  useFaviconFromLogo();
   const siteTitle = health?.siteTitle || 'AI Usage';
   const isDark = document.documentElement.classList.contains('dark');
 

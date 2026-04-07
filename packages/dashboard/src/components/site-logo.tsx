@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 const DEFAULT_ICON = (
   <svg viewBox="0 0 200 160" fill="none" className="h-full w-full" aria-hidden="true">
@@ -14,8 +14,7 @@ const DEFAULT_ICON = (
 
 // ── Logo detection (cached per session) ──
 
-type LogoMode = 'parallax' | 'single' | 'none';
-let cachedMode: LogoMode | null = null;
+let cachedHasLogo: boolean | null = null;
 
 function probeImage(src: string): Promise<boolean> {
   return new Promise((resolve) => {
@@ -26,40 +25,80 @@ function probeImage(src: string): Promise<boolean> {
   });
 }
 
-function useLogoMode(): LogoMode | null {
-  const [mode, setMode] = useState<LogoMode | null>(cachedMode);
+function useHasLogo(): boolean | null {
+  const [has, setHas] = useState<boolean | null>(cachedHasLogo);
   useEffect(() => {
-    if (cachedMode !== null) return;
-    (async () => {
-      const [hasPerson, hasBg, hasSingle] = await Promise.all([
-        probeImage('/logo-person.png'),
-        probeImage('/logo-bg.png'),
-        probeImage('/logo.png'),
-      ]);
-      const m: LogoMode = hasPerson && hasBg ? 'parallax' : hasSingle ? 'single' : 'none';
-      cachedMode = m;
-      setMode(m);
-    })();
+    if (cachedHasLogo !== null) return;
+    probeImage('/logo.png').then((ok) => {
+      cachedHasLogo = ok;
+      setHas(ok);
+    });
   }, []);
-  return mode;
+  return has;
+}
+
+// ── Dynamic favicon from logo.png (circular crop) ──
+
+let faviconApplied = false;
+
+export function useFaviconFromLogo() {
+  const hasLogo = useHasLogo();
+
+  useEffect(() => {
+    if (faviconApplied || !hasLogo) return;
+    faviconApplied = true;
+
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const size = 64;
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d')!;
+
+      // Clip to circle
+      ctx.beginPath();
+      ctx.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2);
+      ctx.closePath();
+      ctx.clip();
+
+      // Draw image (cover fit)
+      const scale = Math.max(size / img.naturalWidth, size / img.naturalHeight);
+      const w = img.naturalWidth * scale;
+      const h = img.naturalHeight * scale;
+      ctx.drawImage(img, (size - w) / 2, (size - h) / 2, w, h);
+
+      const dataUrl = canvas.toDataURL('image/png');
+
+      // Replace existing favicon link
+      let link = document.querySelector<HTMLLinkElement>("link[rel='icon']");
+      if (!link) {
+        link = document.createElement('link');
+        link.rel = 'icon';
+        document.head.appendChild(link);
+      }
+      link.type = 'image/png';
+      link.href = dataUrl;
+    };
+    img.src = '/logo.png';
+  }, [hasLogo]);
 }
 
 // ── Public components ──
 
 /** Header logo (28px round). */
 export function HeaderLogo() {
-  const mode = useLogoMode();
-  if (mode === null || mode === 'none') return <span className="h-7 w-7">{DEFAULT_ICON}</span>;
-  if (mode === 'single') return <SimpleLogo size={28} />;
-  return <ParallaxLogo size={28} />;
+  const hasLogo = useHasLogo();
+  if (hasLogo === null || !hasLogo) return <span className="h-7 w-7">{DEFAULT_ICON}</span>;
+  return <SimpleLogo size={28} />;
 }
 
 /** Footer logo (14px round). */
 export function FooterLogo() {
-  const mode = useLogoMode();
-  if (mode === null || mode === 'none') return <span className="h-3.5 w-3.5">{DEFAULT_ICON}</span>;
-  if (mode === 'single') return <SimpleLogo size={14} />;
-  return <ParallaxLogo size={14} />;
+  const hasLogo = useHasLogo();
+  if (hasLogo === null || !hasLogo) return <span className="h-3.5 w-3.5">{DEFAULT_ICON}</span>;
+  return <SimpleLogo size={14} />;
 }
 
 // ── Simple circular logo (single image) ──
@@ -72,56 +111,5 @@ function SimpleLogo({ size }: { size: number }) {
       className="shrink-0 rounded-full object-cover"
       style={{ width: size, height: size }}
     />
-  );
-}
-
-// ── Parallax logo (bg + person layer, with mouse tracking) ──
-
-function ParallaxLogo({ size }: { size: number }) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const personRef = useRef<HTMLDivElement>(null);
-  const isLarge = size > 20;
-  const offsetY = isLarge ? 4 : 1;
-  const intensity = isLarge ? 5 : 2;
-
-  const onMove = useCallback((e: React.MouseEvent) => {
-    const el = containerRef.current;
-    const person = personRef.current;
-    if (!el || !person) return;
-    const rect = el.getBoundingClientRect();
-    const cx = rect.width / 2;
-    const cy = rect.height / 2;
-    const mx = (e.clientX - rect.left - cx) / cx;
-    const my = (e.clientY - rect.top - cy) / cy;
-    person.style.transform = `scale(0.82) translate(${-mx * intensity}px, ${-my * intensity + offsetY}px)`;
-  }, [intensity, offsetY]);
-
-  const onLeave = useCallback(() => {
-    const person = personRef.current;
-    if (person) person.style.transform = `scale(0.82) translate(0, ${offsetY}px)`;
-  }, [offsetY]);
-
-  return (
-    <div
-      ref={containerRef}
-      onMouseMove={onMove}
-      onMouseLeave={onLeave}
-      className="group relative shrink-0 cursor-pointer overflow-hidden rounded-full border border-black/[0.08] shadow-md dark:border-white/[0.12]"
-      style={{ width: size, height: size }}
-    >
-      <div
-        className="absolute inset-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-105"
-        style={{ backgroundImage: "url('/logo-bg.png')" }}
-      />
-      <div
-        ref={personRef}
-        className="absolute inset-0 bg-cover bg-center transition-transform duration-300 ease-out origin-bottom"
-        style={{
-          backgroundImage: "url('/logo-person.png')",
-          transform: `scale(0.82) translate(0, ${offsetY}px)`,
-        }}
-      />
-      <div className="absolute inset-0 rounded-full shadow-[inset_0_0_10px_rgba(0,0,0,0.15)] pointer-events-none" />
-    </div>
   );
 }

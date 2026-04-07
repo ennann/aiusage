@@ -22,7 +22,7 @@ import { FlowChart } from './components/flow-chart';
 import { DonutSection } from './components/donut-section';
 import { ActivityHeatmap } from './components/activity-heatmap';
 import { buildActivityHeatmapData } from './utils/activity-heatmap-data';
-import { HeaderLogo, FooterLogo } from './components/site-logo';
+import { HeaderLogo, FooterLogo, useFaviconFromLogo } from './components/site-logo';
 
 // ────────────────────────────────────────
 // Constants
@@ -266,6 +266,7 @@ export function App() {
   } = useOverview(filters);
   useFetchCnyRate();
   useCurrencyStore(); // subscribe to re-render on toggle
+  useFaviconFromLogo();
   const isDark = useIsDark();
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 640);
   useEffect(() => {
