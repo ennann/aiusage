@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { createInterface } from 'node:readline';
 import type { IngestBreakdown } from '@aiusage/shared';
-import { normalizeModelName, runWithConcurrency } from './utils.js';
+import { normalizeModelName, runWithConcurrency, type ProjectFields } from './utils.js';
 
 const FILE_CONCURRENCY = 16;
 const MAX_LINE_BYTES = 64 * 1024 * 1024; // 64 MB
@@ -91,8 +91,8 @@ export async function scanClaudeDates(
   // Track distinct sessions per "date|model|project" group
   const sessionSets = new Map<string, Set<string>>();
 
-  // 收集所有 { filePath, project } 对
-  const fileJobs: { filePath: string; project: string }[] = [];
+  // 收集所有 { filePath, projectFields } 对
+  const fileJobs: { filePath: string; projectFields: ProjectFields }[] = [];
 
   for (const baseDir of baseDirs) {
     let projectDirs: string[];
@@ -104,7 +104,7 @@ export async function scanClaudeDates(
 
     for (const projDir of projectDirs) {
       const projectPath = join(baseDir, projDir);
-      const project = resolveProject(projectPath, projectAliases);
+      const fields = resolveProject(projectPath, projectAliases);
 
       const jsonlFiles: string[] = [];
       try {
@@ -114,15 +114,16 @@ export async function scanClaudeDates(
       }
 
       for (const filePath of jsonlFiles) {
-        fileJobs.push({ filePath, project });
+        fileJobs.push({ filePath, projectFields: fields });
       }
     }
   }
 
   // 并发流式处理文件，直接聚合到 groupedByDate
   await runWithConcurrency(fileJobs, FILE_CONCURRENCY, async (job) => {
-    await processJsonlFile(job.filePath, job.project, targetDateSet, projectAliases, groupedByDate, processedHashes, sessionSets);
+    await processJsonlFile(job.filePath, job.projectFields, targetDateSet, projectAliases, groupedByDate, processedHashes, sessionSets);
   });
+
 
   // For dates that have no JSONL data, fall back to stats-cache.json.
   // This covers the period before Claude Code's JSONL rotation window.
@@ -156,7 +157,7 @@ export async function scanClaudeDates(
 /** 流式逐行读取单个 JSONL 文件，避免全量加载到内存 */
 async function processJsonlFile(
   filePath: string,
-  fallbackProject: string,
+  fallbackFields: ProjectFields,
   targetDateSet: Set<string>,
   projectAliases: Record<string, string> | undefined,
   groupedByDate: Map<string, Map<string, IngestBreakdown>>,
@@ -218,7 +219,7 @@ async function processJsonlFile(
       const usage = message.usage;
       let model = normalizeModelName(rawModel);
       if (usage.speed === 'fast') model = `${model}-fast`;
-      const recordProject = record.cwd ? resolveProject(record.cwd, projectAliases) : fallbackProject;
+      const recordFields = record.cwd ? resolveProject(record.cwd, projectAliases) : fallbackFields;
       const sessionId = record.sessionId ?? fallbackSessionId;
       const costUSD = record.costUSD ?? 0;
 
@@ -234,7 +235,7 @@ async function processJsonlFile(
       if (!grouped) continue;
 
       const cacheWriteTokens = cache5m + cache1h;
-      const key = `${model}|${recordProject}`;
+      const key = `${model}|${recordFields.project}`;
 
       // Track distinct sessions per group
       const sessionSetKey = `${usageDate}|${key}`;
@@ -257,7 +258,9 @@ async function processJsonlFile(
           product: 'claude-code',
           channel: 'cli',
           model,
-          project: recordProject,
+          project: recordFields.project,
+          projectDisplay: recordFields.projectDisplay,
+          projectAlias: recordFields.projectAlias,
           eventCount: 1,
           inputTokens: usage.input_tokens ?? 0,
           cachedInputTokens: usage.cache_read_input_tokens ?? 0,
@@ -367,9 +370,10 @@ function extractProjectFromCwd(cwd: string): string {
   return parts[parts.length - 1] || 'unknown';
 }
 
-function resolveProject(rawPath: string, aliases?: Record<string, string>): string {
+function resolveProject(rawPath: string, aliases?: Record<string, string>): ProjectFields {
   const project = extractProjectFromCwd(rawPath);
-  return aliases?.[rawPath] ?? aliases?.[project] ?? project;
+  const alias = aliases?.[rawPath] ?? aliases?.[project];
+  return { project: rawPath, projectDisplay: project, projectAlias: alias };
 }
 
 async function walkForJsonl(dir: string, result: string[]): Promise<void> {

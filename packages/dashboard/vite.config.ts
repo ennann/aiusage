@@ -14,14 +14,6 @@ export default defineConfig({
         target: 'https://aiusage.yizhe.me',
         changeOrigin: true,
       },
-      '/pricing': {
-        target: 'https://aiusage.yizhe.me',
-        changeOrigin: true,
-      },
-      '/embed/docs': {
-        target: 'https://aiusage.yizhe.me',
-        changeOrigin: true,
-      },
     },
   },
 });

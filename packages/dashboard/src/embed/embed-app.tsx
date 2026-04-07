@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useRef, useMemo } from 'react';
 import { parseEmbedParams } from './parse-params';
 import type { EmbedTheme } from './types';
 import type { ThemeMode } from '../theme';
@@ -20,6 +20,36 @@ import { DonutSection } from '../components/donut-section';
 import {
   ChartBoundary, SectionHeader, ChartLegend, EmptyState, Skeleton,
 } from '../components/chart-helpers';
+
+/* ── Auto-resize: notify parent iframe of height changes ── */
+
+function useAutoResize(widget: string | null) {
+  const lastHeight = useRef(0);
+
+  useEffect(() => {
+    if (!widget || window.parent === window) return;
+
+    const root = document.querySelector('.embed-root') as HTMLElement | null;
+    if (!root) return;
+
+    const notify = () => {
+      const h = Math.ceil(root.scrollHeight);
+      if (h === lastHeight.current) return;
+      lastHeight.current = h;
+      window.parent.postMessage(
+        { source: 'aiusage-embed', widget, height: h },
+        '*',
+      );
+    };
+
+    const ro = new ResizeObserver(notify);
+    ro.observe(root);
+    // Fire once after first paint
+    notify();
+
+    return () => ro.disconnect();
+  }, [widget]);
+}
 
 /* ── Helpers ── */
 
@@ -261,6 +291,9 @@ export function EmbedApp() {
   const params = useMemo(() => parseEmbedParams(window.location.search), []);
   const locale = params.locale;
   const t = I18N[locale] as T;
+
+  // Auto-resize: post height to parent on every content change
+  useAutoResize(params.widget);
 
   // Apply theme
   useEffect(() => {

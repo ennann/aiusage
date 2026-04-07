@@ -25,9 +25,9 @@ describe('scanGeminiDates', () => {
     const baseDir = join(tmpDir, '.gemini', 'tmp');
 
     await writeJson(join(baseDir, 'project-a', 'logs.json'), [
-      { type: 'user', timestamp: '2025-06-30T21:38:58.048Z' },
-      { type: 'user', timestamp: '2025-07-15T18:07:20.242Z' },
-      { type: 'user', timestamp: '2025-09-17T20:40:13.941Z' },
+      { type: 'user', timestamp: '2025-06-30T12:38:58.048Z' },
+      { type: 'user', timestamp: '2025-07-15T12:07:20.242Z' },
+      { type: 'user', timestamp: '2025-09-17T12:40:13.941Z' },
     ]);
 
     await writeJson(join(baseDir, 'project-a', 'session.json'), {
@@ -35,7 +35,7 @@ describe('scanGeminiDates', () => {
         model: 'gemini-2.5-pro',
         messages: [
           {
-            timestamp: '2025-09-17T20:40:13.941Z',
+            timestamp: '2025-09-17T12:40:13.941Z',
             usageMetadata: {
               promptTokenCount: 100,
               candidatesTokenCount: 50,

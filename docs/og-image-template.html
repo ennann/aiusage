@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1200" />
+<title>AIUsage — OG Image</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet" />
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    width: 1200px;
+    height: 630px;
+    overflow: hidden;
+    font-family: 'DM Sans', system-ui, sans-serif;
+    background: #0a0a0f;
+    color: #fff;
+  }
+  .card {
+    width: 1200px;
+    height: 630px;
+    position: relative;
+    display: flex;
+    overflow: hidden;
+  }
+
+  /* Left content area */
+  .left {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 64px 0 64px 80px;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* Right avatar area */
+  .right {
+    width: 340px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    z-index: 1;
+  }
+  .avatar-wrapper {
+    position: relative;
+  }
+  .avatar-glow {
+    position: absolute;
+    inset: -30px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(99,102,241,0.35), transparent 70%);
+    filter: blur(30px);
+  }
+  .avatar {
+    width: 260px;
+    height: 260px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 3px solid rgba(255,255,255,0.15);
+    position: relative;
+    z-index: 1;
+    background: #1a1a2e;
+  }
+
+  /* Gradient mesh background */
+  .bg-glow {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(120px);
+    pointer-events: none;
+  }
+  .glow-1 {
+    width: 600px; height: 600px;
+    top: -220px; right: -60px;
+    background: radial-gradient(circle, #6366f1, transparent 70%);
+    opacity: 0.4;
+  }
+  .glow-2 {
+    width: 500px; height: 500px;
+    bottom: -200px; left: -100px;
+    background: radial-gradient(circle, #f59e0b, transparent 70%);
+    opacity: 0.25;
+  }
+  .glow-3 {
+    width: 350px; height: 350px;
+    top: 60%; left: 40%;
+    background: radial-gradient(circle, #06b6d4, transparent 70%);
+    opacity: 0.18;
+  }
+
+  /* Grid pattern */
+  .grid-overlay {
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+  }
+
+  /* Identity row */
+  .identity {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 28px;
+  }
+  .name-tag {
+    font-size: 18px;
+    font-weight: 600;
+    color: rgba(255,255,255,0.5);
+    letter-spacing: 0.5px;
+  }
+  .separator {
+    width: 1px;
+    height: 18px;
+    background: rgba(255,255,255,0.2);
+  }
+  .personal-label {
+    font-size: 15px;
+    font-weight: 500;
+    color: rgba(255,255,255,0.35);
+    letter-spacing: 0.3px;
+  }
+
+  h1 {
+    font-size: 60px;
+    font-weight: 700;
+    line-height: 1.08;
+    letter-spacing: -2.5px;
+    margin-bottom: 18px;
+    background: linear-gradient(135deg, #fff 0%, rgba(255,255,255,0.65) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .subtitle {
+    font-size: 22px;
+    font-weight: 400;
+    color: rgba(255,255,255,0.5);
+    line-height: 1.5;
+    max-width: 680px;
+    margin-bottom: 36px;
+  }
+
+  .tools {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .tool-badge {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 7px 16px;
+    border-radius: 999px;
+    font-size: 14px;
+    font-weight: 600;
+    border: 1px solid rgba(255,255,255,0.1);
+    background: rgba(255,255,255,0.06);
+    color: rgba(255,255,255,0.75);
+    backdrop-filter: blur(8px);
+  }
+  .tool-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  /* Bottom bar */
+  .bottom-bar {
+    position: absolute;
+    bottom: 36px;
+    left: 80px;
+    right: 80px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    z-index: 1;
+  }
+  .url {
+    font-size: 17px;
+    font-weight: 500;
+    color: rgba(255,255,255,0.3);
+    letter-spacing: 0.3px;
+  }
+  .badge-row {
+    display: flex;
+    gap: 10px;
+  }
+  .badge {
+    padding: 5px 12px;
+    border-radius: 7px;
+    font-size: 12px;
+    font-weight: 600;
+    color: rgba(255,255,255,0.5);
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.07);
+  }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="bg-glow glow-1"></div>
+  <div class="bg-glow glow-2"></div>
+  <div class="bg-glow glow-3"></div>
+  <div class="grid-overlay"></div>
+
+  <div class="left">
+    <div class="identity">
+      <!-- TODO: Replace with your name -->
+      <span class="name-tag">Your Name</span>
+      <span class="separator"></span>
+      <span class="personal-label">Personal AI Dashboard</span>
+    </div>
+
+    <h1>My AI Usage Analytics</h1>
+
+    <p class="subtitle">
+      Token costs, model breakdowns &amp; trends across
+      all my AI coding tools — self-hosted on Cloudflare.
+    </p>
+
+    <div class="tools">
+      <div class="tool-badge"><span class="tool-dot" style="background:#D97757"></span>Claude Code</div>
+      <div class="tool-badge"><span class="tool-dot" style="background:#6BA539"></span>Codex CLI</div>
+      <div class="tool-badge"><span class="tool-dot" style="background:#fff"></span>Copilot CLI</div>
+      <div class="tool-badge"><span class="tool-dot" style="background:#8E75B2"></span>Gemini CLI</div>
+      <div class="tool-badge"><span class="tool-dot" style="background:#2C3E50"></span>Antigravity</div>
+    </div>
+  </div>
+
+  <div class="right">
+    <div class="avatar-wrapper">
+      <div class="avatar-glow"></div>
+      <!-- TODO: Replace with your avatar image -->
+      <img class="avatar" src="avatar.png" alt="Avatar" />
+    </div>
+  </div>
+
+  <div class="bottom-bar">
+    <!-- TODO: Replace with your domain -->
+    <span class="url">your-domain.com</span>
+    <div class="badge-row">
+      <span class="badge">Open Source</span>
+      <span class="badge">Cloudflare Workers</span>
+    </div>
+  </div>
+</div>
+</body>
+</html>

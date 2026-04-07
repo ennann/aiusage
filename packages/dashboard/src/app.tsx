@@ -1,8 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { RotateCw, Github, Heart, Sun, Moon, Monitor } from 'lucide-react';
-import { useScrollMorph } from './hooks/use-scroll-morph';
-import { usePinchTextZoom } from './hooks/use-pinch-text-zoom';
-import { ZoomIndicator } from './components/zoom-indicator';
 import type { Locale, T } from './i18n';
 import { I18N, getStoredLocale } from './i18n';
 import type { ThemeMode } from './theme';
@@ -25,6 +22,8 @@ import { FlowChart } from './components/flow-chart';
 import { DonutSection } from './components/donut-section';
 import { ActivityHeatmap } from './components/activity-heatmap';
 import { buildActivityHeatmapData } from './utils/activity-heatmap-data';
+import { HeaderLogo, FooterLogo, useFaviconFromLogo } from './components/site-logo';
+import { SITE_TITLE } from './site-config';
 
 // ────────────────────────────────────────
 // Constants
@@ -139,11 +138,13 @@ function FilterTabs({
   options,
   onChange,
   allLabel = 'All',
+  tooltips,
 }: {
   value: string;
   options: FacetOption[];
   onChange: (v: string) => void;
   allLabel?: string;
+  tooltips?: Record<string, string>;
 }) {
   if (!options.length) return null;
   const activeClass = 'bg-white text-slate-900 shadow-sm dark:bg-[#222222] dark:text-slate-300';
@@ -158,17 +159,26 @@ function FilterTabs({
       >
         {allLabel}
       </button>
-      {options.map((o) => (
-        <button
-          key={o.value}
-          onClick={() => onChange(o.value === value ? '' : o.value)}
-          className={`shrink-0 rounded-md px-2.5 py-1.5 text-[12px] font-medium whitespace-nowrap transition-all duration-150 ${
-            value === o.value ? activeClass : inactiveClass
-          }`}
-        >
-          {formatProductLabel(o.label)}
-        </button>
-      ))}
+      {options.map((o) => {
+        const tip = tooltips?.[o.value];
+        return (
+          <span key={o.value} className={tip ? 'group relative' : ''}>
+            <button
+              onClick={() => onChange(o.value === value ? '' : o.value)}
+              className={`shrink-0 rounded-md px-2.5 py-1.5 text-[12px] font-medium whitespace-nowrap transition-all duration-150 ${
+                value === o.value ? activeClass : inactiveClass
+              }`}
+            >
+              {formatProductLabel(o.label)}
+            </button>
+            {tip && (
+              <span className="pointer-events-none absolute left-1/2 top-full z-50 mt-2 w-64 -translate-x-1/2 rounded-lg bg-slate-800 px-3 py-2 text-[11px] leading-relaxed text-slate-200 opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 dark:bg-slate-700">
+                {tip}
+              </span>
+            )}
+          </span>
+        );
+      })}
     </div>
   );
 }
@@ -179,12 +189,14 @@ function FilterChips({
   options,
   onChange,
   allLabel = 'All',
+  tooltips,
 }: {
   label: string;
   value: string;
   options: FacetOption[];
   onChange: (v: string) => void;
   allLabel?: string;
+  tooltips?: Record<string, string>;
 }) {
   if (!options.length) return null;
   const active = 'bg-slate-900 text-white dark:bg-slate-200 dark:text-slate-900';
@@ -205,17 +217,26 @@ function FilterChips({
                 {allLabel}
               </button>
             )}
-            {options.map((o) => (
-              <button
-                key={o.value}
-                onClick={() => onChange(o.value === value ? '' : o.value)}
-                className={`shrink-0 rounded-full px-3 py-1 text-[12px] font-medium whitespace-nowrap transition-all duration-150 ${
-                  value === o.value ? active : inactive
-                }`}
-              >
-                {formatProductLabel(o.label)}
-              </button>
-            ))}
+            {options.map((o) => {
+              const tip = tooltips?.[o.value];
+              return (
+                <span key={o.value} className={tip ? 'group relative' : ''}>
+                  <button
+                    onClick={() => onChange(o.value === value ? '' : o.value)}
+                    className={`shrink-0 rounded-full px-3 py-1 text-[12px] font-medium whitespace-nowrap transition-all duration-150 ${
+                      value === o.value ? active : inactive
+                    }`}
+                  >
+                    {formatProductLabel(o.label)}
+                  </button>
+                  {tip && (
+                    <span className="pointer-events-none absolute left-1/2 top-full z-50 mt-2 w-64 -translate-x-1/2 rounded-lg bg-slate-800 px-3 py-2 text-[11px] leading-relaxed text-slate-200 opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 dark:bg-slate-700">
+                      {tip}
+                    </span>
+                  )}
+                </span>
+              );
+            })}
           </div>
         </div>
         <div className="pointer-events-none absolute inset-y-0 right-0 w-6 bg-gradient-to-l from-[#fafafa] dark:from-[#0a0a0a]" />
@@ -246,15 +267,16 @@ export function App() {
   } = useOverview(filters);
   useFetchCnyRate();
   useCurrencyStore(); // subscribe to re-render on toggle
+  useFaviconFromLogo();
   const isDark = useIsDark();
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 640);
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 639px)');
+    const h = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mq.addEventListener('change', h);
+    return () => mq.removeEventListener('change', h);
+  }, []);
 
-  // Immersive reading
-  const { containerRef: morphRef } = useScrollMorph();
-  const { containerRef: zoomRef, zoomLevel, isGesturing, gesturePosition } = usePinchTextZoom();
-  const mainRef = useCallback((node: HTMLElement | null) => {
-    (morphRef as React.MutableRefObject<HTMLElement | null>).current = node;
-    (zoomRef as React.MutableRefObject<HTMLElement | null>).current = node;
-  }, [morphRef, zoomRef]);
 
   // Theme
   const [theme, setThemeState] = useState<ThemeMode>(getStoredTheme);
@@ -276,6 +298,10 @@ export function App() {
     try { localStorage.setItem('aiusage-locale', l); } catch {}
   }, []);
   const t: T = I18N[locale];
+  // Sync document title
+  useEffect(() => {
+    document.title = SITE_TITLE;
+  }, []);
 
   // Token legend (locale-aware)
   const tokenLegendLabels: Record<string, keyof T> = {
@@ -300,18 +326,18 @@ export function App() {
   }), [overview, unavailable]);
 
   return (
-    <main ref={mainRef} className="prose-immersive mx-auto w-full max-w-[1200px] px-4 pb-16 sm:px-6 lg:px-8">
+    <main className="mx-auto w-full max-w-[1200px] px-4 pb-16 sm:px-6 lg:px-8">
 
       {/* ── Header ── */}
       <header className="fade-up relative z-20 py-6 sm:py-8">
-        <div className="flex items-center justify-between">
-          <h1 className="flex items-center gap-2 text-[22px] font-semibold tracking-tight text-slate-900 dark:text-slate-300">
+        <div className="flex flex-wrap items-center justify-between gap-y-2">
+          <h1 className="flex items-center gap-2 text-[18px] sm:text-[22px] font-semibold tracking-tight text-slate-900 dark:text-slate-300">
             <a href="https://hubeiqiao.com" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 transition-opacity hover:opacity-70">
               <img src="/avatar.png" alt="Joe" className="h-7 w-7 rounded-full" />
               Joe's AI Usage
             </a>
           </h1>
-          <div className="flex items-center gap-1.5 sm:gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 ml-auto">
             <ThemeToggle value={theme} onChange={setTheme} locale={locale} />
             <LangToggle value={locale} onChange={setLocale} />
             <button
@@ -353,6 +379,7 @@ export function App() {
                 options={fOpts.products}
                 allLabel={t.all}
                 onChange={(v) => setFilters((f) => ({ ...f, product: v }))}
+                tooltips={{ 'claude-code': t.claudeCodeDataNotice }}
               />
             </>
           )}
@@ -380,16 +407,17 @@ export function App() {
           />
           {overview && fOpts.products.length > 1 && (
             <FilterChips
-              label={t.product ?? 'Product'}
+              label=""
               value={filters.product}
               options={fOpts.products}
               allLabel={t.all}
               onChange={(v) => setFilters((f) => ({ ...f, product: v }))}
+              tooltips={{ 'claude-code': t.claudeCodeDataNotice }}
             />
           )}
           {overview && fOpts.devices.length >= 1 && (
             <FilterChips
-              label={t.device ?? 'Device'}
+              label=""
               value={filters.deviceId}
               options={fOpts.devices}
               allLabel={t.all}
@@ -489,12 +517,6 @@ export function App() {
             </div>
           )}
 
-          {!unavailable && (filters.product === '' || filters.product === 'claude-code') && (
-            <div className="fade-up rounded-xl border border-blue-200/80 bg-blue-50/70 px-4 py-3 text-[13px] text-blue-900 dark:border-blue-900/60 dark:bg-blue-950/20 dark:text-blue-200">
-              {t.claudeCodeDataNotice}
-            </div>
-          )}
-
           {/* ── Activity Heatmap ── */}
           <div className="card fade-up p-6" style={{ animationDelay: '120ms' }}>
             <SectionHeader title={locale === 'zh' ? '年度活跃热力图' : 'Activity Heatmap'} />
@@ -578,7 +600,7 @@ export function App() {
                     <div className="my-5 border-t border-slate-100 dark:border-white/[0.08]" />
                     <DonutSection
                       title={t.modelShare}
-                      data={(overview?.modelCostShare ?? []).map((m) => ({ ...m, label: formatModelName(m.label) }))}
+                      data={(overview?.modelCostShare ?? []).map((m) => ({ ...m, label: formatModelName(m.label, isMobile) }))}
                       colors={getChartColors(isDark)}
                       centerLabel={formatUsd(overview?.totalCostUsd ?? 0)}
                     />
@@ -660,7 +682,6 @@ export function App() {
           </div>
         </div>
       </footer>
-      <ZoomIndicator zoomLevel={zoomLevel} isVisible={isGesturing} position={gesturePosition} />
     </main>
   );
 }

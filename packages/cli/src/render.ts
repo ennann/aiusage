@@ -123,8 +123,43 @@ function getRangeLabel(range: string, lang: Lang): string {
     case '1m': return s.rangeLast1m;
     case '3m': return s.rangeLast3m;
     case 'all': return s.rangeAll;
+    case 'today': return s.rangeToday;
     default: return range;
   }
+}
+
+/** 计算字符串在终端中的显示宽度（CJK 字符占 2 列） */
+function displayWidth(str: string): number {
+  let w = 0;
+  for (const ch of str) {
+    const code = ch.codePointAt(0)!;
+    // CJK Unified Ideographs, CJK Symbols, Fullwidth Forms, etc.
+    if (
+      (code >= 0x2E80 && code <= 0x9FFF) ||
+      (code >= 0xF900 && code <= 0xFAFF) ||
+      (code >= 0xFE30 && code <= 0xFE4F) ||
+      (code >= 0xFF01 && code <= 0xFF60) ||
+      (code >= 0xFFE0 && code <= 0xFFE6) ||
+      (code >= 0x20000 && code <= 0x2FA1F)
+    ) {
+      w += 2;
+    } else {
+      w += 1;
+    }
+  }
+  return w;
+}
+
+/** 按显示宽度右对齐 */
+function padStartDisplay(str: string, width: number): string {
+  const gap = width - displayWidth(str);
+  return gap > 0 ? ' '.repeat(gap) + str : str;
+}
+
+/** 按显示宽度左对齐 */
+function padEndDisplay(str: string, width: number): string {
+  const gap = width - displayWidth(str);
+  return gap > 0 ? str + ' '.repeat(gap) : str;
 }
 
 function renderTable(
@@ -135,7 +170,7 @@ function renderTable(
   if (rows.length === 0) return '(no data)';
 
   const widths = headers.map((h, i) =>
-    Math.max(h.length, ...rows.map((r) => (r[i] ?? '').length)),
+    Math.max(displayWidth(h), ...rows.map((r) => displayWidth(r[i] ?? ''))),
   );
 
   const fmtRow = (row: string[]) =>
@@ -143,8 +178,8 @@ function renderTable(
       .map((val, i) => {
         const cell = val ?? '';
         return aligns[i] === 'right'
-          ? cell.padStart(widths[i])
-          : cell.padEnd(widths[i]);
+          ? padStartDisplay(cell, widths[i])
+          : padEndDisplay(cell, widths[i]);
       })
       .join('  ');
 

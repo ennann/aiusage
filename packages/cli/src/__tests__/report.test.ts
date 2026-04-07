@@ -31,7 +31,7 @@ describe('buildLocalReport', () => {
     await writeFile(
       join(homeDir, '.gemini', 'tmp', 'project-a', 'logs.json'),
       JSON.stringify([
-        { type: 'user', timestamp: '2025-06-30T21:38:58.048Z' },
+        { type: 'user', timestamp: '2025-06-30T12:38:58.048Z' },
       ], null, 2),
     );
 
@@ -42,7 +42,7 @@ describe('buildLocalReport', () => {
           model: 'gemini-2.5-pro',
           messages: [
             {
-              timestamp: '2025-09-17T20:40:13.941Z',
+              timestamp: '2025-09-17T12:40:13.941Z',
               usageMetadata: {
                 promptTokenCount: 100,
                 candidatesTokenCount: 50,
@@ -68,7 +68,7 @@ describe('buildLocalReport', () => {
           {
             requestId: 'copilot-1',
             response: [{ value: 'Done' }],
-            timestamp: Date.parse('2025-10-22T01:45:42.785Z'),
+            timestamp: Date.parse('2025-10-22T12:45:42.785Z'),
             modelId: 'copilot/claude-sonnet-4.5',
           },
         ],
@@ -78,7 +78,7 @@ describe('buildLocalReport', () => {
     await mkdir(join(homeDir, '.gemini', 'antigravity', 'brain', 'session-a'), { recursive: true });
     await writeFile(
       join(homeDir, '.gemini', 'antigravity', 'brain', 'session-a', 'task.md.metadata.json'),
-      JSON.stringify({ updatedAt: '2025-12-10T20:36:31.732646Z' }, null, 2),
+      JSON.stringify({ updatedAt: '2025-12-10T12:36:31.732646Z' }, null, 2),
     );
 
     const { buildLocalReport } = await import('../report.js');
@@ -88,7 +88,7 @@ describe('buildLocalReport', () => {
     expect(report.daily.map((day) => day.usageDate)).toEqual([
       '2025-06-30',
       '2025-09-17',
-      '2025-10-21',
+      '2025-10-22',
       '2025-12-10',
     ]);
   });

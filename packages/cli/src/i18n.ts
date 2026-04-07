@@ -15,6 +15,7 @@ interface Strings {
   rangeLast1m: string;
   rangeLast3m: string;
   rangeAll: string;
+  rangeToday: string;
   hdrSource: string;
   hdrDate: string;
   hdrModel: string;
@@ -44,6 +45,7 @@ const en: Strings = {
   rangeLast1m: 'Last 30 days',
   rangeLast3m: 'Last 90 days',
   rangeAll: 'All time',
+  rangeToday: 'Today',
   hdrSource: 'Source',
   hdrDate: 'Date',
   hdrModel: 'Model',
@@ -73,6 +75,7 @@ const zh: Strings = {
   rangeLast1m: '最近 30 天',
   rangeLast3m: '最近 90 天',
   rangeAll: '全部历史',
+  rangeToday: '今天',
   hdrSource: '来源',
   hdrDate: '日期',
   hdrModel: '模型',

@@ -41,7 +41,7 @@ export function TokenTrendChart({ data, locale }: { data: OverviewPayload['token
             const color = getTokenColor(s, isDark);
             return (
               <Area
-                key={s.key} dataKey={s.key} type="monotone" stackId="tok"
+                key={s.key} dataKey={s.key} type="bump" stackId="tok"
                 fill={color} fillOpacity={0.85} stroke={color} strokeWidth={0.5}
               />
             );

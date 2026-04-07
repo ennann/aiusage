@@ -10,6 +10,8 @@ const TOTAL_TOKENS_SQL = `
   COALESCE(b.reasoning_output_tokens, 0)
 `;
 
+const PROJECT_DISPLAY_SQL = `COALESCE(b.project_alias, b.project_display)`;
+
 type FilterKey = 'deviceId' | 'provider' | 'product' | 'channel' | 'model' | 'project';
 
 interface DashboardFilters {
@@ -162,13 +164,13 @@ export async function handleOverview(url: URL, env: Env): Promise<Response> {
     env.DB.prepare(`
       SELECT
         b.model,
-        b.project,
+        ${PROJECT_DISPLAY_SQL} AS project,
         COALESCE(SUM(${TOTAL_TOKENS_SQL}), 0) AS total_tokens
       FROM daily_usage_breakdown b
       ${where.whereClause}
-      GROUP BY b.model, b.project
+      GROUP BY b.model, ${PROJECT_DISPLAY_SQL}
       HAVING COALESCE(SUM(${TOTAL_TOKENS_SQL}), 0) > 0
-      ORDER BY total_tokens DESC, b.model ASC, b.project ASC
+      ORDER BY total_tokens DESC, b.model ASC, project ASC
     `).bind(...where.params).all<{
       model: string;
       project: string;
@@ -327,7 +329,7 @@ function buildWhere(filters: DashboardFilters, omit?: FilterKey): WhereParts {
     params.push(filters.model);
   }
   if (filters.project && omit !== 'project') {
-    clauses.push('b.project = ?');
+    clauses.push(`${PROJECT_DISPLAY_SQL} = ?`);
     params.push(filters.project);
   }
 
@@ -340,15 +342,16 @@ function buildWhere(filters: DashboardFilters, omit?: FilterKey): WhereParts {
 async function loadFacetOptions(column: string, filters: DashboardFilters, env: Env): Promise<FacetItem[]> {
   const omit = toFilterKey(column);
   const where = buildWhere(filters, omit);
+  const columnExpr = column === 'project' ? PROJECT_DISPLAY_SQL : `b.${column}`;
   const rows = await env.DB.prepare(`
     SELECT
-      b.${column} AS value,
+      ${columnExpr} AS value,
       COALESCE(SUM(b.estimated_cost_usd), 0) AS estimated_cost_usd,
       COALESCE(SUM(b.event_count), 0) AS event_count
     FROM daily_usage_breakdown b
     ${where.whereClause}
-    GROUP BY b.${column}
-    HAVING b.${column} IS NOT NULL AND b.${column} != ''
+    GROUP BY ${columnExpr}
+    HAVING value IS NOT NULL AND value != ''
     ORDER BY estimated_cost_usd DESC, value ASC
     LIMIT 80
   `).bind(...where.params).all<{

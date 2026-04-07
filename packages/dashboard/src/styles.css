@@ -148,24 +148,20 @@ body.embed-transparent .card {
   border-color: rgba(255, 255, 255, 0.06);
 }
 
-/* ── Scroll morph (fisheye) ── */
-/* Only .card elements — the leaf visual blocks, not grid wrappers */
-.prose-immersive .card {
-  transform: scale(var(--morph-scale, 1));
-  transform-origin: center center;
-  transition: transform 0.15s ease-out;
+/* ── Card hover lift (PC only) ── */
+@media (hover: hover) and (min-width: 640px) {
+  .card {
+    transition: transform 0.2s ease-out;
+  }
+  .card:hover {
+    transform: scale(1.012);
+  }
 }
 
-/* Prevent native pinch zoom on mobile — must be in CSS for iOS Safari */
-html, body {
-  touch-action: pan-x pan-y;
-}
-
-/* prefers-reduced-motion override */
 @media (prefers-reduced-motion: reduce) {
-  .prose-immersive .card {
-    transform: none !important;
+  .card {
     transition: none !important;
+    transform: none !important;
   }
 }
 

@@ -8,7 +8,7 @@
         "directory": "./public",
         "html_handling": "auto-trailing-slash",
         "not_found_handling": "single-page-application",
-        "run_worker_first": ["/api/*", "/pricing", "/embed/docs", "/favicon.ico"],
+        "run_worker_first": ["/api/*", "/favicon.ico"],
     },
     // 首次 wrangler deploy 时自动创建 D1 数据库并回写 database_id
     "d1_databases": [
