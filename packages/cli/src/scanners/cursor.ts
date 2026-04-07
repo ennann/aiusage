@@ -253,6 +253,7 @@ export async function scanCursorDates(
         channel: 'ide',
         model,
         project: 'unknown',
+        projectDisplay: 'unknown',
         eventCount: 1,
         inputTokens,
         cachedInputTokens: cacheRead,

@@ -6,11 +6,13 @@ import {
   parseTs,
   dateKey,
   projectFromPath,
+  resolveProjectFields,
   walkFiles,
   initDateMap,
   accumulate,
   finalize,
   emptyResult,
+  type ProjectFields,
 } from './utils.js';
 
 /**
@@ -68,7 +70,7 @@ export async function scanPiDates(
     // 从路径提取默认 project: sessions/{encoded-cwd}/{file}.jsonl
     const parentDir = dirname(filePath);
     const encodedCwd = basename(parentDir);
-    let sessionProject = extractProjectFromEncoded(encodedCwd);
+    let sessionProjectFields: ProjectFields = { project: extractProjectFromEncoded(encodedCwd), projectDisplay: extractProjectFromEncoded(encodedCwd) };
 
     for (const line of content.split('\n')) {
       if (!line.trim()) continue;
@@ -81,7 +83,7 @@ export async function scanPiDates(
 
       // session header 提供 cwd
       if (obj.type === 'session' && obj.cwd) {
-        sessionProject = projectFromPath(obj.cwd, projectAliases);
+        sessionProjectFields = resolveProjectFields(obj.cwd, projectAliases);
         continue;
       }
 
@@ -114,13 +116,15 @@ export async function scanPiDates(
 
       accumulate(
         dayMap,
-        `${model}|${sessionProject}`,
+        `${model}|${sessionProjectFields.project}`,
         {
           provider: 'inflection',
           product: 'pi',
           channel: 'cli',
           model,
-          project: sessionProject,
+          project: sessionProjectFields.project,
+          projectDisplay: sessionProjectFields.projectDisplay,
+          projectAlias: sessionProjectFields.projectAlias,
           inputTokens: 0,
           cachedInputTokens: 0,
           cacheWriteTokens: 0,

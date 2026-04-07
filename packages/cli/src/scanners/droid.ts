@@ -112,7 +112,8 @@ export async function scanDroidDates(
 
     const model = settings.model ?? 'unknown';
     const rawProject = extractProjectFromSlug(sessionDir);
-    const project = projectAliases?.[rawProject] ?? rawProject;
+    const alias = projectAliases?.[rawProject];
+    const project = alias ?? rawProject;
 
     accumulate(
       dayMap,
@@ -123,6 +124,8 @@ export async function scanDroidDates(
         channel: 'cli',
         model,
         project,
+        projectDisplay: rawProject,
+        projectAlias: alias,
         inputTokens: 0,
         cachedInputTokens: 0,
         cacheWriteTokens: 0,

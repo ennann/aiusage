@@ -6,11 +6,13 @@ import {
   parseTs,
   dateKey,
   projectFromPath,
+  resolveProjectFields,
   walkFiles,
   initDateMap,
   accumulate,
   finalize,
   emptyResult,
+  type ProjectFields,
 } from './utils.js';
 
 /**
@@ -65,7 +67,7 @@ export async function scanKimiDates(
     const hashDir = dirname(sessionDir);
     const workDirHash = basename(hashDir);
 
-    const project = resolveKimiProject(workDirHash, workspaceMap, projectAliases);
+    const projectFields = resolveKimiProject(workDirHash, workspaceMap, projectAliases);
 
     let content: string;
     try {
@@ -114,13 +116,15 @@ export async function scanKimiDates(
 
       accumulate(
         dayMap,
-        `${currentModel}|${project}`,
+        `${currentModel}|${projectFields.project}`,
         {
           provider: 'moonshot',
           product: 'kimi-code',
           channel: 'cli',
           model: currentModel,
-          project,
+          project: projectFields.project,
+          projectDisplay: projectFields.projectDisplay,
+          projectAlias: projectFields.projectAlias,
           inputTokens: 0,
           cachedInputTokens: 0,
           cacheWriteTokens: 0,
@@ -139,10 +143,10 @@ function resolveKimiProject(
   hash: string,
   workspaceMap: Map<string, string>,
   aliases?: Record<string, string>,
-): string {
+): ProjectFields {
   const wsPath = workspaceMap.get(hash);
-  if (wsPath) return projectFromPath(wsPath, aliases);
-  return projectFromPath(hash, aliases);
+  if (wsPath) return resolveProjectFields(wsPath, aliases);
+  return resolveProjectFields(hash, aliases);
 }
 
 async function loadWorkspaceMap(kimiHome: string): Promise<Map<string, string>> {

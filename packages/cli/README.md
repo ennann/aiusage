@@ -4,6 +4,7 @@
 
 - discovering and managing projects across AI tools
 - scanning local Claude Code, Codex, Cursor, Copilot CLI, Copilot for VS Code, Gemini CLI, and Antigravity usage
+- importing historical usage from Anthropic Admin API
 - printing local usage summaries for the last 7 days, 30 days, 90 days, or all history
 - scheduling automatic sync to an AIUsage Worker
 - diagnosing configuration and connectivity issues
@@ -104,16 +105,36 @@ aiusage enroll \
 
 ### sync
 
-Upload usage data to the Worker. Covers the last 7 closed days by default.
+Upload usage data to the Worker. Default: last 7 days + today.
 
 ```bash
-aiusage sync
-aiusage sync --today           # include today's live data
-aiusage sync --date 2026-03-31
-aiusage sync --lookback 14
+aiusage sync                   # last 7 days + today
+aiusage sync --today           # today only
+aiusage sync --date 2026-03-31 # specific date
+aiusage sync --lookback 14     # last 14 days + today
+aiusage sync --from 2025-01-01 --to 2026-04-05  # date range
 ```
 
-Use `--today` to upload the current (incomplete) day. The server upserts, so partial data is updated on next sync.
+The server upserts, so re-syncing the same dates safely updates existing data.
+
+### import
+
+Import historical Claude usage from the Anthropic Admin API. Useful for recovering data from periods where local JSONL logs were rotated or deleted.
+
+```bash
+aiusage import --start 2025-06-01 --end 2025-09-15
+aiusage import --key sk-ant-admin... --start 2025-06-01 --end 2025-09-15
+```
+
+Requires an **Admin API key** (`sk-ant-admin...`), not a regular API key. Get one at [console.anthropic.com](https://console.anthropic.com) → Settings → Admin Keys.
+
+Save the key once:
+
+```bash
+aiusage config set anthropic-admin-key sk-ant-admin...
+```
+
+**Important:** Do not use `import` for dates already covered by local scan data — it will double-count.
 
 ### schedule
 
@@ -144,9 +165,17 @@ Manage local settings.
 ```bash
 aiusage config set lang zh                              # default language: en or zh
 aiusage config set emoji false                          # disable emoji in report title
-aiusage config set device.alias "MacBook Pro 工作机"
-aiusage config set privacy.projectVisibility masked
-aiusage config set project.alias MyApp "我的应用"  # prefer: aiusage project alias
+aiusage config set device.alias "MacBook Pro 工作机"      # device display name on dashboard
+aiusage config set privacy.projectVisibility masked     # hidden | masked | plain
+aiusage config set project.alias MyApp "我的应用"        # prefer: aiusage project alias
+aiusage config set anthropic-admin-key sk-ant-admin...  # for aiusage import
+```
+
+**Device alias** is shown on the dashboard to distinguish multiple devices. Set it to something recognizable (e.g. your machine name or emoji):
+
+```bash
+aiusage config set device.alias "💻 MacBook Pro"
+aiusage config set device.alias "🖥️ iMac Studio"
 ```
 
 CLI flags (`--lang`, `--no-emoji`) override config values for a single run.
