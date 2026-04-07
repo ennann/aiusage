@@ -111,16 +111,25 @@ export async function handleIngest(request: Request, env: Env): Promise<Response
       .run();
 
     for (const { breakdown: b, cost, cacheWrite5mTokens, cacheWrite1hTokens } of breakdownsWithCost) {
+      const rawProject = b.project || 'unknown';
+      const isFullPath = rawProject.startsWith('/') || /^[A-Z]:\\/i.test(rawProject);
+      const projectDisplay = b.projectDisplay ?? (isFullPath ? rawProject.split('/').filter(Boolean).pop() || 'unknown' : rawProject);
+      const projectAlias = b.projectAlias ?? null;
+
       await env.DB.prepare(`
         INSERT INTO daily_usage_breakdown
           (device_id, usage_date, provider, product, channel, model, project,
-           event_count, input_tokens, cached_input_tokens, cache_write_tokens,
+           project_display, project_alias,
+           event_count, session_count, input_tokens, cached_input_tokens, cache_write_tokens,
            output_tokens, reasoning_output_tokens, estimated_cost_usd, cost_status,
            pricing_version, extra_metrics_json, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT (device_id, usage_date, provider, product, channel, model, project)
         DO UPDATE SET
+          project_display = excluded.project_display,
+          project_alias = excluded.project_alias,
           event_count = excluded.event_count,
+          session_count = excluded.session_count,
           input_tokens = excluded.input_tokens,
           cached_input_tokens = excluded.cached_input_tokens,
           cache_write_tokens = excluded.cache_write_tokens,
@@ -134,8 +143,9 @@ export async function handleIngest(request: Request, env: Env): Promise<Response
       `)
         .bind(
           tokenPayload.deviceId, day.usageDate,
-          b.provider, b.product, b.channel, b.model || 'unknown', b.project || 'unknown',
-          b.eventCount, b.inputTokens, b.cachedInputTokens, b.cacheWriteTokens,
+          b.provider, b.product, b.channel, b.model || 'unknown', rawProject,
+          projectDisplay, projectAlias,
+          b.eventCount, b.sessionCount ?? 0, b.inputTokens, b.cachedInputTokens, b.cacheWriteTokens,
           b.outputTokens, b.reasoningOutputTokens,
           cost.estimatedCostUsd, cost.costStatus, cost.pricingVersion,
           JSON.stringify({
@@ -149,10 +159,10 @@ export async function handleIngest(request: Request, env: Env): Promise<Response
 
     // 计算 top project / model 并回填 daily_usage
     const topProject = await env.DB.prepare(`
-      SELECT project, SUM(estimated_cost_usd) as total_cost
+      SELECT COALESCE(project_alias, project_display) as project, SUM(estimated_cost_usd) as total_cost
       FROM daily_usage_breakdown
       WHERE device_id = ? AND usage_date = ?
-      GROUP BY project ORDER BY total_cost DESC LIMIT 1
+      GROUP BY COALESCE(project_alias, project_display) ORDER BY total_cost DESC LIMIT 1
     `).bind(tokenPayload.deviceId, day.usageDate)
       .first<{ project: string; total_cost: number }>();
 

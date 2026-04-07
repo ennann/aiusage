@@ -1,10 +1,10 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import type { IngestBreakdown } from '@aiusage/shared';
 import { scanDates } from './scan.js';
 
-export type ReportRange = '7d' | '1m' | '3m' | 'all';
+export type ReportRange = '7d' | '1m' | '3m' | 'all' | 'today';
 
 interface Totals {
   eventCount: number;
@@ -46,14 +46,20 @@ export interface LocalReport {
 
 interface BuildReportOptions {
   projectAliases?: Record<string, string>;
+  /** 直接传入日期列表时忽略 range 参数 */
+  dates?: string[];
 }
 
 export async function buildLocalReport(
   range: ReportRange,
   options: BuildReportOptions = {},
 ): Promise<LocalReport> {
-  const requestedDates = range === 'all'
+  const requestedDates = options.dates
+    ? options.dates
+    : range === 'all'
     ? await discoverAllDates()
+    : range === 'today'
+    ? [toDateKey(getTodayLocalDate())]
     : buildPresetDates(range);
 
   const daily: DailySummary[] = [];
@@ -68,7 +74,7 @@ export async function buildLocalReport(
   for (const result of results) {
     const usageDate = result.usageDate;
     const dayTotals = withTotalTokens(result.totals);
-    const hasData = dayTotals.totalTokens > 0;
+    const hasData = result.breakdowns.length > 0 || dayTotals.eventCount > 0 || dayTotals.totalTokens > 0;
 
     if (hasData) {
       daysWithData += 1;
@@ -113,10 +119,11 @@ export async function buildLocalReport(
   };
 }
 
-export function parseReportRange(value: string | boolean | undefined): ReportRange {
+export function parseReportRange(value: string | boolean | undefined, today?: boolean): ReportRange {
+  if (today) return 'today';
   if (value === undefined || value === true) return '7d';
-  if (value === '7d' || value === '1m' || value === '3m' || value === 'all') return value;
-  throw new Error('--range 仅支持 7d、1m、3m、all');
+  if (value === '7d' || value === '1m' || value === '3m' || value === 'all' || value === 'today') return value;
+  throw new Error('--range 仅支持 7d、1m、3m、all、today');
 }
 
 function getRangeLabel(range: ReportRange): string {
@@ -153,6 +160,8 @@ async function discoverAllDates(): Promise<string[]> {
     discoverClaudeDates(dates),
     discoverCodexDates(dates),
     discoverGeminiDates(dates),
+    discoverCopilotVscodeDates(dates),
+    discoverAntigravityDates(dates),
     discoverGenericJsonlDates(join(home, '.copilot', 'session-state'), dates),
     discoverGenericJsonlDates(join(home, '.qwen', 'tmp'), dates),
     discoverGenericJsonlDates(join(home, '.kimi', 'sessions'), dates),
@@ -220,27 +229,43 @@ async function walkForFiles(dir: string, ext: string, result: string[]): Promise
 async function discoverGeminiDates(dates: Set<string>): Promise<void> {
   const baseDir = join(homedir(), '.gemini', 'tmp');
   const files: string[] = [];
-  try {
-    await walkForGeminiJsonl(baseDir, files);
-  } catch {
-    return;
-  }
+  await walkForGeminiJsonl(baseDir, files);
 
   for (const filePath of files) {
     const content = await safeReadUtf8(filePath);
     if (!content) continue;
 
-    let session: { messages?: { timestamp?: string }[]; history?: { timestamp?: string }[] };
+    let session:
+      | { timestamp?: string | number; createTime?: string | number; startTime?: string | number; messages?: { timestamp?: string | number; createTime?: string | number }[]; history?: { timestamp?: string | number; createTime?: string | number }[]; data?: { createTime?: string | number; messages?: { timestamp?: string | number; createTime?: string | number }[]; history?: { timestamp?: string | number; createTime?: string | number }[] } }
+      | Array<{ timestamp?: string | number }>;
     try {
       session = JSON.parse(content);
     } catch {
       continue;
     }
 
-    const messages = session.messages ?? session.history ?? [];
+    if (Array.isArray(session)) {
+      for (const row of session) {
+        const ts = parseTimestamp(row.timestamp);
+        if (ts) dates.add(toDateKey(ts));
+      }
+      continue;
+    }
+
+    const topLevelTs = parseTimestamp(session.timestamp ?? session.createTime ?? session.startTime ?? session.data?.createTime);
+    if (topLevelTs) dates.add(toDateKey(topLevelTs));
+
+    const messages = [
+      ...(session.messages ?? []),
+      ...(session.history ?? []),
+      ...(session.data?.messages ?? []),
+      ...(session.data?.history ?? []),
+    ];
     for (const msg of messages) {
-      const ts = parseTimestamp(msg.timestamp);
-      if (ts) dates.add(toDateKey(ts));
+      const ts = parseTimestamp(msg.timestamp ?? msg.createTime);
+      if (ts) {
+        dates.add(toDateKey(ts));
+      }
     }
   }
 }
@@ -263,38 +288,116 @@ async function walkForGeminiJsonl(dir: string, result: string[]): Promise<void> 
   }
 }
 
-async function discoverClaudeDates(dates: Set<string>): Promise<void> {
-  const baseDir = join(homedir(), '.claude', 'projects');
-
-  let projectDirs: string[];
-  try {
-    projectDirs = await readdir(baseDir);
-  } catch {
-    return;
+async function discoverCopilotVscodeDates(dates: Set<string>): Promise<void> {
+  const home = homedir();
+  const logFiles: string[] = [];
+  await walkForFiles(join(home, 'Library', 'Application Support', 'Code', 'logs'), '.log', logFiles);
+  for (const filePath of logFiles) {
+    if (basename(filePath) !== 'GitHub Copilot Chat.log') continue;
+    const content = await safeReadUtf8(filePath);
+    if (!content) continue;
+    for (const line of content.split('\n')) {
+      if (!line.includes('ccreq:') || !line.includes('| success |')) continue;
+      const ts = parseTimestamp(line.match(/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d+)/)?.[1]?.replace(' ', 'T'));
+      if (ts) dates.add(toDateKey(ts));
+    }
   }
 
-  for (const projectDir of projectDirs) {
-    const jsonlFiles: string[] = [];
+  const sessionFiles: string[] = [];
+  await walkForFiles(join(home, 'Library', 'Application Support', 'Code', 'User', 'workspaceStorage'), '.json', sessionFiles);
+  for (const filePath of sessionFiles) {
+    if (!filePath.includes('/chatSessions/')) continue;
+    const content = await safeReadUtf8(filePath);
+    if (!content) continue;
+    let session: { requests?: Array<{ timestamp?: string | number; response?: unknown[]; result?: { errorDetails?: { responseIsIncomplete?: boolean } } }> };
     try {
-      await walkForClaudeJsonl(join(baseDir, projectDir), jsonlFiles);
+      session = JSON.parse(content);
+    } catch {
+      continue;
+    }
+    for (const request of session.requests ?? []) {
+      if ((request.response?.length ?? 0) === 0) continue;
+      if (request.result?.errorDetails?.responseIsIncomplete) continue;
+      const ts = parseTimestamp(request.timestamp);
+      if (ts) dates.add(toDateKey(ts));
+    }
+  }
+}
+
+async function discoverAntigravityDates(dates: Set<string>): Promise<void> {
+  const home = homedir();
+  const brainFiles: string[] = [];
+  const browserFiles: string[] = [];
+  await walkForFiles(join(home, '.gemini', 'antigravity', 'brain'), '.json', brainFiles);
+  await walkForFiles(join(home, '.gemini', 'antigravity', 'browser_recordings'), '.json', browserFiles);
+
+  for (const filePath of brainFiles) {
+    if (basename(filePath) !== 'task.md.metadata.json') continue;
+    const content = await safeReadUtf8(filePath);
+    if (!content) continue;
+    let data: { updatedAt?: string | number };
+    try {
+      data = JSON.parse(content);
+    } catch {
+      continue;
+    }
+    const ts = parseTimestamp(data.updatedAt);
+    if (ts) dates.add(toDateKey(ts));
+  }
+
+  for (const filePath of browserFiles) {
+    if (basename(filePath) !== 'metadata.json') continue;
+    const content = await safeReadUtf8(filePath);
+    if (!content) continue;
+    let data: { highlights?: Array<{ start_time?: string | number; end_time?: string | number }> };
+    try {
+      data = JSON.parse(content);
+    } catch {
+      continue;
+    }
+    const ts = parseTimestamp(data.highlights?.[0]?.start_time ?? data.highlights?.[0]?.end_time);
+    if (ts) dates.add(toDateKey(ts));
+  }
+}
+
+async function discoverClaudeDates(dates: Set<string>): Promise<void> {
+  const home = homedir();
+  const baseDirs = [
+    join(home, '.config', 'claude', 'projects'),
+    join(home, '.claude', 'projects'),
+  ];
+
+  for (const baseDir of baseDirs) {
+    let projectDirs: string[];
+    try {
+      projectDirs = await readdir(baseDir);
     } catch {
       continue;
     }
 
-    for (const filePath of jsonlFiles) {
-      const content = await safeReadUtf8(filePath);
-      if (!content) continue;
+    for (const projectDir of projectDirs) {
+      const jsonlFiles: string[] = [];
+      try {
+        await walkForClaudeJsonl(join(baseDir, projectDir), jsonlFiles);
+      } catch {
+        continue;
+      }
 
-      for (const line of content.split('\n')) {
-        if (!line.trim()) continue;
-        let record: { timestamp?: string };
-        try {
-          record = JSON.parse(line);
-        } catch {
-          continue;
+      for (const filePath of jsonlFiles) {
+        const content = await safeReadUtf8(filePath);
+        if (!content) continue;
+
+        for (const line of content.split('\n')) {
+          if (!line.trim()) continue;
+          let record: { timestamp?: string };
+          try {
+            record = JSON.parse(line);
+          } catch {
+            continue;
+          }
+          const ts = parseTimestamp(record.timestamp);
+          if (ts) dates.add(toDateKey(ts));
         }
-        const ts = parseTimestamp(record.timestamp);
-        if (ts) dates.add(toDateKey(ts));
       }
     }
   }
@@ -377,8 +480,8 @@ async function safeReadUtf8(filePath: string): Promise<string | null> {
   }
 }
 
-function parseTimestamp(value?: string): Date | null {
-  if (!value) return null;
+function parseTimestamp(value?: string | number): Date | null {
+  if (value === undefined || value === null || value === '') return null;
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date;
 }
@@ -440,6 +543,8 @@ function mergeTotals(target: Totals, source: Totals): Totals {
   target.estimatedCostUsd += source.estimatedCostUsd;
   return target;
 }
+
+const FAST_MULTIPLIER = 6;
 
 const CLAUDE_PRICING: Record<string, { input: number; cache_write_5m: number; cache_write_1h: number; cache_read: number; output: number }> = {
   'claude-opus-4-6': { input: 5, cache_write_5m: 6.25, cache_write_1h: 10, cache_read: 0.5, output: 25 },
@@ -538,9 +643,17 @@ function toBreakdownTotals(breakdown: IngestBreakdown, warnings: Set<string>): T
   };
 }
 
-function calculateBreakdownCost(breakdown: IngestBreakdown, warnings: Set<string>): number {
+export function calculateBreakdownCost(breakdown: IngestBreakdown, warnings: Set<string>): number {
+  // 优先使用 Claude Code 预算的费用（costUSD）
+  if (breakdown.costUSD != null && breakdown.costUSD > 0) {
+    return breakdown.costUSD;
+  }
+
   if (breakdown.provider === 'anthropic' && breakdown.product === 'claude-code') {
-    const resolved = resolveModel(breakdown.model, CLAUDE_PRICING);
+    // 检测 fast 模式（model 名以 -fast 结尾）
+    const isFast = breakdown.model.endsWith('-fast');
+    const baseModel = isFast ? breakdown.model.replace(/-fast$/, '') : breakdown.model;
+    const resolved = resolveModel(baseModel, CLAUDE_PRICING);
     if (!resolved) {
       warnings.add(`Claude 模型 ${breakdown.model} 未配置公开单价，已跳过成本估算。`);
       return 0;
@@ -549,13 +662,13 @@ function calculateBreakdownCost(breakdown: IngestBreakdown, warnings: Set<string
       warnings.add(`${breakdown.model} 已按 ${resolved.model} 的公开单价估算。`);
     }
     const pricing = CLAUDE_PRICING[resolved.model];
-    return (
+    const baseCost =
       (breakdown.inputTokens / 1_000_000) * pricing.input +
       (((breakdown.cacheWrite5mTokens ?? breakdown.cacheWriteTokens) || 0) / 1_000_000) * pricing.cache_write_5m +
       ((breakdown.cacheWrite1hTokens ?? 0) / 1_000_000) * pricing.cache_write_1h +
       (breakdown.cachedInputTokens / 1_000_000) * pricing.cache_read +
-      (breakdown.outputTokens / 1_000_000) * pricing.output
-    );
+      (breakdown.outputTokens / 1_000_000) * pricing.output;
+    return isFast ? baseCost * FAST_MULTIPLIER : baseCost;
   }
 
   if (breakdown.provider === 'openai' && breakdown.product === 'codex') {

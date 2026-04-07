@@ -38,7 +38,11 @@ coverage/
 # Legacy scripts
 token_cost_report.py
 
+# Temporary
+tmp/
+
 # Logs
 *.log
 npm-debug.log*
 pnpm-debug.log*
+

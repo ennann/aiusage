@@ -1,7 +1,7 @@
 // ── 统计维度 ──
 
 export type Provider = 'anthropic' | 'openai' | 'google' | 'github' | 'alibaba' | 'moonshot' | 'sourcegraph' | 'inflection' | 'cursor' | (string & {});
-export type Product = 'claude-code' | 'codex' | 'copilot-cli' | 'gemini-cli' | 'qwen-code' | 'kimi-code' | 'amp' | 'droid' | 'opencode' | 'pi' | 'cursor' | (string & {});
+export type Product = 'claude-code' | 'codex' | 'copilot-cli' | 'copilot-vscode' | 'gemini-cli' | 'antigravity' | 'qwen-code' | 'kimi-code' | 'amp' | 'droid' | 'opencode' | 'pi' | 'cursor' | (string & {});
 export type Channel = 'cli' | 'ide' | 'web' | 'api';
 export type CostStatus = 'exact' | 'estimated' | 'unavailable';
 export type DeviceStatus = 'active' | 'disabled';
@@ -36,7 +36,10 @@ export interface IngestBreakdown {
   channel: Channel;
   model: string;
   project: string;
+  projectDisplay?: string;
+  projectAlias?: string;
   eventCount: number;
+  sessionCount?: number;
   inputTokens: number;
   cachedInputTokens: number;
   cacheWriteTokens: number;
@@ -44,6 +47,7 @@ export interface IngestBreakdown {
   cacheWrite1hTokens?: number;
   outputTokens: number;
   reasoningOutputTokens: number;
+  costUSD?: number;
 }
 
 // ── API 响应 ──
@@ -85,6 +89,8 @@ export interface OverviewResponse {
   totalDays: number;
   activeDays: number;
   totalEvents: number;
+  totalSessions: number;
+  costBearingEvents: number;
   totalCostUsd: number;
   averageDailyCostUsd: number;
   dailyTrend: DailyTrendItem[];

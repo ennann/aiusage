@@ -1,6 +1,8 @@
+import { scanAntigravityDates } from './scanners/antigravity.js';
 import { scanClaudeDates } from './scanners/claude.js';
 import { scanCodexDates } from './scanners/codex.js';
 import { scanCopilotDates } from './scanners/copilot.js';
+import { scanCopilotVscodeDates } from './scanners/copilot-vscode.js';
 import { scanCursorDates } from './scanners/cursor.js';
 import { scanGeminiDates } from './scanners/gemini.js';
 import { scanQwenDates } from './scanners/qwen.js';
@@ -43,9 +45,11 @@ export async function scanDates(targetDates: string[], options: ScanOptions = {}
   if (uniqueDates.length === 0) return [];
 
   const scanners = [
+    scanAntigravityDates(uniqueDates),
     scanClaudeDates(uniqueDates, undefined, options.projectAliases),
     scanCodexDates(uniqueDates, undefined, options.projectAliases),
     scanCopilotDates(uniqueDates, undefined, options.projectAliases),
+    scanCopilotVscodeDates(uniqueDates, undefined, options.projectAliases),
     scanCursorDates(uniqueDates),
     scanGeminiDates(uniqueDates, undefined, options.projectAliases),
     scanQwenDates(uniqueDates, undefined, options.projectAliases),

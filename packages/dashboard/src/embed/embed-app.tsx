@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useRef, useMemo } from 'react';
 import { parseEmbedParams } from './parse-params';
 import type { EmbedTheme } from './types';
 import type { ThemeMode } from '../theme';
@@ -18,8 +18,38 @@ import { TokenCompositionChart } from '../components/token-composition-chart';
 import { FlowChart } from '../components/flow-chart';
 import { DonutSection } from '../components/donut-section';
 import {
-  ChartBoundary, SectionHeader, ChartLegend, Skeleton,
+  ChartBoundary, SectionHeader, ChartLegend, EmptyState, Skeleton,
 } from '../components/chart-helpers';
+
+/* ── Auto-resize: notify parent iframe of height changes ── */
+
+function useAutoResize(widget: string | null) {
+  const lastHeight = useRef(0);
+
+  useEffect(() => {
+    if (!widget || window.parent === window) return;
+
+    const root = document.querySelector('.embed-root') as HTMLElement | null;
+    if (!root) return;
+
+    const notify = () => {
+      const h = Math.ceil(root.scrollHeight);
+      if (h === lastHeight.current) return;
+      lastHeight.current = h;
+      window.parent.postMessage(
+        { source: 'aiusage-embed', widget, height: h },
+        '*',
+      );
+    };
+
+    const ro = new ResizeObserver(notify);
+    ro.observe(root);
+    // Fire once after first paint
+    notify();
+
+    return () => ro.disconnect();
+  }, [widget]);
+}
 
 /* ── Helpers ── */
 
@@ -79,6 +109,7 @@ function WidgetRenderer({
   items,
   overview,
   kpis,
+  metricAvailability,
   t,
   locale,
 }: {
@@ -86,10 +117,12 @@ function WidgetRenderer({
   items: number[] | null;
   overview: OverviewPayload | null;
   kpis: ReturnType<typeof useOverview>['kpis'];
+  metricAvailability: ReturnType<typeof useOverview>['metricAvailability'];
   t: T;
   locale: Locale;
 }) {
   const isDark = useIsDark();
+  const unavailable = metricAvailability.tokenMetricsUnavailable;
   // token legend (shared by token-trend / token-composition)
   const tokenLegend = useMemo(() => {
     if (!overview) return [];
@@ -105,11 +138,11 @@ function WidgetRenderer({
     /* ── KPI Row 1 ── */
     case 'stats-row1': {
       const cards = [
-        { label: t.estimatedCost, value: formatUsd(overview?.totalCostUsd ?? 0), highlight: true },
-        { label: t.totalTokens, value: formatCompact(kpis?.totalTokens ?? 0, locale) },
-        { label: t.inputTokens, value: formatCompact(kpis?.inputTokens ?? 0, locale) },
-        { label: t.outputTokens, value: formatCompact(kpis?.outputTokens ?? 0, locale) },
-        { label: t.cachedTokens, value: formatCompact(kpis?.cachedTokens ?? 0, locale) },
+        { label: t.estimatedCost, value: unavailable ? t.unavailable : formatUsd(overview?.totalCostUsd ?? 0), highlight: true },
+        { label: t.totalTokens, value: unavailable ? t.unavailable : formatCompact(kpis?.totalTokens ?? 0, locale) },
+        { label: t.inputTokens, value: unavailable ? t.unavailable : formatCompact(kpis?.inputTokens ?? 0, locale) },
+        { label: t.outputTokens, value: unavailable ? t.unavailable : formatCompact(kpis?.outputTokens ?? 0, locale) },
+        { label: t.cachedTokens, value: unavailable ? t.unavailable : formatCompact(kpis?.cachedTokens ?? 0, locale) },
       ];
       return <StatsRow cards={cards} items={items} />;
     }
@@ -118,10 +151,10 @@ function WidgetRenderer({
     case 'stats-row2': {
       const cards = [
         { label: t.activeDays, value: String(overview?.activeDays ?? 0), suffix: ` / ${overview?.totalDays ?? 0}` },
-        { label: t.sessions, value: formatNumber(overview?.totalEvents ?? 0) },
-        { label: t.costPerSession, value: formatUsd(kpis?.costPerSession ?? 0) },
-        { label: t.avgDailyCost, value: formatUsd(overview?.averageDailyCostUsd ?? 0) },
-        { label: t.cacheHitRate, value: formatPercent(kpis?.cacheHitRate ?? 0) },
+        { label: t.sessions, value: formatNumber((overview?.totalSessions ?? 0) > 0 ? overview!.totalSessions : (overview?.totalEvents ?? 0)) },
+        { label: t.costPerSession, value: unavailable ? t.unavailable : formatUsd(kpis?.costPerSession ?? 0) },
+        { label: t.avgDailyCost, value: unavailable ? t.unavailable : formatUsd(overview?.averageDailyCostUsd ?? 0) },
+        { label: t.cacheHitRate, value: unavailable ? t.unavailable : formatPercent(kpis?.cacheHitRate ?? 0) },
       ];
       return <StatsRow cards={cards} items={items} />;
     }
@@ -130,13 +163,17 @@ function WidgetRenderer({
     case 'cost-trend':
       return (
         <>
-          <SectionHeader title={t.costTrend} stat={formatUsd(overview?.totalCostUsd ?? 0)} />
-          <ChartBoundary name="Cost Trend">
-            <CostTrendChart
-              data={overview?.dailyTrend ?? []}
-              providerTrend={overview?.providerDailyTrend ?? []}
-            />
-          </ChartBoundary>
+          <SectionHeader title={t.costTrend} stat={unavailable ? t.unavailable : formatUsd(overview?.totalCostUsd ?? 0)} />
+          {unavailable ? (
+            <EmptyState label={t.costUnavailable} />
+          ) : (
+            <ChartBoundary name="Cost Trend">
+              <CostTrendChart
+                data={overview?.dailyTrend ?? []}
+                providerTrend={overview?.providerDailyTrend ?? []}
+              />
+            </ChartBoundary>
+          )}
         </>
       );
 
@@ -144,11 +181,17 @@ function WidgetRenderer({
     case 'token-trend':
       return (
         <>
-          <SectionHeader title={t.tokenTrend} stat={formatCompact(kpis?.totalTokens ?? 0, locale)} />
-          <ChartBoundary name="Token Trend">
-            <TokenTrendChart data={overview?.tokenComposition ?? []} locale={locale} />
-          </ChartBoundary>
-          <ChartLegend items={tokenLegend} />
+          <SectionHeader title={t.tokenTrend} stat={unavailable ? t.unavailable : formatCompact(kpis?.totalTokens ?? 0, locale)} />
+          {unavailable ? (
+            <EmptyState label={t.tokenUnavailable} />
+          ) : (
+            <>
+              <ChartBoundary name="Token Trend">
+                <TokenTrendChart data={overview?.tokenComposition ?? []} locale={locale} />
+              </ChartBoundary>
+              <ChartLegend items={tokenLegend} />
+            </>
+          )}
         </>
       );
 
@@ -156,11 +199,17 @@ function WidgetRenderer({
     case 'token-composition':
       return (
         <>
-          <SectionHeader title={t.tokenComposition} stat={formatCompact(kpis?.totalTokens ?? 0, locale)} />
-          <ChartBoundary name="Token Composition">
-            <TokenCompositionChart data={overview?.tokenComposition ?? []} locale={locale} />
-          </ChartBoundary>
-          <ChartLegend items={tokenLegend} />
+          <SectionHeader title={t.tokenComposition} stat={unavailable ? t.unavailable : formatCompact(kpis?.totalTokens ?? 0, locale)} />
+          {unavailable ? (
+            <EmptyState label={t.tokenUnavailable} />
+          ) : (
+            <>
+              <ChartBoundary name="Token Composition">
+                <TokenCompositionChart data={overview?.tokenComposition ?? []} locale={locale} />
+              </ChartBoundary>
+              <ChartLegend items={tokenLegend} />
+            </>
+          )}
         </>
       );
 
@@ -169,9 +218,13 @@ function WidgetRenderer({
       return (
         <>
           <SectionHeader title={t.tokenFlow} />
-          <ChartBoundary name="Flow">
-            <FlowChart data={overview?.sankey} />
-          </ChartBoundary>
+          {unavailable ? (
+            <EmptyState label={t.tokenUnavailable} />
+          ) : (
+            <ChartBoundary name="Flow">
+              <FlowChart data={overview?.sankey} />
+            </ChartBoundary>
+          )}
         </>
       );
 
@@ -206,6 +259,10 @@ function WidgetRenderer({
       const visible = items ? sections.filter((s) => items.includes(s.idx)) : sections;
       const divider = <div className="my-5 border-t border-slate-100 dark:border-white/[0.08]" />;
 
+      if (unavailable) {
+        return <EmptyState label={t.shareUnavailable} />;
+      }
+
       return (
         <>
           {visible.map((sec, i) => (
@@ -235,6 +292,9 @@ export function EmbedApp() {
   const locale = params.locale;
   const t = I18N[locale] as T;
 
+  // Auto-resize: post height to parent on every content change
+  useAutoResize(params.widget);
+
   // Apply theme
   useEffect(() => {
     applyTheme(embedThemeToMode(params.theme));
@@ -259,7 +319,7 @@ export function EmbedApp() {
     () => ({ range: params.range, deviceId: params.deviceId, product: params.product }),
     [params.range, params.deviceId, params.product],
   );
-  const { overview, kpis, loading, error } = useOverview(filters);
+  const { overview, kpis, metricAvailability, loading, error } = useOverview(filters);
 
   // No widget
   if (!params.widget) {
@@ -283,6 +343,7 @@ export function EmbedApp() {
         items={params.items}
         overview={overview}
         kpis={kpis}
+        metricAvailability={metricAvailability}
         t={t}
         locale={locale}
       />

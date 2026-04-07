@@ -30,7 +30,7 @@ export function parseEmbedParams(search: string): EmbedParams {
     items: items && items.length > 0 ? items : null,
     range: p.get('range') || '30d',
     theme,
-    transparent: p.get('transparent') === '1',
+    transparent: p.get('transparent') === '1' || p.get('transparent') === 'true',
     locale,
     deviceId: p.get('deviceId') ?? '',
     product: p.get('product') ?? '',

@@ -30,6 +30,11 @@ export interface AIUsageConfig {
 
   // 多目标
   targets?: SyncTarget[];
+
+  // Anthropic Admin API key (sk-ant-admin...) for importing historical data
+  // that is no longer available as local JSONL files.
+  // Obtain from: console.anthropic.com → Settings → Admin Keys
+  anthropicAdminKey?: string;
 }
 
 const CONFIG_DIR = join(homedir(), '.aiusage');
@@ -184,6 +189,15 @@ export function setConfigValue(
       throw new Error('emoji only supports true or false');
     }
     next.emoji = value === 'true';
+    return next;
+  }
+
+  if (keyPath === 'anthropic-admin-key') {
+    const value = requireSingleValue(keyPath, values);
+    if (!value.startsWith('sk-ant-admin')) {
+      throw new Error('anthropic-admin-key must start with sk-ant-admin (obtain from console.anthropic.com → Settings → Admin Keys)');
+    }
+    next.anthropicAdminKey = value;
     return next;
   }
 

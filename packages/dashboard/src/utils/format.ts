@@ -34,14 +34,15 @@ export function formatPercent(v: number): string {
   return `${Number(v || 0).toFixed(1)}%`;
 }
 
-export function formatModelName(raw: string): string {
+export function formatModelName(raw: string, compact = false): string {
   if (!raw || raw === '<synthetic>') return 'Other';
   let s = raw.replace(/-\d{8}$/, '');          // strip date suffix
   s = s.replace(/(\d+)-(\d+)/g, '$1.$2');      // version: 4-6 → 4.6
   s = s.replace(/-/g, ' ');                     // dashes → spaces
-  s = s.replace(/^claude\b/i, 'Claude');
+  if (compact) s = s.replace(/^claude\s+/i, ''); // mobile: drop "Claude " prefix
   s = s.replace(/^gpt\s/i, 'GPT-');            // keep GPT- brand dash
   s = s.replace(/^o(\d)/i, 'O$1');
+  s = s.replace(/^[a-z]/, (c) => c.toUpperCase());
   s = s.replace(/(?<=\s)[a-z]/g, (c) => c.toUpperCase());
   return s;
 }
@@ -49,7 +50,7 @@ export function formatModelName(raw: string): string {
 export function shortDate(v: string): string { return v.slice(5); }
 
 export function longDate(v: string): string {
-  const d = new Date(v);
+  const d = new Date(v + 'T00:00:00');
   return Number.isNaN(d.getTime())
     ? v
     : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });

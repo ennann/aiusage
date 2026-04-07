@@ -7,8 +7,9 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "tsc --noEmit",
+    "test": "node --test --import tsx/esm src/utils/*.test.ts",
     "preview": "vite preview",
-    "generate-demo": "node scripts/generate-demo.mjs"
+    "generate-demo": "node --import tsx/esm scripts/generate-demo.ts"
   },
   "dependencies": {
     "@aiusage/shared": "workspace:*",

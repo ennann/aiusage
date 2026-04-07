@@ -2,6 +2,8 @@ import { existsSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { hostname } from 'node:os';
 import { scanDate, scanDates } from './scan.js';
+import { scanAnthropicApiDates } from './scanners/anthropic-admin-api.js';
+import { scanAnthropicCsvDates } from './scanners/anthropic-csv.js';
 import { buildLocalReport, parseReportRange } from './report.js';
 import { renderReport } from './render.js';
 import {
@@ -20,6 +22,7 @@ import { defaultLookbackDays, enrollDevice, fetchHealth, uploadDailyUsage } from
 import { disableSchedule, enableSchedule, formatInterval, getScheduleStatus, parseInterval } from './schedule.js';
 import { runDoctor } from './doctor.js';
 import { getVersion } from './version.js';
+import { discoverProjects } from './project.js';
 
 const argv = process.argv.slice(2);
 const command = argv[0];
@@ -65,14 +68,43 @@ try {
     await runDoctorCommand(parsed.flags);
   } else if (command === 'config' && argv[1] === 'set') {
     await runConfigSet(argv.slice(2));
+  } else if (command === 'project') {
+    const sub = argv[1];
+    if (sub === 'list') {
+      const parsed = parseArgs(argv.slice(2));
+      await runProjectList(parsed.flags);
+    } else if (sub === undefined) {
+      await runProjectList();
+    } else if (sub === 'alias') {
+      await runProjectAlias(argv.slice(2));
+    } else {
+      const zh = (await readConfig()).lang === 'zh';
+      console.error(`${zh ? '未知子命令' : 'Unknown subcommand'}: project ${sub}`);
+      console.log(zh
+        ? '可用: aiusage project list, aiusage project alias <项目名> <别名>'
+        : 'Available: aiusage project list, aiusage project alias <name> <alias>');
+      process.exitCode = 1;
+    }
+  } else if (command === 'import') {
+    const parsed = parseArgs(argv.slice(1));
+    await runImport(parsed.flags, parsed.positionals);
   } else if (command === 'setup') {
     console.log('To deploy the server, clone the repo and run the setup wizard:\n');
     console.log('  git clone https://github.com/ennann/aiusage.git');
     console.log('  cd aiusage && pnpm install');
     console.log('  pnpm setup\n');
     console.log('See: https://github.com/ennann/aiusage#deploy-your-own-server');
+  } else if (command === '--help' || command === '-h' || command === 'help') {
+    const zh = (await readConfig()).lang === 'zh';
+    printHelp(zh);
   } else {
-    printHelp();
+    const config = await readConfig();
+    const lang = config.lang || 'en';
+    const zh = lang === 'zh';
+    if (command) {
+      console.error(`${zh ? '未知命令' : 'Unknown command'}: "${command}"\n`);
+    }
+    printUsageHint(zh);
   }
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
@@ -81,7 +113,8 @@ try {
 
 async function runScan(date: string, isJson: boolean) {
   const config = await readConfig();
-  if (!isJson) console.log(`扫描日期: ${date}\n`);
+  const zh = config.lang === 'zh';
+  if (!isJson) console.log(`${zh ? '扫描日期' : 'Scan date'}: ${date}\n`);
 
   const result = await scanDate(date, { projectAliases: config.projectAliases });
 
@@ -91,7 +124,7 @@ async function runScan(date: string, isJson: boolean) {
   }
 
   if (result.breakdowns.length === 0) {
-    console.log('该日无数据。');
+    console.log(zh ? '该日无数据。' : 'No data for this date.');
     return;
   }
 
@@ -106,7 +139,7 @@ async function runScan(date: string, isJson: boolean) {
   for (const [provider, breakdowns] of byProvider) {
     console.log(`── ${provider} ──`);
     for (const b of breakdowns.sort((a, c) => c.inputTokens - a.inputTokens)) {
-      console.log(`  ${b.model} | ${b.project}`);
+      console.log(`  ${b.model} | ${b.projectAlias ?? b.projectDisplay ?? b.project}`);
       console.log(`    事件: ${b.eventCount}  输入: ${fmt(b.inputTokens)}  缓存读: ${fmt(b.cachedInputTokens)}  缓存写: ${fmt(b.cacheWriteTokens)}  输出: ${fmt(b.outputTokens)}  推理: ${fmt(b.reasoningOutputTokens)}`);
     }
     console.log();
@@ -118,17 +151,17 @@ async function runScan(date: string, isJson: boolean) {
 
 async function runReport(flags: Record<string, string | boolean>) {
   const config = await readConfig();
-  const range = parseReportRange(flags.range);
-  const report = await buildLocalReport(range, { projectAliases: config.projectAliases });
+
+  // 日期解析：--from/--start, --to/--end, --date, --today, --range, --lookback
+  const { dates, range } = resolveDateParams(flags, config);
+  const report = await buildLocalReport(range, { projectAliases: config.projectAliases, dates });
 
   if (flags.json) {
     console.log(JSON.stringify(report, null, 2));
     return;
   }
 
-  const lang = (typeof flags.lang === 'string' ? flags.lang : config.lang) || 'en';
-  if (lang !== 'en' && lang !== 'zh') throw new Error('--lang only supports en or zh');
-
+  const lang = resolveGlobalLang(flags, config);
   const emoji = flags['no-emoji'] === true ? false : (config.emoji ?? true);
   const detail = flags.detail === true;
 
@@ -228,22 +261,8 @@ async function runSync(flags: Record<string, string | boolean>) {
     ? [findTargetOrThrow(config, targetName)]
     : allTargets;
 
-  // ── 日期解析（保持现有逻辑不变） ──
-  const requestedDate = typeof flags.date === 'string' ? flags.date : undefined;
-  const fromDate = typeof flags.from === 'string' ? flags.from : undefined;
-  const toDate = typeof flags.to === 'string' ? flags.to : undefined;
-  let targetDates: string[];
-  if (requestedDate) {
-    targetDates = [requestedDate];
-  } else if (fromDate) {
-    targetDates = buildDateRange(fromDate, toDate ?? getTodayDate());
-  } else {
-    const lookbackDays = typeof flags.lookback === 'string'
-      ? parsePositiveInt(flags.lookback, '--lookback')
-      : defaultLookbackDays(config);
-    targetDates = getClosedDates(lookbackDays);
-    targetDates.push(getTodayDate());
-  }
+  // ── 日期解析 ──
+  const { dates: targetDates } = resolveDateParams(flags, config);
 
   // 扫描一次，所有 target 共享结果
   console.log(`扫描 ${targetDates.length} 天 (${targetDates[0]} ~ ${targetDates[targetDates.length - 1]}) ...`);
@@ -307,6 +326,114 @@ async function runSync(flags: Record<string, string | boolean>) {
     uploadedDays: allDays.map(day => day.usageDate),
     results: uploadResults,
   }, null, 2));
+}
+
+async function runImport(flags: Record<string, string | boolean>, positionals: string[] = []) {
+  const config = await readConfig();
+
+  const targetName = resolveOptionalString(flags.target, undefined);
+  const allTargets = config.targets ?? [];
+  if (allTargets.length === 0) throw new Error('未配置任何上报目标，请先执行 aiusage enroll');
+  const targets = targetName ? [findTargetOrThrow(config, targetName)] : allTargets;
+  const deviceId = resolveRequiredString(undefined, config.deviceId, '缺少 deviceId，请先执行 enroll');
+
+  // Detect mode: CSV files passed as positional args vs Admin API
+  const csvFiles = positionals.filter(p => p.endsWith('.csv'));
+
+  let allDays: Array<{ usageDate: string; breakdowns: import('@aiusage/shared').IngestBreakdown[] }>;
+
+  if (csvFiles.length > 0) {
+    // CSV mode: scan all provided files and determine date range from flags or auto-detect
+    console.log(`Importing from ${csvFiles.length} CSV file(s)...`);
+
+    // Build date range: if --start/--end specified use those, else scan all dates in files
+    const startDate = resolveOptionalString(flags.start, undefined);
+    const endDate = resolveOptionalString(flags.end, undefined);
+
+    // First pass: collect all dates present across all CSV files
+    let dateRange: string[];
+    if (startDate && endDate) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
+        throw new Error('Dates must be in YYYY-MM-DD format');
+      }
+      if (startDate > endDate) throw new Error('--start must be before --end');
+      dateRange = buildDateRange(startDate, endDate);
+    } else {
+      // Scan with a wide range covering all possible CSV dates (2020–2030)
+      dateRange = buildDateRange('2020-01-01', '2030-12-31');
+    }
+
+    const csvResults = await scanAnthropicCsvDates(dateRange, csvFiles);
+    allDays = dateRange
+      .map(date => ({ usageDate: date, breakdowns: csvResults.get(date) ?? [] }))
+      .filter(d => d.breakdowns.length > 0);
+
+    if (allDays.length === 0) {
+      console.log('No usage data found in the provided CSV files.');
+      return;
+    }
+    console.log(`Found data for ${allDays.length} days across CSV files.`);
+  } else {
+    // Admin API mode
+    const adminKey = resolveOptionalString(flags.key, config.anthropicAdminKey);
+    if (!adminKey) {
+      throw new Error(
+        'Provide CSV files or an Anthropic Admin API key.\n' +
+        '  CSV:  aiusage import /path/to/*.csv\n' +
+        '  API:  aiusage import --key sk-ant-admin... --start DATE --end DATE\n' +
+        '        aiusage config set anthropic-admin-key sk-ant-admin...\n' +
+        '  Download CSVs at: https://platform.claude.com/usage?date=YYYY-MM\n' +
+        '  Get Admin key at: console.anthropic.com → Settings → Admin Keys',
+      );
+    }
+
+    const startDate = resolveOptionalString(flags.start, undefined);
+    const endDate = resolveOptionalString(flags.end, undefined);
+    if (!startDate) throw new Error('--start DATE is required (e.g. --start 2025-11-01)');
+    if (!endDate) throw new Error('--end DATE is required (e.g. --end 2026-01-08)');
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
+      throw new Error('Dates must be in YYYY-MM-DD format');
+    }
+    if (startDate > endDate) throw new Error('--start must be before --end');
+
+    console.log(`Fetching Anthropic API usage: ${startDate} → ${endDate}`);
+
+    const dateRange = buildDateRange(startDate, endDate);
+    const apiResults = await scanAnthropicApiDates(dateRange, adminKey);
+
+    allDays = dateRange
+      .map(date => ({ usageDate: date, breakdowns: apiResults.get(date) ?? [] }))
+      .filter(d => d.breakdowns.length > 0);
+
+    if (allDays.length === 0) {
+      console.log('No usage data returned from Anthropic API for the specified range.');
+      return;
+    }
+    console.log(`Found data for ${allDays.length} days. Uploading...`);
+  }
+
+  for (const target of targets) {
+    if (!target.deviceToken) {
+      console.log(`Skipping "${target.name}": not enrolled (missing deviceToken)`);
+      continue;
+    }
+
+    const BATCH_SIZE = 30;
+    let totalProcessed = 0;
+
+    for (let i = 0; i < allDays.length; i += BATCH_SIZE) {
+      const batch = allDays.slice(i, i + BATCH_SIZE);
+      const response = await uploadDailyUsage(
+        target.apiBaseUrl,
+        { siteId: target.siteId, deviceId, deviceAlias: config.deviceAlias, deviceToken: target.deviceToken },
+        batch,
+      );
+      totalProcessed += response.daysProcessed;
+    }
+
+    console.log(`Uploaded ${totalProcessed} days to "${target.name}"`);
+  }
 }
 
 async function runInit(flags: Record<string, string | boolean>) {
@@ -397,23 +524,162 @@ async function runConfigSet(args: string[]) {
   console.log(JSON.stringify({ configPath: getConfigPath(), updated: keyPath }, null, 2));
 }
 
-function printHelp() {
-  const initialized = existsSync(getConfigPath());
+async function runProjectList(flags: Record<string, string | boolean> = {}) {
+  const config = await readConfig();
+  const lang = (typeof flags.lang === 'string' ? flags.lang : config.lang) || 'en';
+  const zh = lang === 'zh';
+  const projects = await discoverProjects(config.projectAliases);
+
+  if (projects.length === 0) {
+    console.log(zh ? '未发现任何项目。' : 'No projects found.');
+    return;
+  }
+
+  // 计算列宽（考虑全角字符占 2 个显示宽度）
+  const dw = (s: string) => [...s].reduce((w, c) => w + (c.charCodeAt(0) > 0x7f ? 2 : 1), 0);
+  const pad = (s: string, width: number) => s + ' '.repeat(Math.max(0, width - dw(s)));
+
+  const hName = zh ? '项目' : 'Project';
+  const hAlias = zh ? '别名' : 'Alias';
+  const hSource = zh ? '来源' : 'Source';
+
+  const nameWidth = Math.max(dw(hName), ...projects.map(p => dw(p.name)));
+  const aliasWidth = Math.max(dw(hAlias), ...projects.map(p => dw(p.alias ?? '-')));
+
+  console.log(pad(hName, nameWidth + 2) + pad(hAlias, aliasWidth + 2) + hSource);
+  console.log('-'.repeat(nameWidth + aliasWidth + 20));
+
+  // 在 . 前插入零宽空格，阻止终端将文本识别为 URL 并自动添加 <> 导致错位
+  const breakUrl = (s: string) => s.replace(/\./g, '\u200B.');
+
+  for (const p of projects) {
+    const line =
+      pad(p.name, nameWidth + 2) +
+      pad(p.alias ?? '-', aliasWidth + 2) +
+      p.sources.join(', ');
+    console.log(breakUrl(line));
+  }
+
+  console.log(`\n${zh ? '共' : 'Total:'} ${projects.length} ${zh ? '个项目' : 'projects'}`);
+}
+
+async function runProjectAlias(args: string[]) {
+  const config = await readConfig();
+  const zh = config.lang === 'zh';
+
+  if (args.length === 0) {
+    const aliases = config.projectAliases ?? {};
+    const entries = Object.entries(aliases);
+    if (entries.length === 0) {
+      console.log(zh ? '尚未设置任何项目别名。' : 'No project aliases configured.');
+      console.log(zh
+        ? '用法: aiusage project alias <项目名> <别名>'
+        : 'Usage: aiusage project alias <name> <alias>');
+      return;
+    }
+    for (const [from, to] of entries) {
+      console.log(`  ${from} → ${to}`);
+    }
+    return;
+  }
+
+  if (args[0] === '--remove') {
+    const name = args.slice(1).join(' ').trim();
+    if (!name) throw new Error(zh ? '请指定要移除别名的项目名' : 'Please specify the project name to remove');
+    const aliases = { ...(config.projectAliases ?? {}) };
+    if (!(name in aliases)) {
+      throw new Error(zh ? `项目 "${name}" 未设置别名` : `No alias set for "${name}"`);
+    }
+    delete aliases[name];
+    config.projectAliases = Object.keys(aliases).length > 0 ? aliases : undefined;
+    await writeConfig(config);
+    console.log(zh ? `已移除 "${name}" 的别名。` : `Removed alias for "${name}".`);
+    return;
+  }
+
+  if (args.length < 2) {
+    throw new Error(zh
+      ? '用法: aiusage project alias <项目名> <别名>'
+      : 'Usage: aiusage project alias <name> <alias>');
+  }
+
+  const name = args[0];
+  const alias = args.slice(1).join(' ').trim();
+  if (!alias) throw new Error(zh ? '别名不能为空' : 'Alias cannot be empty');
+
+  config.projectAliases = { ...(config.projectAliases ?? {}), [name]: alias };
+  await writeConfig(config);
+  console.log(zh ? `已设置: ${name} → ${alias}` : `Set: ${name} → ${alias}`);
+}
+
+function printHelp(zh = false) {
   console.log(`aiusage v${getVersion()}\n`);
-  console.log('Usage: aiusage <command>');
+  const cmds = zh ? [
+    ['scan [--date YYYY-MM-DD] [--json]',                    '扫描某日用量明细'],
+    ['report [--today] [--range 7d|1m|3m|all] [--detail] [--json]', '本地用量报告'],
+    ['sync [--today] [--range 7d|1m|3m|all]',                     '上传用量到服务端'],
+    ['report/sync --from YYYY-MM-DD [--to YYYY-MM-DD]',           '指定日期范围（--start/--end 同义）'],
+    ['project [list|alias]',                                  '项目管理与别名设置'],
+    ['schedule [on|off|status] [--every 5m]',                '定时同步管理'],
+    ['doctor',                                               '诊断检查'],
+    ['config set <key> <value>',                             '修改配置'],
+    ['init [--device-id ID] [--device-name NAME]',           '初始化本地配置'],
+    ['enroll --server URL --site-id ID --enroll-token TOKEN','注册设备到服务端'],
+    ['health [--server URL]',                                '测试服务端连通性'],
+  ] : [
+    ['scan [--date YYYY-MM-DD] [--json]',                    'Scan daily usage breakdown'],
+    ['report [--today] [--range 7d|1m|3m|all] [--detail] [--json]', 'Local usage report'],
+    ['sync [--today] [--range 7d|1m|3m|all]',                     'Upload usage to server'],
+    ['report/sync --from YYYY-MM-DD [--to YYYY-MM-DD]',           'Date range (--start/--end aliases)'],
+    ['project [list|alias]',                                 'Project management & aliases'],
+    ['schedule [on|off|status] [--every 5m]',                'Scheduled sync management'],
+    ['doctor',                                               'Run diagnostics'],
+    ['config set <key> <value>',                             'Update config'],
+    ['init [--device-id ID] [--device-name NAME]',           'Initialize local config'],
+    ['enroll --server URL --site-id ID --enroll-token TOKEN','Register device with server'],
+    ['health [--server URL]',                                'Test server connectivity'],
+  ];
+
+  const dw = (s: string) => [...s].reduce((w, c) => w + (c.charCodeAt(0) > 0x7f ? 2 : 1), 0);
+  const pad = (s: string, width: number) => s + ' '.repeat(Math.max(0, width - dw(s)));
+  const maxCmd = Math.max(...cmds.map(c => dw(c[0])));
+  console.log(zh ? '命令:' : 'Commands:');
+  for (const [cmd, desc] of cmds) {
+    console.log(`  ${pad(cmd, maxCmd + 2)} ${desc}`);
+  }
   console.log('');
-  console.log('Commands:');
-  console.log('  aiusage init [--device-id ID] [--device-name NAME] [--lookback N]');
-  console.log('  aiusage enroll --server URL --site-id ID --enroll-token TOKEN [--target NAME]');
-  console.log('  aiusage sync [--target NAME] [--date YYYY-MM-DD] [--from YYYY-MM-DD [--to YYYY-MM-DD]] [--lookback N] [--today]');
-  console.log('  aiusage health [--target NAME] [--server URL]');
-  console.log('  aiusage scan [--date YYYY-MM-DD] [--json]');
-  console.log('  aiusage report [--range 7d|1m|3m|all] [--detail] [--lang en|zh] [--no-emoji] [--json]');
-  console.log('  aiusage schedule [on|off|status] [--every 5m]');
-  console.log('  aiusage doctor');
-  console.log('  aiusage config set <key> <value...>');
+  console.log(`${zh ? '配置文件' : 'Config'}: ${getConfigPath()}`);
+}
+
+function printUsageHint(zh = false) {
+  console.log(`aiusage v${getVersion()}\n`);
+  const cmds = zh ? [
+    ['scan [--date YYYY-MM-DD]',              '扫描某日用量明细'],
+    ['report [--today] [--range 7d|1m|3m|all]', '本地用量报告'],
+    ['sync [--today] [--range 7d|1m|3m|all]',  '上传用量到服务端'],
+    ['project [list|alias]',                  '项目管理与别名设置'],
+    ['schedule [on|off|status]',              '定时同步管理'],
+    ['doctor',                                '诊断检查'],
+    ['config set <key> <value>',              '修改配置'],
+  ] : [
+    ['scan [--date YYYY-MM-DD]',              'Scan daily usage breakdown'],
+    ['report [--today] [--range 7d|1m|3m|all]', 'Local usage report'],
+    ['sync [--today] [--range 7d|1m|3m|all]',  'Upload usage to server'],
+    ['project [list|alias]',                  'Project management & aliases'],
+    ['schedule [on|off|status]',              'Scheduled sync management'],
+    ['doctor',                                'Run diagnostics'],
+    ['config set <key> <value>',              'Update config'],
+  ];
+
+  const dw2 = (s: string) => [...s].reduce((w, c) => w + (c.charCodeAt(0) > 0x7f ? 2 : 1), 0);
+  const pad2 = (s: string, width: number) => s + ' '.repeat(Math.max(0, width - dw2(s)));
+  const maxCmd2 = Math.max(...cmds.map(c => dw2(c[0])));
+  console.log(zh ? '常用命令:' : 'Commands:');
+  for (const [cmd, desc] of cmds) {
+    console.log(`  ${pad2(cmd, maxCmd2 + 2)} ${desc}`);
+  }
   console.log('');
-  console.log(`配置文件: ${getConfigPath()}${initialized ? '' : ' (尚未初始化)'}`);
+  console.log(`${zh ? '配置文件' : 'Config'}: ${getConfigPath()}`);
 }
 
 function parseArgs(args: string[]): { flags: Record<string, string | boolean>; positionals: string[] } {
@@ -448,14 +714,65 @@ function parseArgs(args: string[]): { flags: Record<string, string | boolean>; p
   return { flags, positionals };
 }
 
+function localDateKey(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 function getYesterdayDate(): string {
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
-  return yesterday.toISOString().split('T')[0];
+  return localDateKey(yesterday);
+}
+
+// ── 通用日期/语言参数解析 ──
+
+interface DateParams {
+  dates?: string[];
+  range: import('./report.js').ReportRange;
+}
+
+function resolveDateParams(flags: Record<string, string | boolean>, config: { lookbackDays?: number }): DateParams {
+  const requestedDate = typeof flags.date === 'string' ? flags.date : undefined;
+  // --from/--start 和 --to/--end 互为别名
+  const fromDate = typeof flags.from === 'string' ? flags.from : typeof flags.start === 'string' ? flags.start : undefined;
+  const toDate = typeof flags.to === 'string' ? flags.to : typeof flags.end === 'string' ? flags.end : undefined;
+
+  if (requestedDate) {
+    return { dates: [requestedDate], range: 'today' };
+  }
+  if (fromDate) {
+    return { dates: buildDateRange(fromDate, toDate ?? getTodayDate()), range: 'all' };
+  }
+  if (flags.today === true) {
+    return { dates: [getTodayDate()], range: 'today' };
+  }
+  // --range 优先（report 惯用）
+  const rangeFlag = flags.range;
+  if (typeof rangeFlag === 'string') {
+    return { range: parseReportRange(rangeFlag) };
+  }
+  // --lookback
+  if (typeof flags.lookback === 'string') {
+    const lookbackDays = parsePositiveInt(flags.lookback, '--lookback');
+    const dates = getClosedDates(lookbackDays);
+    dates.push(getTodayDate());
+    return { dates, range: '7d' };
+  }
+  // 默认：最近 7 天 + 今天
+  const lookbackDays = defaultLookbackDays(config);
+  const dates = getClosedDates(lookbackDays);
+  dates.push(getTodayDate());
+  return { dates, range: '7d' };
+}
+
+function resolveGlobalLang(flags: Record<string, string | boolean>, config: { lang?: string }): 'en' | 'zh' {
+  const lang = (typeof flags.lang === 'string' ? flags.lang : config.lang) || 'en';
+  if (lang !== 'en' && lang !== 'zh') throw new Error('--lang only supports en or zh');
+  return lang;
 }
 
 function getTodayDate(): string {
-  return new Date().toISOString().split('T')[0];
+  return localDateKey(new Date());
 }
 
 function buildDateRange(from: string, to: string): string[] {
@@ -482,7 +799,7 @@ function getClosedDates(lookbackDays: number): string[] {
   for (let offset = lookbackDays; offset >= 1; offset -= 1) {
     const day = new Date();
     day.setDate(day.getDate() - offset);
-    dates.push(day.toISOString().split('T')[0]);
+    dates.push(localDateKey(day));
   }
   return dates;
 }

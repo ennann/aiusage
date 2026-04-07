@@ -21,6 +21,9 @@ import { TokenCompositionChart } from './components/token-composition-chart';
 import { FlowChart } from './components/flow-chart';
 import { DonutSection } from './components/donut-section';
 import { ActivityHeatmap } from './components/activity-heatmap';
+import { buildActivityHeatmapData } from './utils/activity-heatmap-data';
+import { HeaderLogo, FooterLogo, useFaviconFromLogo } from './components/site-logo';
+import { SITE_TITLE } from './site-config';
 
 // ────────────────────────────────────────
 // Constants
@@ -68,7 +71,7 @@ function ThemeToggle({ value, onChange, locale }: { value: ThemeMode; onChange: 
             aria-label={o.value}
           >
             <Icon className="h-3.5 w-3.5" />
-            <span>{THEME_LABELS[o.value][locale]}</span>
+            <span className="hidden sm:inline">{THEME_LABELS[o.value][locale]}</span>
           </button>
         );
       })}
@@ -135,36 +138,109 @@ function FilterTabs({
   options,
   onChange,
   allLabel = 'All',
+  tooltips,
 }: {
   value: string;
   options: FacetOption[];
   onChange: (v: string) => void;
   allLabel?: string;
+  tooltips?: Record<string, string>;
 }) {
   if (!options.length) return null;
   const activeClass = 'bg-white text-slate-900 shadow-sm dark:bg-[#222222] dark:text-slate-300';
   const inactiveClass = 'text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300';
   return (
-    <div className="inline-flex items-center rounded-lg bg-slate-100/80 p-0.5 dark:bg-[#1a1a1a]/80">
+    <div className="inline-flex items-center rounded-lg bg-slate-100/80 p-0.5 dark:bg-[#1a1a1a]/80 flex-nowrap">
       <button
         onClick={() => onChange('')}
-        className={`rounded-md px-2.5 py-1.5 text-[12px] font-medium transition-all duration-150 ${
+        className={`shrink-0 rounded-md px-2.5 py-1.5 text-[12px] font-medium whitespace-nowrap transition-all duration-150 ${
           !value ? activeClass : inactiveClass
         }`}
       >
         {allLabel}
       </button>
-      {options.map((o) => (
-        <button
-          key={o.value}
-          onClick={() => onChange(o.value === value ? '' : o.value)}
-          className={`rounded-md px-2.5 py-1.5 text-[12px] font-medium transition-all duration-150 ${
-            value === o.value ? activeClass : inactiveClass
-          }`}
-        >
-          {formatProductLabel(o.label)}
-        </button>
-      ))}
+      {options.map((o) => {
+        const tip = tooltips?.[o.value];
+        return (
+          <span key={o.value} className={tip ? 'group relative' : ''}>
+            <button
+              onClick={() => onChange(o.value === value ? '' : o.value)}
+              className={`shrink-0 rounded-md px-2.5 py-1.5 text-[12px] font-medium whitespace-nowrap transition-all duration-150 ${
+                value === o.value ? activeClass : inactiveClass
+              }`}
+            >
+              {formatProductLabel(o.label)}
+            </button>
+            {tip && (
+              <span className="pointer-events-none absolute left-1/2 top-full z-50 mt-2 w-64 -translate-x-1/2 rounded-lg bg-slate-800 px-3 py-2 text-[11px] leading-relaxed text-slate-200 opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 dark:bg-slate-700">
+                {tip}
+              </span>
+            )}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+function FilterChips({
+  label,
+  value,
+  options,
+  onChange,
+  allLabel = 'All',
+  tooltips,
+}: {
+  label: string;
+  value: string;
+  options: FacetOption[];
+  onChange: (v: string) => void;
+  allLabel?: string;
+  tooltips?: Record<string, string>;
+}) {
+  if (!options.length) return null;
+  const active = 'bg-slate-900 text-white dark:bg-slate-200 dark:text-slate-900';
+  const inactive = 'bg-white text-slate-500 border border-slate-200 dark:bg-[#1a1a1a] dark:text-slate-400 dark:border-white/10';
+  return (
+    <div className="flex items-center gap-2 min-w-0">
+      {label && <span className="shrink-0 text-[12px] font-medium text-slate-400 dark:text-slate-500">{label}</span>}
+      <div className="relative min-w-0 flex-1">
+        <div className="overflow-x-auto scrollbar-hide">
+          <div className="flex gap-1.5 w-max pr-4">
+            {allLabel && (
+              <button
+                onClick={() => onChange('')}
+                className={`shrink-0 rounded-full px-3 py-1 text-[12px] font-medium whitespace-nowrap transition-all duration-150 ${
+                  !value ? active : inactive
+                }`}
+              >
+                {allLabel}
+              </button>
+            )}
+            {options.map((o) => {
+              const tip = tooltips?.[o.value];
+              return (
+                <span key={o.value} className={tip ? 'group relative' : ''}>
+                  <button
+                    onClick={() => onChange(o.value === value ? '' : o.value)}
+                    className={`shrink-0 rounded-full px-3 py-1 text-[12px] font-medium whitespace-nowrap transition-all duration-150 ${
+                      value === o.value ? active : inactive
+                    }`}
+                  >
+                    {formatProductLabel(o.label)}
+                  </button>
+                  {tip && (
+                    <span className="pointer-events-none absolute left-1/2 top-full z-50 mt-2 w-64 -translate-x-1/2 rounded-lg bg-slate-800 px-3 py-2 text-[11px] leading-relaxed text-slate-200 opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 dark:bg-slate-700">
+                      {tip}
+                    </span>
+                  )}
+                </span>
+              );
+            })}
+          </div>
+        </div>
+        <div className="pointer-events-none absolute inset-y-0 right-0 w-6 bg-gradient-to-l from-[#fafafa] dark:from-[#0a0a0a]" />
+      </div>
     </div>
   );
 }
@@ -178,10 +254,29 @@ export function App() {
     range: '30d', deviceId: '', product: '',
   });
 
-  const { overview, health, kpis, fOpts, loading, error, isDemo, refresh } = useOverview(filters);
+  const {
+    overview,
+    health,
+    kpis,
+    metricAvailability,
+    fOpts,
+    loading,
+    error,
+    isDemo,
+    refresh,
+  } = useOverview(filters);
   useFetchCnyRate();
   useCurrencyStore(); // subscribe to re-render on toggle
+  useFaviconFromLogo();
   const isDark = useIsDark();
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 640);
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 639px)');
+    const h = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mq.addEventListener('change', h);
+    return () => mq.removeEventListener('change', h);
+  }, []);
+
 
   // Theme
   const [theme, setThemeState] = useState<ThemeMode>(getStoredTheme);
@@ -203,6 +298,10 @@ export function App() {
     try { localStorage.setItem('aiusage-locale', l); } catch {}
   }, []);
   const t: T = I18N[locale];
+  // Sync document title
+  useEffect(() => {
+    document.title = SITE_TITLE;
+  }, []);
 
   // Token legend (locale-aware)
   const tokenLegendLabels: Record<string, keyof T> = {
@@ -219,20 +318,26 @@ export function App() {
       value: formatCompact(arrSum(tc.map((d) => Number(d[s.key] || 0))), locale),
     }));
   }, [overview, t, locale, isDark]);
+  const unavailable = metricAvailability.tokenMetricsUnavailable;
+  const activityHeatmap = useMemo(() => buildActivityHeatmapData({
+    heatmap: overview?.heatmap ?? [],
+    dailyTrend: overview?.dailyTrend ?? [],
+    tokenMetricsUnavailable: unavailable,
+  }), [overview, unavailable]);
 
   return (
-    <main className="mx-auto max-w-[1200px] px-4 pb-16 sm:px-6 lg:px-8">
+    <main className="mx-auto w-full max-w-[1200px] px-4 pb-16 sm:px-6 lg:px-8">
 
       {/* ── Header ── */}
       <header className="fade-up relative z-20 py-6 sm:py-8">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <h1 className="flex items-center gap-2 text-[22px] font-semibold tracking-tight text-slate-900 dark:text-slate-300">
-            <svg viewBox="0 0 200 160" fill="none" className="h-7 w-7" aria-hidden="true">
-              <path d="M22 112 C30 112 38 90 44 82 C50 74 54 78 58 88 C62 98 64 116 70 120 C76 124 80 108 86 84 C92 60 96 22 104 16 C112 10 116 36 120 64 C124 92 126 138 134 140 C142 142 146 108 152 72 C158 36 162 14 168 16 C174 18 178 50 182 68" stroke="currentColor" strokeWidth="20" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-            AI Usage
+        <div className="flex flex-wrap items-center justify-between gap-y-2">
+          <h1 className="flex items-center gap-2 text-[18px] sm:text-[22px] font-semibold tracking-tight text-slate-900 dark:text-slate-300">
+            <a href="https://hubeiqiao.com" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 transition-opacity hover:opacity-70">
+              <img src="/avatar.png" alt="Joe" className="h-7 w-7 rounded-full" />
+              Joe's AI Usage
+            </a>
           </h1>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 ml-auto">
             <ThemeToggle value={theme} onChange={setTheme} locale={locale} />
             <LangToggle value={locale} onChange={setLocale} />
             <button
@@ -247,8 +352,8 @@ export function App() {
 
       </header>
 
-        {/* ── Range + Filters ── */}
-        <div className="mt-2 mb-6 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-4 sm:gap-y-2">
+        {/* ── Range + Filters (desktop) ── */}
+        <div className="mt-2 mb-6 hidden sm:flex sm:flex-wrap sm:items-center sm:gap-x-4 sm:gap-y-2">
           <div className="flex items-center gap-2">
             <SegmentedControl
               value={filters.range === 'month' ? '' : filters.range}
@@ -268,29 +373,56 @@ export function App() {
           </div>
           {overview && fOpts.products.length > 1 && (
             <>
-              <div className="hidden h-5 w-px bg-slate-200 dark:bg-[#222222] sm:block" />
-              <div className="overflow-x-auto">
-                <FilterTabs
-                  value={filters.product}
-                  options={fOpts.products}
-                  allLabel={t.all}
-                  onChange={(v) => setFilters((f) => ({ ...f, product: v }))}
-                />
-              </div>
+              <div className="h-5 w-px bg-slate-200 dark:bg-[#222222]" />
+              <FilterTabs
+                value={filters.product}
+                options={fOpts.products}
+                allLabel={t.all}
+                onChange={(v) => setFilters((f) => ({ ...f, product: v }))}
+                tooltips={{ 'claude-code': t.claudeCodeDataNotice }}
+              />
             </>
           )}
           {overview && fOpts.devices.length >= 1 && (
             <>
-              <div className="hidden h-5 w-px bg-slate-200 dark:bg-[#222222] sm:block" />
-              <div className="overflow-x-auto">
-                <FilterTabs
-                  value={filters.deviceId}
-                  options={fOpts.devices}
-                  allLabel={t.all}
-                  onChange={(v) => setFilters((f) => ({ ...f, deviceId: v }))}
-                />
-              </div>
+              <div className="h-5 w-px bg-slate-200 dark:bg-[#222222]" />
+              <FilterTabs
+                value={filters.deviceId}
+                options={fOpts.devices}
+                allLabel={t.all}
+                onChange={(v) => setFilters((f) => ({ ...f, deviceId: v }))}
+              />
             </>
+          )}
+        </div>
+
+        {/* ── Filters (mobile) ── */}
+        <div className="mt-1 mb-5 flex flex-col gap-3 sm:hidden">
+          <FilterChips
+            label=""
+            value={filters.range}
+            options={[...getRanges(t), { value: 'month', label: t.thisMonth }].map((r) => ({ value: r.value, label: r.label, eventCount: 0, estimatedCostUsd: 0 }))}
+            allLabel=""
+            onChange={(v) => setFilters((f) => ({ ...f, range: v || '30d' }))}
+          />
+          {overview && fOpts.products.length > 1 && (
+            <FilterChips
+              label=""
+              value={filters.product}
+              options={fOpts.products}
+              allLabel={t.all}
+              onChange={(v) => setFilters((f) => ({ ...f, product: v }))}
+              tooltips={{ 'claude-code': t.claudeCodeDataNotice }}
+            />
+          )}
+          {overview && fOpts.devices.length >= 1 && (
+            <FilterChips
+              label=""
+              value={filters.deviceId}
+              options={fOpts.devices}
+              allLabel={t.all}
+              onChange={(v) => setFilters((f) => ({ ...f, deviceId: v }))}
+            />
           )}
         </div>
 
@@ -330,19 +462,22 @@ export function App() {
             style={{ animationDelay: '50ms' }}
           >
             <div className="card col-span-2 sm:col-span-1">
-              <CostKpiCard label={t.estimatedCost} value={formatUsd(overview?.totalCostUsd ?? 0)} />
+              <CostKpiCard
+                label={t.estimatedCost}
+                value={unavailable ? t.unavailable : formatUsd(overview?.totalCostUsd ?? 0)}
+              />
             </div>
             <div className="card">
-              <KpiCard label={t.totalTokens} value={formatCompact(kpis?.totalTokens ?? 0, locale)} />
+              <KpiCard label={t.totalTokens} value={unavailable ? t.unavailable : formatCompact(kpis?.totalTokens ?? 0, locale)} />
             </div>
             <div className="card">
-              <KpiCard label={t.inputTokens} value={formatCompact(kpis?.inputTokens ?? 0, locale)} />
+              <KpiCard label={t.inputTokens} value={unavailable ? t.unavailable : formatCompact(kpis?.inputTokens ?? 0, locale)} />
             </div>
             <div className="card">
-              <KpiCard label={t.outputTokens} value={formatCompact(kpis?.outputTokens ?? 0, locale)} />
+              <KpiCard label={t.outputTokens} value={unavailable ? t.unavailable : formatCompact(kpis?.outputTokens ?? 0, locale)} />
             </div>
             <div className="card">
-              <KpiCard label={t.cachedTokens} value={formatCompact(kpis?.cachedTokens ?? 0, locale)} />
+              <KpiCard label={t.cachedTokens} value={unavailable ? t.unavailable : formatCompact(kpis?.cachedTokens ?? 0, locale)} />
             </div>
           </div>
 
@@ -359,97 +494,131 @@ export function App() {
               />
             </div>
             <div className="card">
-              <KpiCard label={t.sessions} value={formatNumber(overview?.totalEvents ?? 0)} />
+              <KpiCard
+                label={t.sessions}
+                value={formatNumber((overview?.totalSessions ?? 0) > 0 ? overview!.totalSessions : (overview?.totalEvents ?? 0))}
+                suffix={(overview?.totalSessions ?? 0) > 0 && overview!.totalSessions !== overview!.totalEvents ? ` / ${formatNumber(overview!.totalEvents)}` : undefined}
+              />
             </div>
             <div className="card">
-              <KpiCard label={t.costPerSession} value={formatUsd(kpis?.costPerSession ?? 0)} />
+              <KpiCard label={t.costPerSession} value={unavailable ? t.unavailable : formatUsd(kpis?.costPerSession ?? 0)} />
             </div>
             <div className="card">
-              <KpiCard label={t.avgDailyCost} value={formatUsd(overview?.averageDailyCostUsd ?? 0)} />
+              <KpiCard label={t.avgDailyCost} value={unavailable ? t.unavailable : formatUsd(overview?.averageDailyCostUsd ?? 0)} />
             </div>
             <div className="card">
-              <KpiCard label={t.cacheHitRate} value={formatPercent(kpis?.cacheHitRate ?? 0)} />
+              <KpiCard label={t.cacheHitRate} value={unavailable ? t.unavailable : formatPercent(kpis?.cacheHitRate ?? 0)} />
             </div>
           </div>
+
+          {unavailable && (
+            <div className="fade-up rounded-xl border border-amber-200/80 bg-amber-50/70 px-4 py-3 text-[13px] text-amber-900 dark:border-amber-950/60 dark:bg-amber-950/20 dark:text-amber-200">
+              <span className="font-medium">{t.eventOnlySource}.</span> {t.eventOnlyNotice}
+            </div>
+          )}
 
           {/* ── Activity Heatmap ── */}
           <div className="card fade-up p-6" style={{ animationDelay: '120ms' }}>
             <SectionHeader title={locale === 'zh' ? '年度活跃热力图' : 'Activity Heatmap'} />
-            <ActivityHeatmap days={overview?.heatmap ?? []} />
+            <ActivityHeatmap days={activityHeatmap.days} metricLabel={activityHeatmap.metricLabel} />
           </div>
 
           {/* ── Cost Trend ── */}
           <div className="card fade-up p-6" style={{ animationDelay: '150ms' }}>
-            <SectionHeader title={t.costTrend} stat={formatUsd(overview?.totalCostUsd ?? 0)} />
-            <ChartBoundary name="Cost Trend">
-              <CostTrendChart
-                data={overview?.dailyTrend ?? []}
-                providerTrend={overview?.providerDailyTrend ?? []}
-              />
-            </ChartBoundary>
+            <SectionHeader title={t.costTrend} stat={unavailable ? t.unavailable : formatUsd(overview?.totalCostUsd ?? 0)} />
+            {unavailable ? (
+              <EmptyState label={t.costUnavailable} />
+            ) : (
+              <ChartBoundary name="Cost Trend">
+                <CostTrendChart
+                  data={overview?.dailyTrend ?? []}
+                  providerTrend={overview?.providerDailyTrend ?? []}
+                />
+              </ChartBoundary>
+            )}
           </div>
 
           {/* ── Token Trend ── */}
           <div className="card fade-up p-6" style={{ animationDelay: '200ms' }}>
-            <SectionHeader title={t.tokenTrend} stat={formatCompact(kpis?.totalTokens ?? 0, locale)} />
-            <ChartBoundary name="Token Trend">
-              <TokenTrendChart data={overview?.tokenComposition ?? []} locale={locale} />
-            </ChartBoundary>
-            <ChartLegend items={tokenLegend} />
+            <SectionHeader title={t.tokenTrend} stat={unavailable ? t.unavailable : formatCompact(kpis?.totalTokens ?? 0, locale)} />
+            {unavailable ? (
+              <EmptyState label={t.tokenUnavailable} />
+            ) : (
+              <>
+                <ChartBoundary name="Token Trend">
+                  <TokenTrendChart data={overview?.tokenComposition ?? []} locale={locale} />
+                </ChartBoundary>
+                <ChartLegend items={tokenLegend} />
+              </>
+            )}
           </div>
 
           {/* ── Token Composition ── */}
           <div className="card fade-up p-6" style={{ animationDelay: '250ms' }}>
-            <SectionHeader title={t.tokenComposition} />
-            <ChartBoundary name="Token Composition">
-              <TokenCompositionChart data={overview?.tokenComposition ?? []} locale={locale} />
-            </ChartBoundary>
-            <ChartLegend items={tokenLegend} />
+            <SectionHeader title={t.tokenComposition} stat={unavailable ? t.unavailable : undefined} />
+            {unavailable ? (
+              <EmptyState label={t.tokenUnavailable} />
+            ) : (
+              <>
+                <ChartBoundary name="Token Composition">
+                  <TokenCompositionChart data={overview?.tokenComposition ?? []} locale={locale} />
+                </ChartBoundary>
+                <ChartLegend items={tokenLegend} />
+              </>
+            )}
           </div>
 
           {/* ── Flow & Share ── */}
           <div className="fade-up grid gap-4 lg:grid-cols-5" style={{ animationDelay: '300ms' }}>
             <div className="card p-6 lg:col-span-3">
               <SectionHeader title={t.tokenFlow} />
-              <ChartBoundary name="Token Flow">
-                <FlowChart data={overview?.sankey} />
-              </ChartBoundary>
+              {unavailable ? (
+                <EmptyState label={t.tokenUnavailable} />
+              ) : (
+                <ChartBoundary name="Token Flow">
+                  <FlowChart data={overview?.sankey} />
+                </ChartBoundary>
+              )}
             </div>
             <div className="card flex flex-col p-6 lg:col-span-2">
-              <ChartBoundary name="Share">
-                <div className="flex flex-1 flex-col">
-                  <DonutSection
-                    title={t.providerShare}
-                    data={(overview?.filters.options.providers ?? []).map((p) => ({
-                      value: p.value,
-                      label: providerLabel(p.value),
-                      estimatedCostUsd: p.estimatedCostUsd,
-                      eventCount: p.eventCount,
-                    }))}
-                    colors={getChartColors(isDark)}
-                    centerLabel={formatUsd(overview?.totalCostUsd ?? 0)}
-                  />
-                  <div className="my-5 border-t border-slate-100 dark:border-white/[0.08]" />
-                  <DonutSection
-                    title={t.modelShare}
-                    data={(overview?.modelCostShare ?? []).map((m) => ({ ...m, label: formatModelName(m.label) }))}
-                    colors={getChartColors(isDark)}
-                    centerLabel={formatUsd(overview?.totalCostUsd ?? 0)}
-                  />
-                  <div className="my-5 border-t border-slate-100 dark:border-white/[0.08]" />
-                  <DonutSection
-                    title={t.deviceShare}
-                    data={(overview?.filters.options.devices ?? []).map((d) => ({
-                      value: d.value,
-                      label: d.label,
-                      estimatedCostUsd: d.estimatedCostUsd,
-                      eventCount: d.eventCount,
-                    }))}
-                    colors={getChartColors(isDark)}
-                    centerLabel={formatUsd(overview?.totalCostUsd ?? 0)}
-                  />
-                </div>
-              </ChartBoundary>
+              {unavailable ? (
+                <EmptyState label={t.shareUnavailable} />
+              ) : (
+                <ChartBoundary name="Share">
+                  <div className="flex flex-1 flex-col">
+                    <DonutSection
+                      title={t.providerShare}
+                      data={(overview?.filters.options.providers ?? []).map((p) => ({
+                        value: p.value,
+                        label: providerLabel(p.value),
+                        estimatedCostUsd: p.estimatedCostUsd,
+                        eventCount: p.eventCount,
+                      }))}
+                      colors={getChartColors(isDark)}
+                      centerLabel={formatUsd(overview?.totalCostUsd ?? 0)}
+                    />
+                    <div className="my-5 border-t border-slate-100 dark:border-white/[0.08]" />
+                    <DonutSection
+                      title={t.modelShare}
+                      data={(overview?.modelCostShare ?? []).map((m) => ({ ...m, label: formatModelName(m.label, isMobile) }))}
+                      colors={getChartColors(isDark)}
+                      centerLabel={formatUsd(overview?.totalCostUsd ?? 0)}
+                    />
+                    <div className="my-5 border-t border-slate-100 dark:border-white/[0.08]" />
+                    <DonutSection
+                      title={t.deviceShare}
+                      data={(overview?.filters.options.devices ?? []).map((d) => ({
+                        value: d.value,
+                        label: d.label,
+                        estimatedCostUsd: d.estimatedCostUsd,
+                        eventCount: d.eventCount,
+                      }))}
+                      colors={getChartColors(isDark)}
+                      centerLabel={formatUsd(overview?.totalCostUsd ?? 0)}
+                    />
+                  </div>
+                </ChartBoundary>
+              )}
             </div>
           </div>
 
@@ -460,55 +629,56 @@ export function App() {
       <footer className="fade-up mt-16 border-t border-slate-100 dark:border-white/[0.08] pb-10 pt-8">
         <div className="flex flex-col items-center gap-4">
           <div className="flex items-center gap-3 text-[12px] text-slate-400 dark:text-slate-500">
-            <span className="flex items-center gap-1.5 font-medium text-slate-500 dark:text-slate-400">
-              <svg viewBox="0 0 200 160" fill="none" className="h-3.5 w-3.5" aria-hidden="true">
-                <path d="M22 112 C30 112 38 90 44 82 C50 74 54 78 58 88 C62 98 64 116 70 120 C76 124 80 108 86 84 C92 60 96 22 104 16 C112 10 116 36 120 64 C124 92 126 138 134 140 C142 142 146 108 152 72 C158 36 162 14 168 16 C174 18 178 50 182 68" stroke="currentColor" strokeWidth="20" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-              AI Usage
-            </span>
+            <a href="https://hubeiqiao.com" target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 font-medium text-slate-500 transition-opacity hover:opacity-70 dark:text-slate-400">
+              <img src="/avatar.png" alt="Joe" className="h-3.5 w-3.5 rounded-full" />
+              Joe's AI Usage
+            </a>
             {health?.version && (
               <span className="rounded-full bg-slate-100 dark:bg-[#1a1a1a] px-2 py-0.5 text-[10px] font-medium text-slate-400 dark:text-slate-500">
                 v{health.version}
               </span>
             )}
           </div>
-          <div className="flex items-center gap-4 text-[11px] text-slate-300 dark:text-slate-600">
-            <a
-              href="https://github.com/ennann/aiusage"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1.5 text-slate-400 transition-colors hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300"
-            >
-              <Github className="h-3.5 w-3.5" />
-              <span>GitHub</span>
-            </a>
-            <span className="h-3 w-px bg-slate-200 dark:bg-[#222222]" />
-            <a
-              href="/pricing"
-              className="text-slate-400 transition-colors hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300"
-            >
-              {t.pricing}
-            </a>
-            <span className="h-3 w-px bg-slate-200 dark:bg-[#222222]" />
-            <a
-              href="/embed/docs"
-              className="text-slate-400 transition-colors hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300"
-            >
-              {t.embedWidgets}
-            </a>
-            <span className="h-3 w-px bg-slate-200 dark:bg-[#222222]" />
-            <span className="flex items-center gap-1">
-              Made with <Heart className="h-3 w-3 fill-red-300 text-red-300" /> by{' '}
+          <div className="flex flex-wrap justify-center gap-x-4 gap-y-2 text-[11px] text-slate-300 dark:text-slate-600">
+            <div className="flex items-center gap-4">
               <a
-                href="https://x.com/qingnianxiaozhe"
+                href="/pricing"
+                className="text-slate-400 transition-colors hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300"
+              >
+                {t.pricing}
+              </a>
+              <span className="h-3 w-px bg-slate-200 dark:bg-[#222222]" />
+              <a
+                href="/embed/docs"
+                className="text-slate-400 transition-colors hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300"
+              >
+                {t.embedWidgets}
+              </a>
+            </div>
+            <div className="flex items-center gap-4">
+              <a
+                href="https://github.com/ennann/aiusage"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-1 text-slate-400 transition-colors hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300"
+                className="flex items-center gap-1.5 text-slate-400 transition-colors hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300"
               >
-                <svg className="h-3 w-3" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" /></svg>
-                qingnianxiaozhe
+                <Github className="h-3.5 w-3.5" />
+                <span>GitHub</span>
               </a>
-            </span>
+              <span className="h-3 w-px bg-slate-200 dark:bg-[#222222]" />
+              <span className="flex items-center gap-1">
+                Made with <Heart className="h-3 w-3 fill-red-300 text-red-300" /> by{' '}
+                <a
+                  href="https://x.com/qingnianxiaozhe"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 text-slate-400 transition-colors hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300"
+                >
+                  <svg className="h-3 w-3" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" /></svg>
+                  qingnianxiaozhe
+                </a>
+              </span>
+            </div>
           </div>
         </div>
       </footer>
