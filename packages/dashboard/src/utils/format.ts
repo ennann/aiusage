@@ -50,7 +50,7 @@ export function formatModelName(raw: string, compact = false): string {
 export function shortDate(v: string): string { return v.slice(5); }
 
 export function longDate(v: string): string {
-  const d = new Date(v);
+  const d = new Date(v + 'T00:00:00');
   return Number.isNaN(d.getTime())
     ? v
     : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
