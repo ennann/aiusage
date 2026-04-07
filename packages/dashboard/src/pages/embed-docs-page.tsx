@@ -135,7 +135,7 @@ function getParamsTable(locale: Locale) {
     { name: 'items', values: '0,1,2,...', default: isZh ? '全部' : 'all', desc: isZh ? '仅显示指定索引的子项（逗号分隔）' : 'Show only specified sub-items by index (comma-separated)', required: false },
     { name: 'range', values: '7d, 30d, 90d, month, all', default: '30d', desc: isZh ? '数据时间范围' : 'Data time range', required: false },
     { name: 'theme', values: 'light, dark, auto', default: 'auto', desc: isZh ? '颜色主题' : 'Color theme', required: false },
-    { name: 'transparent', values: '0, 1', default: '0', desc: isZh ? '启用透明背景' : 'Enable transparent background', required: false },
+    { name: 'transparent', values: '0, 1, true', default: '0', desc: isZh ? '启用透明背景' : 'Enable transparent background', required: false },
     { name: 'locale', values: 'en, zh', default: 'en', desc: isZh ? '界面语言' : 'Interface language', required: false },
     { name: 'deviceId', values: isZh ? '设备标识' : 'device identifier', default: '-', desc: isZh ? '仅显示指定设备的数据' : 'Show data for a specific device only', required: false },
     { name: 'product', values: isZh ? '产品标识' : 'product identifier', default: '-', desc: isZh ? '仅显示指定产品的数据' : 'Show data for a specific product only', required: false },
