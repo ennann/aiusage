@@ -32,7 +32,7 @@ interface ProviderBrand {
 
 const PROVIDER_BRANDS: Record<string, ProviderBrand> = {
   anthropic: { color: '#D97757' },
-  openai: { color: '#10A37F' },
+  openai: { color: '#171717', darkColor: '#e6edf3' },
   google: { color: '#4285F4' },
   github: { color: '#24292F', darkColor: '#e6edf3' },
   sourcegraph: { color: '#FF5543' },
@@ -46,8 +46,8 @@ const PROVIDER_ORDER = ['anthropic', 'openai', 'google', 'github', 'sourcegraph'
 
 function AnthropicLogo({ className }: { className?: string }) {
   return (
-    <svg viewBox="0 0 256 256" fill="currentColor" className={className}>
-      <path d="M147.48 36h-39L18 220h39.6l17.52-37.44h105.48L198.72 220h39.6L147.48 36zm-30.48 115.2L145.44 76.8l28.08 74.4H117z" />
+    <svg viewBox="0 0 46 32" fill="currentColor" className={className}>
+      <path d="M32.73 0h-6.945L38.45 32h6.945L32.73 0ZM12.665 0 0 32h7.082l2.59-6.72h13.25l2.59 6.72h7.082L19.929 0h-7.264Zm-.702 19.337 4.334-11.246 4.334 11.246h-8.668Z" />
     </svg>
   );
 }
@@ -319,49 +319,67 @@ function ProductTable({
 
 function AliasesSection({
   aliases,
+  collapsed,
+  onToggle,
   t,
 }: {
   aliases: Record<string, string>;
+  collapsed: boolean;
+  onToggle: () => void;
   t: T;
 }) {
   const sortedAliases = Object.entries(aliases).sort(([a], [b]) => a.localeCompare(b));
 
   return (
-    <div className="card overflow-hidden p-5">
-      <div className="mb-3 flex items-center justify-between">
+    <div className="card overflow-hidden">
+      <button
+        onClick={onToggle}
+        className="flex w-full items-center justify-between gap-3 px-5 py-4 text-left transition-colors hover:bg-slate-50/60 dark:hover:bg-white/[0.02]"
+      >
         <span className="text-[16px] font-semibold text-slate-900 dark:text-slate-300">
           {t.modelAliases}
         </span>
-        <span className="inline-flex items-center rounded-full bg-slate-100/80 px-2.5 py-0.5 text-[12px] font-medium text-slate-400 dark:bg-white/[0.06] dark:text-slate-500">
-          {sortedAliases.length} aliases
-        </span>
-      </div>
-      <div className="overflow-x-auto scrollbar-hide">
-        <table className="w-full border-collapse whitespace-nowrap">
-          <thead>
-            <tr>
-              <th className="border-b border-slate-100 px-3 py-2 text-left text-[11px] font-medium uppercase tracking-[0.06em] text-slate-400 dark:border-white/[0.06] dark:text-slate-500">
-                {t.alias.toUpperCase()}
-              </th>
-              <th className="border-b border-slate-100 px-3 py-2 text-left text-[11px] font-medium uppercase tracking-[0.06em] text-slate-400 dark:border-white/[0.06] dark:text-slate-500">
-                {t.resolvedModel.toUpperCase()}
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {sortedAliases.map(([alias, resolved]) => (
-              <tr key={alias} className="group">
-                <td className="border-b border-slate-50 px-3 py-2 font-mono text-[13px] text-slate-700 group-last:border-b-0 dark:border-white/[0.04] dark:text-slate-400">
-                  {alias}
-                </td>
-                <td className="border-b border-slate-50 px-3 py-2 font-mono text-[13px] text-slate-700 group-last:border-b-0 dark:border-white/[0.04] dark:text-slate-400">
-                  {resolved}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+        <div className="flex items-center gap-2">
+          <span className="inline-flex items-center rounded-full bg-slate-100/80 px-2.5 py-0.5 text-[12px] font-medium text-slate-400 dark:bg-white/[0.06] dark:text-slate-500">
+            {sortedAliases.length} aliases
+          </span>
+          <ChevronDown
+            className={`h-4 w-4 text-slate-300 transition-transform duration-200 dark:text-slate-600 ${
+              collapsed ? '-rotate-90' : ''
+            }`}
+          />
+        </div>
+      </button>
+      {!collapsed && (
+        <div className="px-5 pb-5">
+          <div className="overflow-x-auto scrollbar-hide">
+            <table className="w-full border-collapse whitespace-nowrap">
+              <thead>
+                <tr>
+                  <th className="border-b border-slate-100 px-3 py-2 text-left text-[11px] font-medium uppercase tracking-[0.06em] text-slate-400 dark:border-white/[0.06] dark:text-slate-500">
+                    {t.alias.toUpperCase()}
+                  </th>
+                  <th className="border-b border-slate-100 px-3 py-2 text-left text-[11px] font-medium uppercase tracking-[0.06em] text-slate-400 dark:border-white/[0.06] dark:text-slate-500">
+                    {t.resolvedModel.toUpperCase()}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {sortedAliases.map(([alias, resolved]) => (
+                  <tr key={alias} className="group">
+                    <td className="border-b border-slate-50 px-3 py-2 font-mono text-[13px] text-slate-700 group-last:border-b-0 dark:border-white/[0.04] dark:text-slate-400">
+                      {alias}
+                    </td>
+                    <td className="border-b border-slate-50 px-3 py-2 font-mono text-[13px] text-slate-700 group-last:border-b-0 dark:border-white/[0.04] dark:text-slate-400">
+                      {resolved}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -460,7 +478,12 @@ export function PricingPage() {
         className="fade-up"
         style={{ animationDelay: `${100 + sortedProviders.length * 50}ms` }}
       >
-        <AliasesSection aliases={catalog.aliases} t={t} />
+        <AliasesSection
+          aliases={catalog.aliases}
+          collapsed={!!collapsed['__aliases__']}
+          onToggle={() => toggle('__aliases__')}
+          t={t}
+        />
       </div>
 
       {/* Footer note */}
