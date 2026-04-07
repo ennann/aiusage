@@ -1,41 +1,40 @@
 {
-    "$schema": "../../node_modules/wrangler/config-schema.json",
-    "name": "aiusage",
-    "main": "src/index.ts",
-    "compatibility_date": "2026-04-01",
-    "compatibility_flags": ["nodejs_compat"],
-    "assets": {
-        "directory": "./public",
-        "html_handling": "auto-trailing-slash",
-        "not_found_handling": "single-page-application",
-        "run_worker_first": ["/api/*", "/favicon.ico"],
-    },
-    // 首次 wrangler deploy 时自动创建 D1 数据库并回写 database_id
-    "d1_databases": [
-        {
-            "binding": "DB",
-            "database_name": "aiusage-db",
-        },
-    ],
-    // IP 限流: 每 IP 每 60 秒最多 30 次 API 请求
-    "ratelimits": [
-        {
-            "name": "RATE_LIMITER",
-            "namespace_id": "1",
-            "simple": {
-                "limit": 30,
-                "period": 60,
-            },
-        },
-    ],
-    // 部署后通过 wrangler secret put 设置:
-    // - SITE_ID
-    // - ENROLL_TOKEN
-    // - DEVICE_TOKEN_SECRET
-    // - PROJECT_NAME_SALT
-    "vars": {
-        "MAX_DEVICES": "10",
-        "PUBLIC_PROJECT_VISIBILITY": "masked",
-        "DEFAULT_TIMEZONE": "Asia/Shanghai",
-    },
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "aiusage-715eeba5",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-04-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": "./public",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*", "/pricing", "/embed/docs", "/favicon.ico"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "aiusage-db",
+      "database_id": "8ac71780-746c-4b43-9e5b-35ab3e31de02"
+    }
+  ],
+  "ratelimits": [
+    {
+      "name": "RATE_LIMITER",
+      "namespace_id": "1",
+      "simple": {
+        "limit": 30,
+        "period": 60
+      }
+    }
+  ],
+  // Secrets are set via `wrangler secret put`:
+  // - SITE_ID
+  // - ENROLL_TOKEN
+  // - DEVICE_TOKEN_SECRET
+  // - PROJECT_NAME_SALT
+  "vars": {
+    "MAX_DEVICES": "10",
+    "PUBLIC_PROJECT_VISIBILITY": "masked",
+    "DEFAULT_TIMEZONE": "America/Toronto"
+  }
 }
