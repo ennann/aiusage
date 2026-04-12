@@ -6,7 +6,7 @@ import type { ThemeMode } from '../theme';
 import { getStoredTheme, applyTheme } from '../theme';
 import type { HealthPayload } from '../hooks/use-overview';
 import { HeaderLogo, FooterLogo, useFaviconFromLogo } from './site-logo';
-import { SITE_TITLE } from '../site-config';
+import { SITE_TITLE, SITE_URL } from '../site-config';
 
 // ────────────────────────────────────────
 // Context
@@ -168,8 +168,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <header className="fade-up relative z-20 py-6 sm:py-8">
           <div className="flex flex-wrap items-center justify-between gap-y-2">
             <h1 className="flex items-center gap-2 text-[18px] sm:text-[22px] font-semibold tracking-tight text-slate-900 dark:text-slate-300">
-              <HeaderLogo />
-              {SITE_TITLE}
+              <a href={SITE_URL} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 transition-opacity hover:opacity-70">
+                <HeaderLogo />
+                {SITE_TITLE}
+              </a>
             </h1>
             <div className="flex items-center gap-1.5 sm:gap-2 ml-auto">
               <ThemeToggle value={theme} onChange={setTheme} locale={locale} />
@@ -191,10 +193,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <footer className="fade-up mt-16 border-t border-slate-100 dark:border-white/[0.08] pb-10 pt-8">
           <div className="flex flex-col items-center gap-4">
             <div className="flex items-center gap-3 text-[12px] text-slate-400 dark:text-slate-500">
-              <span className="flex items-center gap-1.5 font-medium text-slate-500 dark:text-slate-400">
+              <a href={SITE_URL} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 font-medium text-slate-500 transition-opacity hover:opacity-70 dark:text-slate-400">
                 <FooterLogo />
                 {SITE_TITLE}
-              </span>
+              </a>
               {health?.version && (
                 <span className="rounded-full bg-slate-100 dark:bg-[#1a1a1a] px-2 py-0.5 text-[10px] font-medium text-slate-400 dark:text-slate-500">
                   v{health.version}
