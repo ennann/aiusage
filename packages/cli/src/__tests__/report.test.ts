@@ -92,4 +92,40 @@ describe('buildLocalReport', () => {
       '2025-12-10',
     ]);
   });
+
+  it('discovers Kiro chats in all-history report aggregation', async () => {
+    const day = '2025-08-01';
+    const dir = join(
+      homeDir,
+      'Library',
+      'Application Support',
+      'Kiro',
+      'User',
+      'globalStorage',
+      'kiro.kiroagent',
+    );
+    await mkdir(dir, { recursive: true });
+    await writeFile(
+      join(dir, 'chat-01.chat'),
+      JSON.stringify({
+        metadata: {
+          startTime: `${day}T09:00:00.000Z`,
+          modelId: 'gpt-4.1',
+          executionId: 'kiro-report-1',
+        },
+      }),
+      'utf-8',
+    );
+
+    const { buildLocalReport } = await import('../report.js');
+    const report = await buildLocalReport('all');
+
+    expect(report.daily.map((d) => d.usageDate)).toContain(day);
+    expect(report.bySource).toContainEqual(
+      expect.objectContaining({
+        source: 'kiro/kiro',
+        eventCount: 1,
+      }),
+    );
+  });
 });

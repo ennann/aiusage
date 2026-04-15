@@ -1,4 +1,4 @@
-import { readdir, readFile } from 'node:fs/promises';
+import { readdir, readFile, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
 import type { IngestBreakdown } from '@aiusage/shared';
@@ -169,6 +169,7 @@ async function discoverAllDates(): Promise<string[]> {
     discoverGenericJsonlDates(join(home, '.factory', 'sessions'), dates),
     discoverGenericJsonDates(join(home, '.local', 'share', 'opencode'), dates),
     discoverGenericJsonlDates(join(home, '.pi', 'agent', 'sessions'), dates),
+    discoverKiroDates(dates),
   ]);
   return [...dates].sort();
 }
@@ -321,6 +322,49 @@ async function discoverCopilotVscodeDates(dates: Set<string>): Promise<void> {
       const ts = parseTimestamp(request.timestamp);
       if (ts) dates.add(toDateKey(ts));
     }
+  }
+}
+
+async function discoverKiroDates(dates: Set<string>): Promise<void> {
+  const baseDir = join(
+    homedir(),
+    'Library',
+    'Application Support',
+    'Kiro',
+    'User',
+    'globalStorage',
+    'kiro.kiroagent',
+  );
+  const files: string[] = [];
+  await walkForFiles(baseDir, '.chat', files);
+
+  for (const filePath of files) {
+    const content = await safeReadUtf8(filePath);
+    if (!content) continue;
+
+    let data: { metadata?: { startTime?: string | number; endTime?: string | number } };
+    try {
+      data = JSON.parse(content);
+    } catch {
+      continue;
+    }
+
+    const ts = parseTimestamp(data.metadata?.startTime ?? data.metadata?.endTime);
+    if (ts) {
+      dates.add(toDateKey(ts));
+      continue;
+    }
+
+    const fallbackTs = await readFileMtime(filePath);
+    if (fallbackTs) dates.add(toDateKey(fallbackTs));
+  }
+}
+
+async function readFileMtime(filePath: string): Promise<Date | null> {
+  try {
+    return (await stat(filePath)).mtime;
+  } catch {
+    return null;
   }
 }
 
