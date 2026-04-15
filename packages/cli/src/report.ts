@@ -326,17 +326,8 @@ async function discoverCopilotVscodeDates(dates: Set<string>): Promise<void> {
 }
 
 async function discoverKiroDates(dates: Set<string>): Promise<void> {
-  const baseDir = join(
-    homedir(),
-    'Library',
-    'Application Support',
-    'Kiro',
-    'User',
-    'globalStorage',
-    'kiro.kiroagent',
-  );
   const files: string[] = [];
-  await walkForFiles(baseDir, '.chat', files);
+  await discoverFilesInKiroDirs(files);
 
   for (const filePath of files) {
     const content = await safeReadUtf8(filePath);
@@ -358,6 +349,39 @@ async function discoverKiroDates(dates: Set<string>): Promise<void> {
     const fallbackTs = await readFileMtime(filePath);
     if (fallbackTs) dates.add(toDateKey(fallbackTs));
   }
+}
+
+async function discoverFilesInKiroDirs(files: string[]): Promise<void> {
+  const dirs = resolveKiroDirs();
+  for (const dir of dirs) {
+    await walkForFiles(dir, '.chat', files);
+  }
+}
+
+function resolveKiroDirs(): string[] {
+  const envDir = process.env.KIRO_CHAT_DIR?.trim();
+  if (envDir) return [envDir];
+
+  return [
+    join(
+      homedir(),
+      'Library',
+      'Application Support',
+      'Kiro',
+      'User',
+      'globalStorage',
+      'kiro.kiroagent',
+    ),
+    join(
+      homedir(),
+      'Library',
+      'Application Support',
+      'Code',
+      'User',
+      'globalStorage',
+      'kiro.kiroagent',
+    ),
+  ];
 }
 
 async function readFileMtime(filePath: string): Promise<Date | null> {

@@ -39,17 +39,14 @@ export async function scanKiroDates(
   _projectAliases?: Record<string, string>,
 ): Promise<Map<string, IngestBreakdown[]>> {
   const targetDateSet = new Set(targetDates);
-  const dir = baseDir ?? join(
-    homedir(),
-    'Library',
-    'Application Support',
-    'Kiro',
-    'User',
-    'globalStorage',
-    'kiro.kiroagent',
-  );
+  const dirs = resolveKiroDirs(baseDir);
 
-  const files = await walkFiles(dir, '.chat');
+  const files = (
+    await Promise.all(
+      dirs.map((dir) => walkFiles(dir, '.chat')),
+    )
+  ).flat();
+
   if (files.length === 0) return emptyResult(targetDateSet);
 
   const groupedByDate = initDateMap(targetDateSet);
@@ -104,6 +101,34 @@ export async function scanKiroDates(
   }
 
   return finalize(groupedByDate);
+}
+
+function resolveKiroDirs(baseDir?: string): string[] {
+  if (baseDir) return [baseDir];
+
+  const envDir = process.env.KIRO_CHAT_DIR?.trim();
+  if (envDir) return [envDir];
+
+  return [
+    join(
+      homedir(),
+      'Library',
+      'Application Support',
+      'Kiro',
+      'User',
+      'globalStorage',
+      'kiro.kiroagent',
+    ),
+    join(
+      homedir(),
+      'Library',
+      'Application Support',
+      'Code',
+      'User',
+      'globalStorage',
+      'kiro.kiroagent',
+    ),
+  ];
 }
 
 async function getEventDate(data: KiroChatRecord, filePath: string): Promise<Date | null> {
