@@ -116,6 +116,13 @@ const catalog: PricingCatalog = {
     openai: {
       codex: {
         models: {
+          'gpt-5.5': {
+            input_per_million_usd: 5,
+            output_per_million_usd: 30,
+            cached_input_per_million_usd: 0.5,
+            cache_write_5m_per_million_usd: 0,
+            cache_write_1h_per_million_usd: 0,
+          },
           'gpt-5.4-pro': {
             input_per_million_usd: 30,
             output_per_million_usd: 180,

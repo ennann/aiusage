@@ -136,10 +136,12 @@ function getRangeLabel(range: ReportRange): string {
       return '最近 90 天';
     case 'all':
       return '全部历史';
+    case 'today':
+      return '今天';
   }
 }
 
-function buildPresetDates(range: Exclude<ReportRange, 'all'>): string[] {
+function buildPresetDates(range: Exclude<ReportRange, 'all' | 'today'>): string[] {
   const days = range === '7d' ? 7 : range === '1m' ? 30 : 90;
   const today = getTodayLocalDate();
   const result: string[] = [];
@@ -562,6 +564,7 @@ const CLAUDE_PRICING: Record<string, { input: number; cache_write_5m: number; ca
 };
 
 const OPENAI_PRICING: Record<string, { input: number; cached_input: number | null; output: number; estimated: boolean }> = {
+  'gpt-5.5': { input: 5, cached_input: 0.5, output: 30, estimated: false },
   'gpt-5.4-pro': { input: 30, cached_input: null, output: 180, estimated: false },
   'gpt-5.4': { input: 2.5, cached_input: 0.25, output: 15, estimated: false },
   'gpt-5.4-mini': { input: 0.75, cached_input: 0.075, output: 4.5, estimated: false },

@@ -263,6 +263,9 @@ async function runSync(flags: Record<string, string | boolean>) {
 
   // ── 日期解析 ──
   const { dates: targetDates } = resolveDateParams(flags, config);
+  if (!targetDates) {
+    throw new Error('sync --range all 需要明确日期范围，请改用 --from YYYY-MM-DD --to YYYY-MM-DD');
+  }
 
   // 扫描一次，所有 target 共享结果
   console.log(`扫描 ${targetDates.length} 天 (${targetDates[0]} ~ ${targetDates[targetDates.length - 1]}) ...`);
@@ -749,7 +752,12 @@ function resolveDateParams(flags: Record<string, string | boolean>, config: { lo
   // --range 优先（report 惯用）
   const rangeFlag = flags.range;
   if (typeof rangeFlag === 'string') {
-    return { range: parseReportRange(rangeFlag) };
+    const range = parseReportRange(rangeFlag);
+    if (range === 'today') return { dates: [getTodayDate()], range };
+    if (range === '7d') return { dates: [...getClosedDates(6), getTodayDate()], range };
+    if (range === '1m') return { dates: [...getClosedDates(29), getTodayDate()], range };
+    if (range === '3m') return { dates: [...getClosedDates(89), getTodayDate()], range };
+    return { range };
   }
   // --lookback
   if (typeof flags.lookback === 'string') {

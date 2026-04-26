@@ -18,14 +18,18 @@ export default {
     }
 
     // IP 限流 — 仅对 API 路由生效
-    if (pathname.startsWith('/api/')) {
-      const ip = request.headers.get('CF-Connecting-IP') ?? 'unknown';
-      const { success } = await env.RATE_LIMITER.limit({ key: ip });
-      if (!success) {
-        return new Response(
-          JSON.stringify({ ok: false, error: { code: 'RATE_LIMITED', message: 'Too many requests' } }),
-          { status: 429, headers: { 'Content-Type': 'application/json', 'Retry-After': '60' } },
-        );
+    if (pathname.startsWith('/api/') && env.RATE_LIMITER) {
+      try {
+        const ip = request.headers.get('CF-Connecting-IP') ?? 'unknown';
+        const { success } = await env.RATE_LIMITER.limit({ key: ip });
+        if (!success) {
+          return new Response(
+            JSON.stringify({ ok: false, error: { code: 'RATE_LIMITED', message: 'Too many requests' } }),
+            { status: 429, headers: { 'Content-Type': 'application/json', 'Retry-After': '60' } },
+          );
+        }
+      } catch (err) {
+        console.warn('Rate limiter unavailable, skipping check', err);
       }
     }
 
@@ -56,7 +60,7 @@ export default {
         return handlePricingApi();
       }
 
-      return jsonError(404, 'NOT_FOUND', 'Route not found');
+      return env.ASSETS.fetch(request);
     } catch (err) {
       console.error('Unhandled error:', err);
       return jsonError(500, 'INTERNAL_ERROR', 'Internal server error');

@@ -93,3 +93,27 @@ describe('buildLocalReport', () => {
     ]);
   });
 });
+
+describe('calculateBreakdownCost', () => {
+  it('prices local Codex GPT-5.5 usage', async () => {
+    const { calculateBreakdownCost } = await import('../report.js');
+    const warnings = new Set<string>();
+
+    const cost = calculateBreakdownCost({
+      provider: 'openai',
+      product: 'codex',
+      channel: 'cli',
+      model: 'gpt-5.5',
+      project: '/tmp/project',
+      eventCount: 1,
+      inputTokens: 1_000_000,
+      cachedInputTokens: 1_000_000,
+      cacheWriteTokens: 0,
+      outputTokens: 500_000,
+      reasoningOutputTokens: 0,
+    }, warnings);
+
+    expect(cost).toBe(20.5);
+    expect([...warnings]).toEqual([]);
+  });
+});
