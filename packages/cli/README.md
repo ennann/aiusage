@@ -50,7 +50,7 @@ Project aliases are applied locally before upload. If two devices set the same a
 Local usage report. No cloud upload required.
 
 ```bash
-aiusage report                          # default: last 7 days, English, compact
+aiusage report                          # default: last 7 days + today, English, compact
 aiusage report --range 1m               # last 30 days
 aiusage report --range 3m               # last 90 days
 aiusage report --range all              # all history
@@ -64,13 +64,29 @@ Reads data from local tool data directories including `~/.claude/projects` (Clau
 
 **Compact mode** (default) shows Sources and Daily tables with merged Cache column and 2-decimal cost. **Detail mode** (`--detail`) expands all columns (CacheRead, CacheWrite, Reasoning), adds Top Models and Pricing Notes sections, and shows 4-decimal cost.
 
-### scan
+### Shared date options
 
-Scan a single day and print the breakdown.
+`scan`, `report`, and `sync` use the same date options:
 
 ```bash
-aiusage scan --date 2026-03-31
-aiusage scan --date 2026-03-31 --json
+aiusage scan --today                    # today only
+aiusage report --date 2026-03-31        # specific date
+aiusage sync --range 1m                 # last 30 days
+aiusage sync --lookback 14              # last 14 days + today
+aiusage scan --from 2025-01-01 --to 2026-04-05
+```
+
+Use `--range 1m`, not `range -1m`. `report` also supports `--range all`; `scan` and `sync` require explicit `--from/--to` for large historical ranges.
+
+### scan
+
+Scan local usage and print detailed breakdowns.
+
+```bash
+aiusage scan                            # yesterday
+aiusage scan --date 2026-03-31          # specific date
+aiusage scan --range 1m                 # last 30 days
+aiusage scan --date 2026-03-31 --json   # JSON output
 ```
 
 Defaults to yesterday when `--date` is omitted.
@@ -111,6 +127,7 @@ Upload usage data to the Worker. Default: last 7 days + today.
 aiusage sync                   # last 7 days + today
 aiusage sync --today           # today only
 aiusage sync --date 2026-03-31 # specific date
+aiusage sync --range 1m        # last 30 days
 aiusage sync --lookback 14     # last 14 days + today
 aiusage sync --from 2025-01-01 --to 2026-04-05  # date range
 ```

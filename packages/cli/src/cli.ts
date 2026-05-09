@@ -32,11 +32,10 @@ try {
     console.log(getVersion());
   } else if (command === 'scan') {
     const parsed = parseArgs(argv.slice(1));
-    const date = typeof parsed.flags.date === 'string' ? parsed.flags.date : getYesterdayDate();
-    await runScan(date, Boolean(parsed.flags.json));
+    await runScan(parsed.flags, parsed.positionals);
   } else if (command === 'report') {
     const parsed = parseArgs(argv.slice(1));
-    await runReport(parsed.flags);
+    await runReport(parsed.flags, parsed.positionals);
   } else if (command === 'health') {
     const parsed = parseArgs(argv.slice(1));
     await runHealth(parsed.flags);
@@ -45,7 +44,7 @@ try {
     await runEnroll(parsed.flags);
   } else if (command === 'sync') {
     const parsed = parseArgs(argv.slice(1));
-    await runSync(parsed.flags);
+    await runSync(parsed.flags, parsed.positionals);
   } else if (command === 'init') {
     const parsed = parseArgs(argv.slice(1));
     await runInit(parsed.flags);
@@ -111,18 +110,42 @@ try {
   process.exitCode = 1;
 }
 
-async function runScan(date: string, isJson: boolean) {
+async function runScan(flags: Record<string, string | boolean>, positionals: string[] = []) {
   const config = await readConfig();
   const zh = config.lang === 'zh';
-  if (!isJson) console.log(`${zh ? '扫描日期' : 'Scan date'}: ${date}\n`);
+  assertNoPositionals('scan', positionals, zh);
 
-  const result = await scanDate(date, { projectAliases: config.projectAliases });
+  const isJson = Boolean(flags.json);
+  const dates = resolveScanDates(flags, config);
+  const results = dates.length === 1
+    ? [await scanDate(dates[0], { projectAliases: config.projectAliases })]
+    : await scanDates(dates, { projectAliases: config.projectAliases });
 
   if (isJson) {
-    console.log(JSON.stringify(result, null, 2));
+    console.log(JSON.stringify(results.length === 1 ? results[0] : results, null, 2));
     return;
   }
 
+  if (results.length === 1) {
+    console.log(`${zh ? '扫描日期' : 'Scan date'}: ${results[0].usageDate}\n`);
+    printScanResult(results[0], zh);
+    return;
+  }
+
+  console.log(`${zh ? '扫描范围' : 'Scan range'}: ${dates[0]} ~ ${dates[dates.length - 1]} (${dates.length} ${zh ? '天' : 'days'})\n`);
+  const daysWithData = results.filter(result => result.breakdowns.length > 0);
+  if (daysWithData.length === 0) {
+    console.log(zh ? '该范围无数据。' : 'No data in this range.');
+    return;
+  }
+
+  for (const result of daysWithData) {
+    console.log(`══ ${result.usageDate} ══`);
+    printScanResult(result, zh);
+  }
+}
+
+function printScanResult(result: Awaited<ReturnType<typeof scanDate>>, zh: boolean) {
   if (result.breakdowns.length === 0) {
     console.log(zh ? '该日无数据。' : 'No data for this date.');
     return;
@@ -147,10 +170,12 @@ async function runScan(date: string, isJson: boolean) {
 
   console.log('── 合计 ──');
   console.log(`  事件: ${result.totals.eventCount}  输入: ${fmt(result.totals.inputTokens)}  缓存读: ${fmt(result.totals.cachedInputTokens)}  缓存写: ${fmt(result.totals.cacheWriteTokens)}  输出: ${fmt(result.totals.outputTokens)}  推理: ${fmt(result.totals.reasoningOutputTokens)}`);
+  console.log();
 }
 
-async function runReport(flags: Record<string, string | boolean>) {
+async function runReport(flags: Record<string, string | boolean>, positionals: string[] = []) {
   const config = await readConfig();
+  assertNoPositionals('report', positionals, config.lang === 'zh');
 
   // 日期解析：--from/--start, --to/--end, --date, --today, --range, --lookback
   const { dates, range } = resolveDateParams(flags, config);
@@ -246,8 +271,10 @@ function prompt(question: string): Promise<string> {
   });
 }
 
-async function runSync(flags: Record<string, string | boolean>) {
+async function runSync(flags: Record<string, string | boolean>, positionals: string[] = []) {
   const config = await readConfig();
+  assertNoPositionals('sync', positionals, config.lang === 'zh');
+
   const allTargets = config.targets ?? [];
   if (allTargets.length === 0) {
     throw new Error('未配置任何上报目标，请先执行 aiusage enroll');
@@ -618,10 +645,10 @@ async function runProjectAlias(args: string[]) {
 function printHelp(zh = false) {
   console.log(`aiusage v${getVersion()}\n`);
   const cmds = zh ? [
-    ['scan [--date YYYY-MM-DD] [--json]',                    '扫描某日用量明细'],
+    ['scan [--date YYYY-MM-DD|--today|--range 7d|1m|3m] [--json]', '扫描用量明细'],
     ['report [--today] [--range 7d|1m|3m|all] [--detail] [--json]', '本地用量报告'],
-    ['sync [--today] [--range 7d|1m|3m|all]',                     '上传用量到服务端'],
-    ['report/sync --from YYYY-MM-DD [--to YYYY-MM-DD]',           '指定日期范围（--start/--end 同义）'],
+    ['sync [--today] [--range 7d|1m|3m]',                         '上传用量到服务端'],
+    ['scan/report/sync --from YYYY-MM-DD [--to YYYY-MM-DD]',      '指定日期范围（--start/--end 同义）'],
     ['project [list|alias]',                                  '项目管理与别名设置'],
     ['schedule [on|off|status] [--every 5m]',                '定时同步管理'],
     ['doctor',                                               '诊断检查'],
@@ -630,10 +657,10 @@ function printHelp(zh = false) {
     ['enroll --server URL --site-id ID --enroll-token TOKEN','注册设备到服务端'],
     ['health [--server URL]',                                '测试服务端连通性'],
   ] : [
-    ['scan [--date YYYY-MM-DD] [--json]',                    'Scan daily usage breakdown'],
+    ['scan [--date YYYY-MM-DD|--today|--range 7d|1m|3m] [--json]', 'Scan usage breakdown'],
     ['report [--today] [--range 7d|1m|3m|all] [--detail] [--json]', 'Local usage report'],
-    ['sync [--today] [--range 7d|1m|3m|all]',                     'Upload usage to server'],
-    ['report/sync --from YYYY-MM-DD [--to YYYY-MM-DD]',           'Date range (--start/--end aliases)'],
+    ['sync [--today] [--range 7d|1m|3m]',                         'Upload usage to server'],
+    ['scan/report/sync --from YYYY-MM-DD [--to YYYY-MM-DD]',      'Date range (--start/--end aliases)'],
     ['project [list|alias]',                                 'Project management & aliases'],
     ['schedule [on|off|status] [--every 5m]',                'Scheduled sync management'],
     ['doctor',                                               'Run diagnostics'],
@@ -657,17 +684,17 @@ function printHelp(zh = false) {
 function printUsageHint(zh = false) {
   console.log(`aiusage v${getVersion()}\n`);
   const cmds = zh ? [
-    ['scan [--date YYYY-MM-DD]',              '扫描某日用量明细'],
+    ['scan [--date YYYY-MM-DD|--range 1m]',   '扫描用量明细'],
     ['report [--today] [--range 7d|1m|3m|all]', '本地用量报告'],
-    ['sync [--today] [--range 7d|1m|3m|all]',  '上传用量到服务端'],
+    ['sync [--today] [--range 7d|1m|3m]',     '上传用量到服务端'],
     ['project [list|alias]',                  '项目管理与别名设置'],
     ['schedule [on|off|status]',              '定时同步管理'],
     ['doctor',                                '诊断检查'],
     ['config set <key> <value>',              '修改配置'],
   ] : [
-    ['scan [--date YYYY-MM-DD]',              'Scan daily usage breakdown'],
+    ['scan [--date YYYY-MM-DD|--range 1m]',   'Scan usage breakdown'],
     ['report [--today] [--range 7d|1m|3m|all]', 'Local usage report'],
-    ['sync [--today] [--range 7d|1m|3m|all]',  'Upload usage to server'],
+    ['sync [--today] [--range 7d|1m|3m]',     'Upload usage to server'],
     ['project [list|alias]',                  'Project management & aliases'],
     ['schedule [on|off|status]',              'Scheduled sync management'],
     ['doctor',                                'Run diagnostics'],
@@ -717,6 +744,22 @@ function parseArgs(args: string[]): { flags: Record<string, string | boolean>; p
   return { flags, positionals };
 }
 
+function assertNoPositionals(command: string, positionals: string[], zh = false): void {
+  if (positionals.length === 0) return;
+
+  const value = positionals.join(' ');
+  const rangeHint = positionals.includes('range') || positionals.some(arg => /^-\d+[dm]$/.test(arg));
+  if (zh) {
+    throw new Error(rangeHint
+      ? `${command} 不支持位置参数: ${value}\n时间范围请使用 --range 1m，例如: aiusage ${command} --range 1m`
+      : `${command} 不支持位置参数: ${value}`);
+  }
+
+  throw new Error(rangeHint
+    ? `${command} does not accept positional arguments: ${value}\nUse --range 1m, for example: aiusage ${command} --range 1m`
+    : `${command} does not accept positional arguments: ${value}`);
+}
+
 function localDateKey(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
@@ -740,6 +783,9 @@ function resolveDateParams(flags: Record<string, string | boolean>, config: { lo
   const fromDate = typeof flags.from === 'string' ? flags.from : typeof flags.start === 'string' ? flags.start : undefined;
   const toDate = typeof flags.to === 'string' ? flags.to : typeof flags.end === 'string' ? flags.end : undefined;
 
+  if (toDate && !fromDate) {
+    throw new Error('--to 需要搭配 --from 使用');
+  }
   if (requestedDate) {
     return { dates: [requestedDate], range: 'today' };
   }
@@ -771,6 +817,27 @@ function resolveDateParams(flags: Record<string, string | boolean>, config: { lo
   const dates = getClosedDates(lookbackDays);
   dates.push(getTodayDate());
   return { dates, range: '7d' };
+}
+
+function resolveScanDates(flags: Record<string, string | boolean>, config: { lookbackDays?: number }): string[] {
+  if (!hasDateSelection(flags)) return [getYesterdayDate()];
+
+  const { dates } = resolveDateParams(flags, config);
+  if (!dates) {
+    throw new Error('scan --range all 需要明确日期范围，请改用 --from YYYY-MM-DD --to YYYY-MM-DD');
+  }
+  return dates;
+}
+
+function hasDateSelection(flags: Record<string, string | boolean>): boolean {
+  return typeof flags.date === 'string'
+    || flags.today === true
+    || typeof flags.from === 'string'
+    || typeof flags.start === 'string'
+    || typeof flags.to === 'string'
+    || typeof flags.end === 'string'
+    || typeof flags.range === 'string'
+    || typeof flags.lookback === 'string';
 }
 
 function resolveGlobalLang(flags: Record<string, string | boolean>, config: { lang?: string }): 'en' | 'zh' {
