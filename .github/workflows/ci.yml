@@ -41,10 +41,6 @@ jobs:
 
       - name: Inject Cloudflare deployment config
         run: |
-          if [ -z "$CLOUDFLARE_WORKER_NAME" ]; then
-            echo "::error::Missing GitHub secret CLOUDFLARE_WORKER_NAME"
-            exit 1
-          fi
           if [ -z "$CLOUDFLARE_D1_DATABASE_ID" ]; then
             echo "::error::Missing GitHub secret CLOUDFLARE_D1_DATABASE_ID"
             exit 1
@@ -53,7 +49,9 @@ jobs:
           const fs = require('node:fs');
           const path = 'packages/worker/wrangler.jsonc';
           let config = fs.readFileSync(path, 'utf8');
-          config = config.replace(/"name":\s*"[^"]+"/, `"name": "${process.env.CLOUDFLARE_WORKER_NAME}"`);
+          if (process.env.CLOUDFLARE_WORKER_NAME) {
+            config = config.replace(/"name":\s*"[^"]+"/, `"name": "${process.env.CLOUDFLARE_WORKER_NAME}"`);
+          }
           config = config.replace(/"database_id":\s*"[^"]+"/, `"database_id": "${process.env.CLOUDFLARE_D1_DATABASE_ID}"`);
           fs.writeFileSync(path, config);
           NODE
