@@ -86,15 +86,15 @@ jobs:
       - name: Build CLI
         run: pnpm turbo build --filter @aiusage/cli
 
-      - name: Publish CLI (if version changed)
+      - name: Publish CLI (if version is new)
         run: |
           LOCAL_VERSION=$(node -p "require('./packages/cli/package.json').version")
-          NPM_VERSION=$(npm view @aiusage/cli version 2>/dev/null || echo "0.0.0")
-          if [ "$LOCAL_VERSION" != "$NPM_VERSION" ]; then
-            echo "Publishing @aiusage/cli@${LOCAL_VERSION} (npm has ${NPM_VERSION})"
-            cd packages/cli && npm publish --access public
-          else
+          if npm view "@aiusage/cli@${LOCAL_VERSION}" version >/dev/null 2>&1; then
             echo "CLI v${LOCAL_VERSION} already published, skipping"
+          else
+            NPM_VERSION=$(npm view @aiusage/cli version 2>/dev/null || echo "none")
+            echo "Publishing @aiusage/cli@${LOCAL_VERSION} (npm latest is ${NPM_VERSION})"
+            cd packages/cli && npm publish --access public
           fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
