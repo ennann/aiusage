@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { RotateCw, Github, Heart, Sun, Moon, Monitor } from 'lucide-react';
+import { RotateCw, Github, Heart, Sun, Moon, Monitor, Share2 } from 'lucide-react';
 import type { Locale, T } from './i18n';
 import { I18N, getStoredLocale } from './i18n';
 import type { ThemeMode } from './theme';
@@ -23,6 +23,7 @@ import { DonutSection } from './components/donut-section';
 import { ActivityHeatmap } from './components/activity-heatmap';
 import { buildActivityHeatmapData } from './utils/activity-heatmap-data';
 import { HeaderLogo, FooterLogo, useFaviconFromLogo } from './components/site-logo';
+import { ShareModal } from './components/share-modal';
 import { SITE_TITLE } from './site-config';
 
 // ────────────────────────────────────────
@@ -319,6 +320,35 @@ export function App() {
     }));
   }, [overview, t, locale, isDark]);
   const unavailable = metricAvailability.tokenMetricsUnavailable;
+
+  // Share modal state
+  const [shareOpen, setShareOpen] = useState(false);
+
+  // Range label for share card
+  const rangeLabel = useMemo(() => {
+    const ranges = getRanges(t);
+    if (filters.range === 'month') return t.thisMonth;
+    const found = ranges.find((r) => r.value === filters.range);
+    return found?.label ?? filters.range;
+  }, [filters.range, t]);
+
+  // Top models & providers for share card
+  const shareTopModels = useMemo(() =>
+    (overview?.modelCostShare ?? [])
+      .sort((a, b) => b.estimatedCostUsd - a.estimatedCostUsd)
+      .slice(0, 3)
+      .map((m) => ({ label: formatModelName(m.label, false), estimatedCostUsd: m.estimatedCostUsd })),
+    [overview],
+  );
+
+  const shareTopProviders = useMemo(() =>
+    (overview?.filters.options.providers ?? [])
+      .sort((a, b) => b.estimatedCostUsd - a.estimatedCostUsd)
+      .slice(0, 3)
+      .map((p) => ({ label: providerLabel(p.value), estimatedCostUsd: p.estimatedCostUsd })),
+    [overview],
+  );
+
   const activityHeatmap = useMemo(() => buildActivityHeatmapData({
     heatmap: overview?.heatmap ?? [],
     dailyTrend: overview?.dailyTrend ?? [],
@@ -338,6 +368,16 @@ export function App() {
           <div className="flex items-center gap-1.5 sm:gap-2 ml-auto">
             <ThemeToggle value={theme} onChange={setTheme} locale={locale} />
             <LangToggle value={locale} onChange={setLocale} />
+            {overview && !unavailable && (
+              <button
+                onClick={() => setShareOpen(true)}
+                className="inline-flex items-center justify-center rounded-md bg-slate-100/80 p-1.5 text-slate-400 transition-colors hover:text-slate-600 dark:bg-[#1a1a1a]/80 dark:text-slate-500 dark:hover:text-slate-300"
+                aria-label={t.shareButton}
+                title={t.shareButton}
+              >
+                <Share2 className="h-3.5 w-3.5" />
+              </button>
+            )}
             <button
               onClick={refresh}
               className="hidden sm:inline-flex items-center justify-center rounded-md bg-slate-100/80 p-1.5 text-slate-400 transition-colors hover:text-slate-600 dark:bg-[#1a1a1a]/80 dark:text-slate-500 dark:hover:text-slate-300"
@@ -680,6 +720,41 @@ export function App() {
           </div>
         </div>
       </footer>
+
+      {/* ── Share Modal (overview) ── */}
+      <ShareModal
+        open={shareOpen}
+        onClose={() => setShareOpen(false)}
+        locale={locale}
+        cardData={{
+          totalCostUsd: overview?.totalCostUsd ?? 0,
+          totalTokens: kpis?.totalTokens ?? 0,
+          totalSessions: (overview?.totalSessions ?? 0) > 0 ? overview!.totalSessions : (overview?.totalEvents ?? 0),
+          activeDays: overview?.activeDays ?? 0,
+          totalDays: overview?.totalDays ?? 0,
+          cacheHitRate: kpis?.cacheHitRate ?? 0,
+          avgDailyCostUsd: overview?.averageDailyCostUsd ?? 0,
+          rangeLabel,
+          topModels: shareTopModels,
+          topProviders: shareTopProviders,
+        }}
+        detailData={overview ? {
+          totalCostUsd: overview.totalCostUsd,
+          totalTokens: kpis?.totalTokens ?? 0,
+          totalSessions: (overview.totalSessions ?? 0) > 0 ? overview.totalSessions : (overview.totalEvents ?? 0),
+          activeDays: overview.activeDays ?? 0,
+          totalDays: overview.totalDays ?? 0,
+          cacheHitRate: kpis?.cacheHitRate ?? 0,
+          avgDailyCostUsd: overview.averageDailyCostUsd ?? 0,
+          rangeLabel,
+          topModels: shareTopModels,
+          topProviders: shareTopProviders,
+          heatmapDays: activityHeatmap.days,
+          heatmapMetric: activityHeatmap.metricLabel,
+          dailyTrend: overview.dailyTrend ?? [],
+          providerDailyTrend: overview.providerDailyTrend ?? [],
+        } : undefined}
+      />
     </main>
   );
 }

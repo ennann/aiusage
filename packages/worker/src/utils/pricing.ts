@@ -16,11 +16,12 @@ export interface PricingCatalog {
 
 // 第一版内置定价目录，后续可改为读取 JSON 文件或 KV
 const catalog: PricingCatalog = {
-  version: '2026-04-01-official-v2',
+  version: '2026-05-09-official-v3',
   aliases: {
     'claude-sonnet-4-6-20250301': 'claude-sonnet-4-6',
     'claude-opus-4-6-20250301': 'claude-opus-4-6',
     'claude-haiku-4-5-20251001': 'claude-haiku-4-5',
+    'codex-auto-review': 'gpt-5.4',
   },
   providers: {
     anthropic: {
@@ -116,6 +117,20 @@ const catalog: PricingCatalog = {
     openai: {
       codex: {
         models: {
+          'gpt-5.5-pro': {
+            input_per_million_usd: 30,
+            output_per_million_usd: 180,
+            cached_input_per_million_usd: null,
+            cache_write_5m_per_million_usd: 0,
+            cache_write_1h_per_million_usd: 0,
+          },
+          'gpt-5.5': {
+            input_per_million_usd: 5,
+            output_per_million_usd: 30,
+            cached_input_per_million_usd: 0.5,
+            cache_write_5m_per_million_usd: 0,
+            cache_write_1h_per_million_usd: 0,
+          },
           'gpt-5.4-pro': {
             input_per_million_usd: 30,
             output_per_million_usd: 180,

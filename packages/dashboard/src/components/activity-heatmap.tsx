@@ -69,17 +69,20 @@ function useContainerWidth(ref: React.RefObject<HTMLDivElement | null>): number 
 
 // ── 主组件 ──
 
-export function ActivityHeatmap({ days, metricLabel = 'tokens', className = '' }: {
+export function ActivityHeatmap({ days, metricLabel = 'tokens', className = '', maxWeeks }: {
   days: ActivityHeatmapDay[];
   metricLabel?: 'tokens' | 'sessions';
   className?: string;
+  /** Cap the number of visible weeks (for compact share images). */
+  maxWeeks?: number;
 }) {
   const isDark = useIsDark();
   const containerRef = useRef<HTMLDivElement>(null);
   const containerWidth = useContainerWidth(containerRef);
 
-  // 由容器宽度决定列数（至少 4 列）
-  const weeks = containerWidth > 0 ? Math.max(4, Math.floor(containerWidth / STEP)) : 53;
+  // 由容器宽度决定列数（至少 4 列），可被 maxWeeks 进一步限制
+  const autoWeeks = containerWidth > 0 ? Math.max(4, Math.floor(containerWidth / STEP)) : 53;
+  const weeks = maxWeeks ? Math.min(autoWeeks, maxWeeks) : autoWeeks;
 
   const [tooltip, setTooltip] = useState<{
     x: number; y: number;
@@ -139,7 +142,8 @@ export function ActivityHeatmap({ days, metricLabel = 'tokens', className = '' }
   const totalH = MONTH_ROW + svgH + LEGEND_ROW;
 
   // 右对齐偏移：让最新一列（最右格子）始终贴近容器右边
-  const offsetX = containerWidth > 0 ? containerWidth - svgInnerW : 0;
+  // maxWeeks 模式下左对齐（用于分享截图，避免左侧大片空白）
+  const offsetX = maxWeeks ? 0 : (containerWidth > 0 ? containerWidth - svgInnerW : 0);
 
   return (
     <div className={`flex flex-col gap-3 ${className}`}>

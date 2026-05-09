@@ -58,6 +58,31 @@ describe('calculateCost: 基本计费', () => {
     expect(result.estimatedCostUsd).toBe(12.5);
     expect(result.costStatus).toBe('exact');
   });
+
+  it('Codex gpt-5.5 基本 input/output 计费', () => {
+    // gpt-5.5: input=$5/M, output=$30/M
+    const result = calculateCost('openai', 'codex', 'gpt-5.5', {
+      inputTokens: 1_000_000,
+      cachedInputTokens: 0,
+      cacheWriteTokens: 0,
+      outputTokens: 1_000_000,
+    });
+    // 1*5 + 1*30 = $35
+    expect(result.estimatedCostUsd).toBe(35);
+    expect(result.costStatus).toBe('exact');
+  });
+
+  it('Codex auto-review 按 gpt-5.4 估算', () => {
+    const result = calculateCost('openai', 'codex', 'codex-auto-review', {
+      inputTokens: 1_000_000,
+      cachedInputTokens: 1_000_000,
+      cacheWriteTokens: 0,
+      outputTokens: 1_000_000,
+    });
+    // gpt-5.4: 1*2.5 + 1*0.25 + 1*15 = $17.75
+    expect(result.estimatedCostUsd).toBe(17.75);
+    expect(result.costStatus).toBe('estimated');
+  });
 });
 
 // ─── calculateCost: cached input ───

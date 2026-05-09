@@ -111,7 +111,12 @@ export function defaultLookbackDays(config: AIUsageConfig): number {
 }
 
 async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, init);
+  let response: Response;
+  try {
+    response = await fetch(url, init);
+  } catch (err) {
+    throw new Error(`无法连接 ${url}：${describeFetchError(err)}`, { cause: err });
+  }
   const text = await response.text();
 
   let data: T | ApiErrorResponse | null = null;
@@ -133,4 +138,17 @@ async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
   }
 
   return data as T;
+}
+
+function describeFetchError(err: unknown): string {
+  if (!(err instanceof Error)) return String(err);
+  const cause = (err as { cause?: unknown }).cause as
+    | { code?: string; message?: string; errors?: Array<{ code?: string; message?: string }> }
+    | undefined;
+  const parts: string[] = [];
+  if (cause?.code) parts.push(cause.code);
+  const causeMsg = cause?.message ?? cause?.errors?.[0]?.message;
+  if (causeMsg && causeMsg !== err.message) parts.push(causeMsg);
+  if (parts.length === 0) return err.message;
+  return `${err.message} (${parts.join(': ')})`;
 }

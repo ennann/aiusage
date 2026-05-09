@@ -263,6 +263,9 @@ async function runSync(flags: Record<string, string | boolean>) {
 
   // ── 日期解析 ──
   const { dates: targetDates } = resolveDateParams(flags, config);
+  if (!targetDates) {
+    throw new Error('sync 不支持 --range，请使用 --lookback、--date、--from/--to 或 --today');
+  }
 
   // 扫描一次，所有 target 共享结果
   console.log(`扫描 ${targetDates.length} 天 (${targetDates[0]} ~ ${targetDates[targetDates.length - 1]}) ...`);

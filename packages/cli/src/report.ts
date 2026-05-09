@@ -136,6 +136,8 @@ function getRangeLabel(range: ReportRange): string {
       return '最近 90 天';
     case 'all':
       return '全部历史';
+    case 'today':
+      return '今天';
   }
 }
 
@@ -561,7 +563,9 @@ const CLAUDE_PRICING: Record<string, { input: number; cache_write_5m: number; ca
   'claude-haiku-3': { input: 0.25, cache_write_5m: 0.3, cache_write_1h: 0.5, cache_read: 0.03, output: 1.25 },
 };
 
-const OPENAI_PRICING: Record<string, { input: number; cached_input: number | null; output: number; estimated: boolean }> = {
+const OPENAI_PRICING: Record<string, { input: number; cached_input: number | null; output: number; estimated: boolean; estimatedFrom?: string }> = {
+  'gpt-5.5-pro': { input: 30, cached_input: null, output: 180, estimated: false },
+  'gpt-5.5': { input: 5, cached_input: 0.5, output: 30, estimated: false },
   'gpt-5.4-pro': { input: 30, cached_input: null, output: 180, estimated: false },
   'gpt-5.4': { input: 2.5, cached_input: 0.25, output: 15, estimated: false },
   'gpt-5.4-mini': { input: 0.75, cached_input: 0.075, output: 4.5, estimated: false },
@@ -615,6 +619,7 @@ const OPENAI_PRICING: Record<string, { input: number; cached_input: number | nul
   'text-embedding-3-large': { input: 0.13, cached_input: null, output: 0, estimated: false },
   'text-embedding-ada-002': { input: 0.1, cached_input: null, output: 0, estimated: false },
   'codex-mini-latest': { input: 1.5, cached_input: 0.375, output: 6, estimated: false },
+  'codex-auto-review': { input: 2.5, cached_input: 0.25, output: 15, estimated: true, estimatedFrom: 'GPT-5.4' },
 };
 
 const GEMINI_PRICING: Record<string, { input: number; cache_read: number; output: number }> = {
@@ -681,7 +686,7 @@ export function calculateBreakdownCost(breakdown: IngestBreakdown, warnings: Set
     if (resolved.normalized) {
       warnings.add(`${breakdown.model} 已按 ${resolved.model} 的公开单价估算。`);
     } else if (pricing.estimated) {
-      warnings.add(`${breakdown.model} 未在公开价目表单列，当前按 GPT-5 公开单价估算。`);
+      warnings.add(`${breakdown.model} 未在公开价目表单列，当前按 ${pricing.estimatedFrom ?? 'GPT-5'} 公开单价估算。`);
     }
     return (
       (breakdown.inputTokens / 1_000_000) * pricing.input +
