@@ -18,7 +18,7 @@
     "build": "node scripts/build.mjs",
     "lint": "tsc --noEmit",
     "types": "wrangler types",
-    "test": "node --test scripts/*.test.mjs",
+    "test": "vitest run && node --test scripts/*.test.mjs",
     "db:migrate:local": "wrangler d1 execute aiusage-db --local --file=migrations/0001_init.sql",
     "db:migrate:remote": "wrangler d1 execute aiusage-db --remote --file=migrations/0001_init.sql"
   },

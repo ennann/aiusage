@@ -136,8 +136,7 @@ describe('calculateBreakdownCost', () => {
     }, warnings);
 
     expect(cost).toBe(17.75);
-    expect([...warnings]).toEqual([
-      'codex-auto-review 未在公开价目表单列，当前按 GPT-5.4 公开单价估算。',
-    ]);
+    // codex-auto-review 是 catalog 里的显式 alias → gpt-5.4，按 exact 处理，不应有 warning
+    expect([...warnings]).toEqual([]);
   });
 });

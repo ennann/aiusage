@@ -81,7 +81,8 @@ describe('calculateCost: 基本计费', () => {
     });
     // gpt-5.4: 1*2.5 + 1*0.25 + 1*15 = $17.75
     expect(result.estimatedCostUsd).toBe(17.75);
-    expect(result.costStatus).toBe('estimated');
+    // codex-auto-review 是 catalog 里的显式 alias → gpt-5.4，按 exact 处理
+    expect(result.costStatus).toBe('exact');
   });
 });
 
@@ -152,8 +153,8 @@ describe('calculateCost: 模型别名解析', () => {
       outputTokens: 1_000_000,
     });
     expect(aliased.estimatedCostUsd).toBe(direct.estimatedCostUsd);
-    // 别名解析后 resolvedModel !== baseModel，status 为 estimated
-    expect(aliased.costStatus).toBe('estimated');
+    // 显式 alias 命中视为 exact（catalog 已声明两名等价）
+    expect(aliased.costStatus).toBe('exact');
   });
 });
 

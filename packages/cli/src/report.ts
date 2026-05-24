@@ -2,6 +2,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
 import type { IngestBreakdown } from '@aiusage/shared';
+import { calculateCost } from '@aiusage/shared';
 import { scanDates } from './scan.js';
 
 export type ReportRange = '7d' | '1m' | '3m' | 'all' | 'today';
@@ -546,89 +547,6 @@ function mergeTotals(target: Totals, source: Totals): Totals {
   return target;
 }
 
-const FAST_MULTIPLIER = 6;
-
-const CLAUDE_PRICING: Record<string, { input: number; cache_write_5m: number; cache_write_1h: number; cache_read: number; output: number }> = {
-  'claude-opus-4-6': { input: 5, cache_write_5m: 6.25, cache_write_1h: 10, cache_read: 0.5, output: 25 },
-  'claude-opus-4-5': { input: 5, cache_write_5m: 6.25, cache_write_1h: 10, cache_read: 0.5, output: 25 },
-  'claude-opus-4-1': { input: 15, cache_write_5m: 18.75, cache_write_1h: 30, cache_read: 1.5, output: 75 },
-  'claude-opus-4': { input: 15, cache_write_5m: 18.75, cache_write_1h: 30, cache_read: 1.5, output: 75 },
-  'claude-opus-3': { input: 15, cache_write_5m: 18.75, cache_write_1h: 30, cache_read: 1.5, output: 75 },
-  'claude-sonnet-4-6': { input: 3, cache_write_5m: 3.75, cache_write_1h: 6, cache_read: 0.3, output: 15 },
-  'claude-sonnet-4-5': { input: 3, cache_write_5m: 3.75, cache_write_1h: 6, cache_read: 0.3, output: 15 },
-  'claude-sonnet-4': { input: 3, cache_write_5m: 3.75, cache_write_1h: 6, cache_read: 0.3, output: 15 },
-  'claude-sonnet-3.7': { input: 3, cache_write_5m: 3.75, cache_write_1h: 6, cache_read: 0.3, output: 15 },
-  'claude-haiku-4-5': { input: 1, cache_write_5m: 1.25, cache_write_1h: 2, cache_read: 0.1, output: 5 },
-  'claude-haiku-3-5': { input: 0.8, cache_write_5m: 1, cache_write_1h: 1.6, cache_read: 0.08, output: 4 },
-  'claude-haiku-3': { input: 0.25, cache_write_5m: 0.3, cache_write_1h: 0.5, cache_read: 0.03, output: 1.25 },
-};
-
-const OPENAI_PRICING: Record<string, { input: number; cached_input: number | null; output: number; estimated: boolean; estimatedFrom?: string }> = {
-  'gpt-5.5-pro': { input: 30, cached_input: null, output: 180, estimated: false },
-  'gpt-5.5': { input: 5, cached_input: 0.5, output: 30, estimated: false },
-  'gpt-5.4-pro': { input: 30, cached_input: null, output: 180, estimated: false },
-  'gpt-5.4': { input: 2.5, cached_input: 0.25, output: 15, estimated: false },
-  'gpt-5.4-mini': { input: 0.75, cached_input: 0.075, output: 4.5, estimated: false },
-  'gpt-5.4-nano': { input: 0.2, cached_input: 0.02, output: 1.25, estimated: false },
-  'gpt-5.2-pro': { input: 21, cached_input: null, output: 168, estimated: false },
-  'gpt-5.2': { input: 1.75, cached_input: 0.175, output: 14, estimated: false },
-  'gpt-5.1': { input: 1.25, cached_input: 0.125, output: 10, estimated: false },
-  'gpt-5': { input: 1.25, cached_input: 0.125, output: 10, estimated: false },
-  'gpt-5-pro': { input: 15, cached_input: null, output: 120, estimated: false },
-  'gpt-5-mini': { input: 0.25, cached_input: 0.025, output: 2, estimated: false },
-  'gpt-5-nano': { input: 0.05, cached_input: 0.005, output: 0.4, estimated: false },
-  'gpt-5-codex': { input: 1.25, cached_input: 0.125, output: 10, estimated: false },
-  'gpt-5.1-codex': { input: 1.25, cached_input: 0.125, output: 10, estimated: false },
-  'gpt-5.1-codex-mini': { input: 0.25, cached_input: 0.025, output: 2, estimated: false },
-  'gpt-5.1-codex-max': { input: 1.25, cached_input: 0.125, output: 10, estimated: false },
-  'gpt-5.2-codex': { input: 1.75, cached_input: 0.175, output: 14, estimated: false },
-  'gpt-5.3-codex': { input: 1.75, cached_input: 0.175, output: 14, estimated: false },
-  'gpt-4.1': { input: 2, cached_input: 0.5, output: 8, estimated: false },
-  'gpt-4.1-mini': { input: 0.4, cached_input: 0.1, output: 1.6, estimated: false },
-  'gpt-4.1-nano': { input: 0.1, cached_input: 0.025, output: 0.4, estimated: false },
-  'gpt-4o': { input: 2.5, cached_input: 1.25, output: 10, estimated: false },
-  'gpt-4o-2024-05-13': { input: 5, cached_input: null, output: 15, estimated: false },
-  'gpt-4o-mini': { input: 0.15, cached_input: 0.075, output: 0.6, estimated: false },
-  'o1': { input: 15, cached_input: 7.5, output: 60, estimated: false },
-  'o1-pro': { input: 150, cached_input: null, output: 600, estimated: false },
-  'o3-pro': { input: 20, cached_input: null, output: 80, estimated: false },
-  'o3': { input: 2, cached_input: 0.5, output: 8, estimated: false },
-  'o4-mini': { input: 1.1, cached_input: 0.275, output: 4.4, estimated: false },
-  'o3-mini': { input: 1.1, cached_input: 0.55, output: 4.4, estimated: false },
-  'o1-mini': { input: 1.1, cached_input: 0.55, output: 4.4, estimated: false },
-  'gpt-4-turbo-2024-04-09': { input: 10, cached_input: null, output: 30, estimated: false },
-  'gpt-4-0125-preview': { input: 10, cached_input: null, output: 30, estimated: false },
-  'gpt-4-1106-preview': { input: 10, cached_input: null, output: 30, estimated: false },
-  'gpt-4-1106-vision-preview': { input: 10, cached_input: null, output: 30, estimated: false },
-  'gpt-4-0613': { input: 30, cached_input: null, output: 60, estimated: false },
-  'gpt-4-0314': { input: 30, cached_input: null, output: 60, estimated: false },
-  'gpt-4-32k': { input: 60, cached_input: null, output: 120, estimated: false },
-  'gpt-3.5-turbo': { input: 0.5, cached_input: null, output: 1.5, estimated: false },
-  'gpt-3.5-turbo-0125': { input: 0.5, cached_input: null, output: 1.5, estimated: false },
-  'gpt-3.5-turbo-1106': { input: 1, cached_input: null, output: 2, estimated: false },
-  'gpt-3.5-turbo-0613': { input: 1.5, cached_input: null, output: 2, estimated: false },
-  'gpt-3.5-0301': { input: 1.5, cached_input: null, output: 2, estimated: false },
-  'gpt-3.5-turbo-instruct': { input: 1.5, cached_input: null, output: 2, estimated: false },
-  'gpt-3.5-turbo-16k-0613': { input: 3, cached_input: null, output: 4, estimated: false },
-  'davinci-002': { input: 2, cached_input: null, output: 2, estimated: false },
-  'babbage-002': { input: 0.4, cached_input: null, output: 0.4, estimated: false },
-  'o3-deep-research': { input: 10, cached_input: 2.5, output: 40, estimated: false },
-  'o4-mini-deep-research': { input: 2, cached_input: 0.5, output: 8, estimated: false },
-  'computer-use-preview': { input: 3, cached_input: null, output: 12, estimated: false },
-  'text-embedding-3-small': { input: 0.02, cached_input: null, output: 0, estimated: false },
-  'text-embedding-3-large': { input: 0.13, cached_input: null, output: 0, estimated: false },
-  'text-embedding-ada-002': { input: 0.1, cached_input: null, output: 0, estimated: false },
-  'codex-mini-latest': { input: 1.5, cached_input: 0.375, output: 6, estimated: false },
-  'codex-auto-review': { input: 2.5, cached_input: 0.25, output: 15, estimated: true, estimatedFrom: 'GPT-5.4' },
-};
-
-const GEMINI_PRICING: Record<string, { input: number; cache_read: number; output: number }> = {
-  'gemini-3-flash': { input: 0.1, cache_read: 0.025, output: 0.4 },
-  'gemini-2.0-flash': { input: 0.1, cache_read: 0.025, output: 0.4 },
-  'gemini-1.5-flash': { input: 0.075, cache_read: 0.01875, output: 0.3 },
-  'gemini-1.5-pro': { input: 3.5, cache_read: 0.875, output: 10.5 },
-};
-
 function toBreakdownTotals(breakdown: IngestBreakdown, warnings: Set<string>): Totals {
   const estimatedCostUsd = calculateBreakdownCost(breakdown, warnings);
   return {
@@ -648,82 +566,37 @@ function toBreakdownTotals(breakdown: IngestBreakdown, warnings: Set<string>): T
   };
 }
 
+/**
+ * 计算单个 breakdown 的成本：
+ * 1. 若 Claude Code JSONL 自带 costUSD（旧版本会写），直接采用
+ * 2. 否则委托给 @aiusage/shared 的 calculateCost
+ *
+ * 失败/估算情况注入 warning 给上层报告展示。
+ */
 export function calculateBreakdownCost(breakdown: IngestBreakdown, warnings: Set<string>): number {
-  // 优先使用 Claude Code 预算的费用（costUSD）
   if (breakdown.costUSD != null && breakdown.costUSD > 0) {
     return breakdown.costUSD;
   }
 
-  if (breakdown.provider === 'anthropic' && breakdown.product === 'claude-code') {
-    // 检测 fast 模式（model 名以 -fast 结尾）
-    const isFast = breakdown.model.endsWith('-fast');
-    const baseModel = isFast ? breakdown.model.replace(/-fast$/, '') : breakdown.model;
-    const resolved = resolveModel(baseModel, CLAUDE_PRICING);
-    if (!resolved) {
-      warnings.add(`Claude 模型 ${breakdown.model} 未配置公开单价，已跳过成本估算。`);
-      return 0;
-    }
-    if (resolved.normalized) {
-      warnings.add(`${breakdown.model} 已按 ${resolved.model} 的公开单价估算。`);
-    }
-    const pricing = CLAUDE_PRICING[resolved.model];
-    const baseCost =
-      (breakdown.inputTokens / 1_000_000) * pricing.input +
-      (((breakdown.cacheWrite5mTokens ?? breakdown.cacheWriteTokens) || 0) / 1_000_000) * pricing.cache_write_5m +
-      ((breakdown.cacheWrite1hTokens ?? 0) / 1_000_000) * pricing.cache_write_1h +
-      (breakdown.cachedInputTokens / 1_000_000) * pricing.cache_read +
-      (breakdown.outputTokens / 1_000_000) * pricing.output;
-    return isFast ? baseCost * FAST_MULTIPLIER : baseCost;
+  const result = calculateCost(
+    breakdown.provider,
+    breakdown.product,
+    breakdown.model,
+    {
+      inputTokens: breakdown.inputTokens,
+      cachedInputTokens: breakdown.cachedInputTokens,
+      cacheWriteTokens: breakdown.cacheWriteTokens,
+      cacheWrite5mTokens: breakdown.cacheWrite5mTokens,
+      cacheWrite1hTokens: breakdown.cacheWrite1hTokens,
+      outputTokens: breakdown.outputTokens,
+    },
+  );
+
+  if (result.costStatus === 'unavailable') {
+    warnings.add(`${breakdown.provider}/${breakdown.product}/${breakdown.model} 暂无定价配置，已跳过成本估算。`);
+  } else if (result.costStatus === 'estimated' && result.resolvedModel && result.resolvedModel !== breakdown.model) {
+    warnings.add(`${breakdown.model} 已按 ${result.resolvedModel} 的公开单价估算。`);
   }
 
-  if (breakdown.provider === 'openai' && breakdown.product === 'codex') {
-    const resolved = resolveModel(breakdown.model, OPENAI_PRICING);
-    if (!resolved) {
-      warnings.add(`Codex/OpenAI 模型 ${breakdown.model} 未配置公开单价，已跳过成本估算。`);
-      return 0;
-    }
-    const pricing = OPENAI_PRICING[resolved.model];
-    if (resolved.normalized) {
-      warnings.add(`${breakdown.model} 已按 ${resolved.model} 的公开单价估算。`);
-    } else if (pricing.estimated) {
-      warnings.add(`${breakdown.model} 未在公开价目表单列，当前按 ${pricing.estimatedFrom ?? 'GPT-5'} 公开单价估算。`);
-    }
-    return (
-      (breakdown.inputTokens / 1_000_000) * pricing.input +
-      ((breakdown.cachedInputTokens / 1_000_000) * (pricing.cached_input ?? 0)) +
-      (breakdown.outputTokens / 1_000_000) * pricing.output
-    );
-  }
-
-  if (breakdown.provider === 'google' && breakdown.product === 'gemini-cli') {
-    const resolved = resolveModel(breakdown.model, GEMINI_PRICING);
-    if (!resolved) {
-      warnings.add(`Gemini 模型 ${breakdown.model} 未配置公开单价，已跳过成本估算。`);
-      return 0;
-    }
-    const pricing = GEMINI_PRICING[resolved.model];
-    if (resolved.normalized) {
-      warnings.add(`${breakdown.model} 已按 ${resolved.model} 的公开单价估算。`);
-    }
-    return (
-      (breakdown.inputTokens / 1_000_000) * pricing.input +
-      (breakdown.cachedInputTokens / 1_000_000) * pricing.cache_read +
-      (breakdown.outputTokens / 1_000_000) * pricing.output
-    );
-  }
-
-  warnings.add(`${breakdown.provider}/${breakdown.product} 暂无本地定价策略，已跳过成本估算。`);
-  return 0;
-}
-
-function resolveModel<T>(model: string, pricingTable: Record<string, T>): { model: string; normalized: boolean } | null {
-  if (model in pricingTable) {
-    return { model, normalized: false };
-  }
-  for (const known of Object.keys(pricingTable).sort((a, b) => b.length - a.length)) {
-    if (model.startsWith(`${known}-`)) {
-      return { model: known, normalized: true };
-    }
-  }
-  return null;
+  return result.estimatedCostUsd;
 }
