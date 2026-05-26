@@ -187,7 +187,7 @@ function WidgetRenderer({
           ) : (
             <>
               <ChartBoundary name="Token Trend">
-                <TokenTrendChart data={overview?.tokenComposition ?? []} locale={locale} />
+                <TokenTrendChart data={overview?.tokenComposition ?? []} locale={locale} totalLabel={t.total} />
               </ChartBoundary>
               <ChartLegend items={tokenLegend} />
             </>
@@ -205,7 +205,7 @@ function WidgetRenderer({
           ) : (
             <>
               <ChartBoundary name="Token Composition">
-                <TokenCompositionChart data={overview?.tokenComposition ?? []} locale={locale} />
+                <TokenCompositionChart data={overview?.tokenComposition ?? []} locale={locale} totalLabel={t.total} />
               </ChartBoundary>
               <ChartLegend items={tokenLegend} />
             </>

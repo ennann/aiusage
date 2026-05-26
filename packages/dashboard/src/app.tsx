@@ -554,7 +554,7 @@ export function App() {
             ) : (
               <>
                 <ChartBoundary name="Token Trend">
-                  <TokenTrendChart data={overview?.tokenComposition ?? []} locale={locale} />
+                  <TokenTrendChart data={overview?.tokenComposition ?? []} locale={locale} totalLabel={t.total} />
                 </ChartBoundary>
                 <ChartLegend items={tokenLegend} />
               </>
@@ -563,13 +563,13 @@ export function App() {
 
           {/* ── Token Composition ── */}
           <div className="card fade-up p-6" style={{ animationDelay: '250ms' }}>
-            <SectionHeader title={t.tokenComposition} stat={unavailable ? t.unavailable : undefined} />
+            <SectionHeader title={t.tokenComposition} stat={unavailable ? t.unavailable : formatCompact(kpis?.totalTokens ?? 0, locale)} />
             {unavailable ? (
               <EmptyState label={t.tokenUnavailable} />
             ) : (
               <>
                 <ChartBoundary name="Token Composition">
-                  <TokenCompositionChart data={overview?.tokenComposition ?? []} locale={locale} />
+                  <TokenCompositionChart data={overview?.tokenComposition ?? []} locale={locale} totalLabel={t.total} />
                 </ChartBoundary>
                 <ChartLegend items={tokenLegend} />
               </>

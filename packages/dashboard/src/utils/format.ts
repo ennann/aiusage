@@ -30,6 +30,14 @@ export function formatNumber(v: number): string {
   return new Intl.NumberFormat('en-US').format(Number(v || 0));
 }
 
+/** Tooltip 用：紧凑数字 + 括号完整数字。如 `8.62B (8,621,971,144)`。
+ *  数字 < 1000 时只显示原值，避免冗余如 `42 (42)`。 */
+export function formatTokens(v: number, locale: Locale = 'en'): string {
+  const n = Number(v || 0);
+  if (n < 1000) return formatNumber(n);
+  return `${formatCompact(n, locale)} (${formatNumber(n)})`;
+}
+
 export function formatPercent(v: number): string {
   return `${Number(v || 0).toFixed(1)}%`;
 }

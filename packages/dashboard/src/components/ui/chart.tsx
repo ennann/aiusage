@@ -59,6 +59,10 @@ interface ChartTooltipContentProps extends React.HTMLAttributes<HTMLDivElement> 
   indicator?: 'dot' | 'line';
   labelFormatter?: (label: string) => React.ReactNode;
   formatter?: (value: number | string, name: string) => React.ReactNode;
+  /** 在 series 列表底部追加一行汇总（payload 各项 value 求和后用 totalFormatter 渲染）。 */
+  showTotal?: boolean;
+  totalLabel?: string;
+  totalFormatter?: (value: number) => React.ReactNode;
 }
 
 export function ChartTooltipContent({
@@ -69,6 +73,9 @@ export function ChartTooltipContent({
   indicator = 'dot',
   labelFormatter,
   formatter,
+  showTotal = false,
+  totalLabel = 'Total',
+  totalFormatter,
   className,
   ...props
 }: ChartTooltipContentProps): React.JSX.Element | null {
@@ -103,12 +110,24 @@ export function ChartTooltipContent({
                 style={{ color: tone }}
               />
               <span className="truncate text-[11px] text-slate-500 dark:text-slate-400">{itemLabel}</span>
-              <span className="text-[11px] font-semibold text-slate-950 dark:text-slate-300">
+              <span className="text-[11px] font-semibold text-slate-950 dark:text-slate-300 tabular-nums">
                 {formatter ? formatter(item.value ?? 0, String(itemLabel)) : String(item.value ?? 0)}
               </span>
             </div>
           );
         })}
+        {showTotal ? (() => {
+          const sum = payload.reduce((acc, it) => acc + Number(it.value ?? 0), 0);
+          return (
+            <div className="mt-1 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2.5 border-t border-slate-200/80 pt-2 dark:border-white/10">
+              <span className="h-2.5 w-2.5" />
+              <span className="truncate text-[11px] font-semibold text-slate-700 dark:text-slate-300">{totalLabel}</span>
+              <span className="text-[11px] font-semibold text-slate-950 dark:text-slate-200 tabular-nums">
+                {totalFormatter ? totalFormatter(sum) : String(sum)}
+              </span>
+            </div>
+          );
+        })() : null}
       </div>
     </div>
   );

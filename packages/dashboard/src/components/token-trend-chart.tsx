@@ -7,11 +7,11 @@ import {
 import type { OverviewPayload } from '../hooks/use-overview';
 import type { Locale } from '../i18n';
 import { TOKEN_SERIES, getTokenConfig, getTokenColor } from '../constants';
-import { formatCompact, formatNumber, shortDate, longDate } from '../utils/format';
+import { formatCompact, formatTokens, shortDate, longDate } from '../utils/format';
 import { EmptyState } from './chart-helpers';
 import { useIsDark } from '../hooks/use-dark';
 
-export function TokenTrendChart({ data, locale }: { data: OverviewPayload['tokenComposition']; locale: Locale }) {
+export function TokenTrendChart({ data, locale, totalLabel }: { data: OverviewPayload['tokenComposition']; locale: Locale; totalLabel?: string }) {
   const isDark = useIsDark();
   if (!data.length) return <EmptyState label="No data" />;
   return (
@@ -33,7 +33,10 @@ export function TokenTrendChart({ data, locale }: { data: OverviewPayload['token
             content={
               <ChartTooltipContent
                 labelFormatter={longDate}
-                formatter={(v) => formatNumber(Number(v))}
+                formatter={(v) => formatTokens(Number(v), locale)}
+                showTotal
+                totalLabel={totalLabel ?? 'Total'}
+                totalFormatter={(v) => formatTokens(v, locale)}
               />
             }
           />

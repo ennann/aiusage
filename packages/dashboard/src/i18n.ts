@@ -51,6 +51,7 @@ export const I18N = {
     required: 'Required', theme: 'Theme', timeRange: 'Time Range', transparent: 'Transparent', language: 'Language',
     filterDevice: 'Filter by Device', filterProduct: 'Filter by Product', items: 'Items',
     demoBanner: 'Demo data — backend unavailable, showing sample numbers',
+    total: 'Total',
   },
   zh: {
     estimatedCost: '预估费用', totalTokens: '总 Token',
@@ -97,6 +98,7 @@ export const I18N = {
     required: '必填', theme: '主题', timeRange: '时间范围', transparent: '透明背景', language: '语言',
     filterDevice: '按设备筛选', filterProduct: '按产品筛选', items: '子项',
     demoBanner: '演示数据 — 后端无法连接，以下为示例数字',
+    total: '合计',
   },
 } as const;
 
