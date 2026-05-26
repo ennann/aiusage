@@ -161,8 +161,8 @@ describe('calculateCost: 模型别名解析', () => {
 // ─── calculateCost: 模型前缀匹配 ───
 
 describe('calculateCost: 模型前缀匹配', () => {
-  it('claude-sonnet-4-6-20260101 前缀匹配 claude-sonnet-4-6', () => {
-    const prefixed = calculateCost('anthropic', 'claude-code', 'claude-sonnet-4-6-20260101', {
+  it('语义化后缀（如 -bedrock）触发前缀回退 estimated', () => {
+    const prefixed = calculateCost('anthropic', 'claude-code', 'claude-sonnet-4-6-bedrock', {
       inputTokens: 1_000_000,
       cachedInputTokens: 0,
       cacheWriteTokens: 0,
@@ -175,15 +175,42 @@ describe('calculateCost: 模型前缀匹配', () => {
       outputTokens: 1_000_000,
     });
     expect(prefixed.estimatedCostUsd).toBe(direct.estimatedCostUsd);
-    // 前缀匹配时 resolvedModel !== baseModel，应返回 estimated
     expect(prefixed.costStatus).toBe('estimated');
+  });
+
+  it('纯日期后缀不再静默回退（视为独立新版本，未登记则 unavailable）', () => {
+    const r = calculateCost('anthropic', 'claude-code', 'claude-sonnet-4-6-20260101', {
+      inputTokens: 1_000_000,
+      cachedInputTokens: 0,
+      cacheWriteTokens: 0,
+      outputTokens: 1_000_000,
+    });
+    expect(r.costStatus).toBe('unavailable');
   });
 });
 
-// ─── calculateCost: fast 模式 ───
+// ─── calculateCost: fast 模式（白名单 Opus 4.6/4.7） ───
 
 describe('calculateCost: fast 模式', () => {
-  it('model 以 -fast 结尾时费用乘以 6', () => {
+  it('Opus 4.7-fast 应 ×6', () => {
+    const normal = calculateCost('anthropic', 'claude-code', 'claude-opus-4-7', {
+      inputTokens: 1_000_000,
+      cachedInputTokens: 0,
+      cacheWriteTokens: 0,
+      outputTokens: 1_000_000,
+    });
+    const fast = calculateCost('anthropic', 'claude-code', 'claude-opus-4-7-fast', {
+      inputTokens: 1_000_000,
+      cachedInputTokens: 0,
+      cacheWriteTokens: 0,
+      outputTokens: 1_000_000,
+    });
+    expect(fast.estimatedCostUsd).toBe(
+      Math.round(normal.estimatedCostUsd * 6 * 10000) / 10000,
+    );
+  });
+
+  it('非 Opus 4.6/4.7 的 -fast 后缀不应放大（白名单防护）', () => {
     const normal = calculateCost('anthropic', 'claude-code', 'claude-sonnet-4-6', {
       inputTokens: 1_000_000,
       cachedInputTokens: 0,
@@ -196,10 +223,7 @@ describe('calculateCost: fast 模式', () => {
       cacheWriteTokens: 0,
       outputTokens: 1_000_000,
     });
-    // fast = normal * 6
-    expect(fast.estimatedCostUsd).toBe(
-      Math.round(normal.estimatedCostUsd * 6 * 10000) / 10000,
-    );
+    expect(fast.estimatedCostUsd).toBe(normal.estimatedCostUsd);
   });
 });
 

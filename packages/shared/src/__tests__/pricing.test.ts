@@ -66,10 +66,90 @@ describe('calculateCost — 关键模型', () => {
     expect(r.costStatus).toBe('exact');
   });
 
-  it('未知后缀触发前缀回退（estimated）', () => {
-    const r = calculateCost('anthropic', 'claude-code', 'claude-sonnet-4-6-20260101', tokens);
+  it('语义化未知后缀触发前缀回退（estimated）', () => {
+    const r = calculateCost('anthropic', 'claude-code', 'claude-sonnet-4-6-bedrock', tokens);
     expect(r.resolvedModel).toBe('claude-sonnet-4-6');
     expect(r.costStatus).toBe('estimated');
+  });
+
+  it('纯日期后缀视为独立版本，未登记则 unavailable（不再静默回退）', () => {
+    const r = calculateCost('anthropic', 'claude-code', 'claude-sonnet-4-6-20260101', tokens);
+    expect(r.costStatus).toBe('unavailable');
+  });
+});
+
+// ─── 跨档防护（fallback 不应跨版本号档位）───
+
+describe('跨档防护', () => {
+  const tokens = {
+    inputTokens: 1_000_000,
+    cachedInputTokens: 0,
+    cacheWriteTokens: 0,
+    outputTokens: 1_000_000,
+  };
+
+  it('已知 claude-opus-4-7 不应回退到 claude-opus-4（即便都在表中）', () => {
+    const r = calculateCost('anthropic', 'claude-code', 'claude-opus-4-7', tokens);
+    expect(r.resolvedModel).toBe('claude-opus-4-7');
+    expect(r.costStatus).toBe('exact');
+  });
+
+  it('未来未登记的 claude-opus-4-8 应返回 unavailable 而非吞到 claude-opus-4', () => {
+    const r = calculateCost('anthropic', 'claude-code', 'claude-opus-4-8', tokens);
+    expect(r.costStatus).toBe('unavailable');
+    expect(r.estimatedCostUsd).toBe(0);
+  });
+
+  it('claude-sonnet-4-9 同理拒绝跨档', () => {
+    const r = calculateCost('anthropic', 'claude-code', 'claude-sonnet-4-9', tokens);
+    expect(r.costStatus).toBe('unavailable');
+  });
+
+  it('带语义后缀（非纯数字）的版本可以回退', () => {
+    const r = calculateCost('anthropic', 'claude-code', 'claude-sonnet-4-6-bedrock', tokens);
+    expect(r.resolvedModel).toBe('claude-sonnet-4-6');
+    expect(r.costStatus).toBe('estimated');
+  });
+});
+
+// ─── Fast 模式白名单 ───
+
+describe('Fast 模式白名单', () => {
+  const tokens = {
+    inputTokens: 1_000_000,
+    cachedInputTokens: 0,
+    cacheWriteTokens: 0,
+    outputTokens: 1_000_000,
+  };
+
+  it('Opus 4.7-fast 应 ×6', () => {
+    const fast = calculateCost('anthropic', 'claude-code', 'claude-opus-4-7-fast', tokens);
+    const normal = calculateCost('anthropic', 'claude-code', 'claude-opus-4-7', tokens);
+    expect(fast.estimatedCostUsd).toBeCloseTo(normal.estimatedCostUsd * 6, 3);
+  });
+
+  it('Opus 4.6-fast 应 ×6', () => {
+    const fast = calculateCost('anthropic', 'claude-code', 'claude-opus-4-6-fast', tokens);
+    const normal = calculateCost('anthropic', 'claude-code', 'claude-opus-4-6', tokens);
+    expect(fast.estimatedCostUsd).toBeCloseTo(normal.estimatedCostUsd * 6, 3);
+  });
+
+  it('Sonnet-fast 不应 ×6（官方不支持）', () => {
+    const fast = calculateCost('anthropic', 'claude-code', 'claude-sonnet-4-6-fast', tokens);
+    const normal = calculateCost('anthropic', 'claude-code', 'claude-sonnet-4-6', tokens);
+    expect(fast.estimatedCostUsd).toBe(normal.estimatedCostUsd);
+  });
+
+  it('Haiku-fast 不应 ×6', () => {
+    const fast = calculateCost('anthropic', 'claude-code', 'claude-haiku-4-5-fast', tokens);
+    const normal = calculateCost('anthropic', 'claude-code', 'claude-haiku-4-5', tokens);
+    expect(fast.estimatedCostUsd).toBe(normal.estimatedCostUsd);
+  });
+
+  it('Gemini-fast 不应 ×6', () => {
+    const fast = calculateCost('google', 'gemini-cli', 'gemini-2.5-flash-fast', tokens);
+    const normal = calculateCost('google', 'gemini-cli', 'gemini-2.5-flash', tokens);
+    expect(fast.estimatedCostUsd).toBe(normal.estimatedCostUsd);
   });
 });
 

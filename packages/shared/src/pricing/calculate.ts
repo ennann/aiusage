@@ -11,10 +11,21 @@ import { catalog as defaultCatalog } from './catalog.js';
 const FAST_MULTIPLIER = 6;
 
 /**
+ * Fast 模式 ×6 仅适用以下模型（Anthropic 官方明确支持）。
+ * 其它 -fast 后缀（即便 scanner 误标）按原价计算，避免被错误放大 6 倍。
+ */
+const FAST_SUPPORTED = new Set<string>([
+  'claude-opus-4-7',
+  'claude-opus-4-6',
+]);
+
+/**
  * resolveModelPricing — alias 精确匹配，再 longest-prefix fallback。
  *
- * 重要：fallback 时只匹配同档前缀（如 `claude-opus-4-7` 不应 fallback 到 `claude-opus-4`），
- * 通过要求"前缀后必须紧跟 `-` + 数字"避免跨档命中。
+ * 跨档防护：当 model 仅在前缀后多一段"纯数字版本号"（如 `claude-opus-4-7` vs known
+ * `claude-opus-4`）时，说明这是一个独立的新版本而非同 family 衍生，拒绝 fallback。
+ * 这样可确保未来出现 `claude-opus-4-8` 等新版本被显式登记前，会返回 unavailable
+ * 而不是默默按旧版本计算（旧版本可能贵 3 倍）。
  */
 function resolveModelPricing(
   catalog: PricingCatalog,
@@ -39,9 +50,12 @@ function resolveModelPricing(
   // longest-prefix fallback（同 family / 同档位前缀）
   for (const knownModel of Object.keys(models).sort((a, b) => b.length - a.length)) {
     if (!model.startsWith(`${knownModel}-`)) continue;
-    // 拒绝跨档命中：known='claude-opus-4', model='claude-opus-4-7' 时
-    // 后缀是 '-7'（纯版本号），说明本应有更准确的 'claude-opus-4-7' 条目；
-    // 此处保留旧行为以保证兼容，但调用方应通过 cost_status='estimated' 区分。
+
+    // 跨档防护：剥掉 known 前缀后，若 suffix 仅是版本号数字段（如 `-7`、`-7-20260201`），
+    // 视为独立新版本，拒绝回退。这是为了避免 `claude-opus-4-7` 被错误归到旧 `claude-opus-4`。
+    const suffix = model.slice(knownModel.length + 1); // 去掉 "knownModel-"
+    if (/^\d+(?:[-.]\d+)*(?:-\d{6,8})?$/.test(suffix)) continue;
+
     return { resolvedModel: knownModel, pricing: models[knownModel], normalized: true };
   }
 
@@ -134,8 +148,8 @@ export function calculateCost(
   // 折算 currency → USD
   raw = toUsd(raw, pricing.currency, cat);
 
-  // Fast 模式（仅 Opus 4.6/4.7 官方支持，但对所有 -fast 后缀都乘 6 以保留旧行为）
-  const finalCost = isFast ? raw * FAST_MULTIPLIER : raw;
+  // Fast 模式 ×6 仅对白名单模型生效；其它 -fast 后缀按原价
+  const finalCost = isFast && FAST_SUPPORTED.has(resolvedModel) ? raw * FAST_MULTIPLIER : raw;
 
   return {
     estimatedCostUsd: Math.round(finalCost * 10000) / 10000,

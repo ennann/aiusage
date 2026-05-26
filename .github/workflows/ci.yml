@@ -19,11 +19,14 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      - name: Lint (typecheck all packages)
+        run: pnpm -r lint
+
       - name: Build
         run: pnpm turbo build
 
-      - name: Test
-        run: cd packages/cli && npx vitest run
+      - name: Test (all packages)
+        run: pnpm -r test
 
   deploy:
     needs: build

@@ -350,6 +350,16 @@ export function App() {
 
       </header>
 
+      {isDemo && (
+        <div
+          role="status"
+          className="mb-4 flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[13px] text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200"
+        >
+          <span aria-hidden className="inline-block h-1.5 w-1.5 rounded-full bg-amber-500" />
+          {t.demoBanner}
+        </div>
+      )}
+
         {/* ── Range + Filters (desktop) ── */}
         <div className="mt-2 mb-6 hidden sm:flex sm:flex-wrap sm:items-center sm:gap-x-4 sm:gap-y-2">
           <div className="flex items-center gap-2">

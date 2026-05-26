@@ -23,47 +23,59 @@ import { disableSchedule, enableSchedule, formatInterval, getScheduleStatus, par
 import { runDoctor } from './doctor.js';
 import { getVersion } from './version.js';
 import { discoverProjects } from './project.js';
+import { applyPrivacy } from './privacy.js';
 
 const argv = process.argv.slice(2);
 const command = argv[0];
 
+await (async () => {
 try {
   if (command === '--version' || command === '-v') {
     console.log(getVersion());
   } else if (command === 'scan') {
     const parsed = parseArgs(argv.slice(1));
+    if (parsed.flags.help) return helpForSubcommand('scan');
     await runScan(parsed.flags, parsed.positionals);
   } else if (command === 'report') {
     const parsed = parseArgs(argv.slice(1));
+    if (parsed.flags.help) return helpForSubcommand('report');
     await runReport(parsed.flags, parsed.positionals);
   } else if (command === 'health') {
     const parsed = parseArgs(argv.slice(1));
+    if (parsed.flags.help) return helpForSubcommand('health');
     await runHealth(parsed.flags);
   } else if (command === 'enroll') {
     const parsed = parseArgs(argv.slice(1));
+    if (parsed.flags.help) return helpForSubcommand('enroll');
     await runEnroll(parsed.flags);
   } else if (command === 'sync') {
     const parsed = parseArgs(argv.slice(1));
+    if (parsed.flags.help) return helpForSubcommand('sync');
     await runSync(parsed.flags, parsed.positionals);
   } else if (command === 'init') {
     const parsed = parseArgs(argv.slice(1));
+    if (parsed.flags.help) return helpForSubcommand('init');
     await runInit(parsed.flags);
   } else if (command === 'schedule') {
     const sub = argv[1];
+    if (sub === '--help' || sub === '-h') return helpForSubcommand('schedule');
     if (sub === 'off') {
       await runSchedule('off', {});
     } else if (sub === 'status') {
       await runSchedule('status', {});
     } else if (sub === 'on') {
       const parsed = parseArgs(argv.slice(2));
+      if (parsed.flags.help) return helpForSubcommand('schedule');
       await runSchedule('on', parsed.flags);
     } else {
       // 无子命令 → 默认启用 5m
       const parsed = parseArgs(argv.slice(1));
+      if (parsed.flags.help) return helpForSubcommand('schedule');
       await runSchedule('on', parsed.flags);
     }
   } else if (command === 'doctor') {
     const parsed = parseArgs(argv.slice(1));
+    if (parsed.flags.help) return helpForSubcommand('doctor');
     await runDoctorCommand(parsed.flags);
   } else if (command === 'config' && argv[1] === 'set') {
     await runConfigSet(argv.slice(2));
@@ -86,6 +98,7 @@ try {
     }
   } else if (command === 'import') {
     const parsed = parseArgs(argv.slice(1));
+    if (parsed.flags.help) return helpForSubcommand('import');
     await runImport(parsed.flags, parsed.positionals);
   } else if (command === 'setup') {
     console.log('To deploy the server, clone the repo and run the setup wizard:\n');
@@ -109,6 +122,7 @@ try {
   console.error(error instanceof Error ? error.message : String(error));
   process.exitCode = 1;
 }
+})();
 
 async function runScan(flags: Record<string, string | boolean>, positionals: string[] = []) {
   const config = await readConfig();
@@ -298,9 +312,10 @@ async function runSync(flags: Record<string, string | boolean>, positionals: str
   console.log(`扫描 ${targetDates.length} 天 (${targetDates[0]} ~ ${targetDates[targetDates.length - 1]}) ...`);
 
   const results = await scanDates(targetDates, { projectAliases: config.projectAliases });
+  const visibility = config.privacy?.projectVisibility;
   const allDays = results
     .filter(r => r.breakdowns.length > 0)
-    .map(r => ({ usageDate: r.usageDate, breakdowns: r.breakdowns }));
+    .map(r => ({ usageDate: r.usageDate, breakdowns: applyPrivacy(r.breakdowns, visibility) }));
 
   if (allDays.length === 0) {
     console.log('没有可上传的数据。');
@@ -442,6 +457,10 @@ async function runImport(flags: Record<string, string | boolean>, positionals: s
     }
     console.log(`Found data for ${allDays.length} days. Uploading...`);
   }
+
+  // 上传前按隐私策略脱敏（默认 masked：basename + 8 字符短哈希）
+  const visibility = config.privacy?.projectVisibility;
+  allDays = allDays.map(d => ({ usageDate: d.usageDate, breakdowns: applyPrivacy(d.breakdowns, visibility) }));
 
   for (const target of targets) {
     if (!target.deviceToken) {
@@ -640,6 +659,15 @@ async function runProjectAlias(args: string[]) {
   config.projectAliases = { ...(config.projectAliases ?? {}), [name]: alias };
   await writeConfig(config);
   console.log(zh ? `已设置: ${name} → ${alias}` : `Set: ${name} → ${alias}`);
+}
+
+/**
+ * 子命令 --help：临时方案是统一回退到顶层 printHelp，避免子命令把 --help 当数据吃掉。
+ * 未来可按 subcommand 输出更精细的用法（参数表 + 示例），目前简单一致更重要。
+ */
+async function helpForSubcommand(_command: string): Promise<void> {
+  const zh = (await readConfig().catch(() => ({ lang: 'en' as const }))).lang === 'zh';
+  printHelp(zh);
 }
 
 function printHelp(zh = false) {
