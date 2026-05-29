@@ -41,6 +41,7 @@ describe('calculateCost — 关键模型', () => {
   };
 
   it.each([
+    ['anthropic', 'claude-code', 'claude-opus-4-8', 30], // 5 + 25
     ['anthropic', 'claude-code', 'claude-opus-4-7', 30], // 5 + 25
     ['anthropic', 'claude-code', 'claude-sonnet-4-6', 18],
     ['openai', 'codex', 'gpt-5.4', 17.5], // 2.5 + 15
@@ -94,8 +95,14 @@ describe('跨档防护', () => {
     expect(r.costStatus).toBe('exact');
   });
 
-  it('未来未登记的 claude-opus-4-8 应返回 unavailable 而非吞到 claude-opus-4', () => {
+  it('已登记的 claude-opus-4-8 命中 exact 而非吞到 claude-opus-4', () => {
     const r = calculateCost('anthropic', 'claude-code', 'claude-opus-4-8', tokens);
+    expect(r.resolvedModel).toBe('claude-opus-4-8');
+    expect(r.costStatus).toBe('exact');
+  });
+
+  it('未来未登记的 claude-opus-4-9 应返回 unavailable 而非吞到 claude-opus-4', () => {
+    const r = calculateCost('anthropic', 'claude-code', 'claude-opus-4-9', tokens);
     expect(r.costStatus).toBe('unavailable');
     expect(r.estimatedCostUsd).toBe(0);
   });
@@ -121,6 +128,12 @@ describe('Fast 模式白名单', () => {
     cacheWriteTokens: 0,
     outputTokens: 1_000_000,
   };
+
+  it('Opus 4.8-fast 应 ×6', () => {
+    const fast = calculateCost('anthropic', 'claude-code', 'claude-opus-4-8-fast', tokens);
+    const normal = calculateCost('anthropic', 'claude-code', 'claude-opus-4-8', tokens);
+    expect(fast.estimatedCostUsd).toBeCloseTo(normal.estimatedCostUsd * 6, 3);
+  });
 
   it('Opus 4.7-fast 应 ×6', () => {
     const fast = calculateCost('anthropic', 'claude-code', 'claude-opus-4-7-fast', tokens);

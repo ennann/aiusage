@@ -15,6 +15,7 @@ const FAST_MULTIPLIER = 6;
  * 其它 -fast 后缀（即便 scanner 误标）按原价计算，避免被错误放大 6 倍。
  */
 const FAST_SUPPORTED = new Set<string>([
+  'claude-opus-4-8',
   'claude-opus-4-7',
   'claude-opus-4-6',
 ]);
