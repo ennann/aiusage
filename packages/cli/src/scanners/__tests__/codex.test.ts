@@ -216,6 +216,51 @@ describe('Fix 2: deduplication of duplicate events', () => {
     expect(results[0].cachedInputTokens).toBe(5000); // 2000 + 3000
     expect(results[0].outputTokens).toBe(250);       // 100 + 150
   });
+
+  it('does not drop real turns across sessions that each start with a zero total', async () => {
+    const day = '2025-10-16';
+    const dir = join(tmpDir, 'sessions', '2025', '10', '16');
+    // 两个独立会话，开头都带一个全零 total（会话开头噪声）。
+    // 旧逻辑下第二个会话的全零会命中第一个的签名而被丢弃，进而连累后续 delta 计算；
+    // 修复后全零不参与去重，两个会话的真实 turn 都应保留。
+    const zeroEvent = (ts: string) => ({
+      type: 'event_msg',
+      timestamp: ts,
+      payload: {
+        type: 'token_count',
+        info: {
+          last_token_usage: { input_tokens: 0, cached_input_tokens: 0, output_tokens: 0 },
+          total_token_usage: { input_tokens: 0, cached_input_tokens: 0, output_tokens: 0 },
+        },
+      },
+    });
+    const realEvent = (ts: string, out: number) => ({
+      type: 'event_msg',
+      timestamp: ts,
+      payload: {
+        type: 'token_count',
+        info: {
+          last_token_usage: { input_tokens: 100, cached_input_tokens: 50, output_tokens: out },
+          total_token_usage: { input_tokens: 100, cached_input_tokens: 50, output_tokens: out },
+        },
+      },
+    });
+    const ctx = { type: 'turn_context', payload: { model: 'gpt-5-codex', cwd: '/p' } };
+    await writeSession(dir, 'session-a.jsonl', [
+      { ...ctx, timestamp: `${day}T10:00:00.000Z` },
+      zeroEvent(`${day}T10:00:00.500Z`),
+      realEvent(`${day}T10:00:05.000Z`, 80),
+    ]);
+    await writeSession(dir, 'session-b.jsonl', [
+      { ...ctx, timestamp: `${day}T11:00:00.000Z` },
+      zeroEvent(`${day}T11:00:00.500Z`),
+      realEvent(`${day}T11:00:05.000Z`, 120),
+    ]);
+
+    const results = await scanCodex(day, tmpDir);
+    expect(results[0].eventCount).toBe(2); // 两个会话各 1 笔真实 turn，全零不计
+    expect(results[0].outputTokens).toBe(200); // 80 + 120
+  });
 });
 
 // ─── Fix 3: fallback to delta when last_token_usage is absent ───

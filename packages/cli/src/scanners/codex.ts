@@ -129,8 +129,18 @@ async function processCodexFile(
       const usageDate = toDateKey(ts);
       if (!targetDateSet.has(usageDate)) continue;
 
-      // 按 total_token_usage 签名跨文件全局去重
+      // 跨文件全局去重：total_token_usage 在会话内单调累加，相同的非零累计值
+      // 只可能来自 fork/resume 复制行或重复 emit，可安全去重。
       const total = info.total_token_usage;
+      const totalSum =
+        (total.input_tokens ?? 0) +
+        (total.cached_input_tokens ?? 0) +
+        (total.output_tokens ?? 0) +
+        (total.reasoning_output_tokens ?? 0) +
+        (total.total_tokens ?? 0);
+      // 全零累计是每个会话开头都有的噪声，跨会话签名相同会被误杀，
+      // 故全零既不参与去重也不计入用量（last 也必为 0，无影响）。
+      if (totalSum === 0) continue;
       const signature = `${total.input_tokens ?? 0}|${total.cached_input_tokens ?? 0}|${total.output_tokens ?? 0}|${total.reasoning_output_tokens ?? 0}|${total.total_tokens ?? 0}`;
       if (globalSeenSigs.has(signature)) continue;
       globalSeenSigs.add(signature);
