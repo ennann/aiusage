@@ -2,10 +2,22 @@ import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { IngestBreakdown } from '@aiusage/shared';
 
+/** 早于此刻视为脏数据下界（2015-01-01），用于过滤被误判单位的时间戳 */
+const MIN_VALID_MS = Date.UTC(2015, 0, 1);
+
 export function parseTs(value?: string | number): Date | null {
-  if (value == null) return null;
-  const d = new Date(value);
-  return isNaN(d.getTime()) ? null : d;
+  if (value == null || value === '') return null;
+  // 数值时间戳：区分秒级（10 位）与毫秒级（13 位）。
+  // 形如 1775196391.26 的秒级值若按毫秒解析会落到 1970，需先 ×1000。
+  let input: string | number = value;
+  if (typeof value === 'number' || /^\d+(\.\d+)?$/.test(value)) {
+    const num = typeof value === 'number' ? value : Number(value);
+    input = num < 1e12 ? num * 1000 : num;
+  }
+  const d = new Date(input);
+  const t = d.getTime();
+  if (isNaN(t) || t < MIN_VALID_MS) return null;
+  return d;
 }
 
 export function dateKey(date: Date): string {
