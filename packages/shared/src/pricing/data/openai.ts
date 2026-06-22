@@ -3,7 +3,7 @@ import type { ProductPricing } from '../types.js';
 /**
  * OpenAI（Codex / GPT 系列）。
  * 单价 USD / 1M tokens。来源：https://developers.openai.com/api/docs/pricing
- * 最近核对：2026-05-24
+ * 最近核对：2026-06-22
  *
  * 注意：deep-research 与 computer-use 此前在 worker/cli 表里写高了 2 倍，本次已校正。
  */

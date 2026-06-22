@@ -124,6 +124,42 @@ describe('Fix 1: non-cached input cost formula', () => {
   });
 });
 
+describe('Codex service tier', () => {
+  it('adds priority suffix for supported GPT-5.5 Codex usage', async () => {
+    const day = '2026-06-22';
+    await writeFile(join(tmpDir, 'config.toml'), 'service_tier = "priority"\n');
+    const sessionDir = join(tmpDir, 'sessions', '2026', '06', '22');
+    const events = tokenCountEvent(
+      `${day}T10:00:00.000Z`,
+      { input: 10000, cached: 8000, output: 500 },
+      { input: 10000, cached: 8000, output: 500 },
+      'gpt-5.5',
+    );
+    await writeSession(sessionDir, 'rollout-test.jsonl', events);
+
+    const results = await scanCodex(day, tmpDir);
+    expect(results).toHaveLength(1);
+    expect(results[0].model).toBe('gpt-5.5-priority');
+  });
+
+  it('does not add service tier suffix to unsupported Codex models', async () => {
+    const day = '2026-06-22';
+    await writeFile(join(tmpDir, 'config.toml'), 'service_tier = "priority"\n');
+    const sessionDir = join(tmpDir, 'sessions', '2026', '06', '22');
+    const events = tokenCountEvent(
+      `${day}T10:00:00.000Z`,
+      { input: 10000, cached: 8000, output: 500 },
+      { input: 10000, cached: 8000, output: 500 },
+      'codex-auto-review',
+    );
+    await writeSession(sessionDir, 'rollout-test.jsonl', events);
+
+    const results = await scanCodex(day, tmpDir);
+    expect(results).toHaveLength(1);
+    expect(results[0].model).toBe('codex-auto-review');
+  });
+});
+
 // ─── Fix 2: deduplicate events with identical total_token_usage ───
 
 describe('Fix 2: deduplication of duplicate events', () => {

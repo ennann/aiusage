@@ -8,17 +8,53 @@ import type {
 } from './types.js';
 import { catalog as defaultCatalog } from './catalog.js';
 
-const FAST_MULTIPLIER = 6;
+const ANTHROPIC_FAST_MULTIPLIER = 6;
 
 /**
  * Fast 模式 ×6 仅适用以下模型（Anthropic 官方明确支持）。
- * 其它 -fast 后缀（即便 scanner 误标）按原价计算，避免被错误放大 6 倍。
+ * OpenAI Codex 的 fast/priority 倍率另按官方 Codex speed/API priority 口径处理。
  */
 const FAST_SUPPORTED = new Set<string>([
   'claude-opus-4-8',
   'claude-opus-4-7',
   'claude-opus-4-6',
 ]);
+
+type ServiceTierSuffix = 'fast' | 'priority' | null;
+
+const OPENAI_CODEX_TIER_MULTIPLIERS: Record<string, number> = {
+  'gpt-5.5': 2.5,
+  'gpt-5.4': 2,
+};
+
+function splitServiceTierSuffix(model: string): { baseModel: string; tier: ServiceTierSuffix } {
+  if (model.endsWith('-priority')) {
+    return { baseModel: model.replace(/-priority$/, ''), tier: 'priority' };
+  }
+  if (model.endsWith('-fast')) {
+    return { baseModel: model.replace(/-fast$/, ''), tier: 'fast' };
+  }
+  return { baseModel: model, tier: null };
+}
+
+function getServiceTierMultiplier(
+  provider: string,
+  product: string,
+  resolvedModel: string,
+  tier: ServiceTierSuffix,
+): number {
+  if (!tier) return 1;
+
+  if (provider === 'openai' && product === 'codex') {
+    return OPENAI_CODEX_TIER_MULTIPLIERS[resolvedModel] ?? 1;
+  }
+
+  if (tier === 'fast' && FAST_SUPPORTED.has(resolvedModel)) {
+    return ANTHROPIC_FAST_MULTIPLIER;
+  }
+
+  return 1;
+}
 
 /**
  * resolveModelPricing — alias 精确匹配，再 longest-prefix fallback。
@@ -105,8 +141,7 @@ export function calculateCost(
     return { estimatedCostUsd: 0, costStatus: 'exact', pricingVersion: cat.version };
   }
 
-  const isFast = model.endsWith('-fast');
-  const baseModel = isFast ? model.replace(/-fast$/, '') : model;
+  const { baseModel, tier } = splitServiceTierSuffix(model);
 
   const resolved = resolveModelPricing(cat, provider, product, baseModel);
   if (!resolved) {
@@ -149,8 +184,7 @@ export function calculateCost(
   // 折算 currency → USD
   raw = toUsd(raw, pricing.currency, cat);
 
-  // Fast 模式 ×6 仅对白名单模型生效；其它 -fast 后缀按原价
-  const finalCost = isFast && FAST_SUPPORTED.has(resolvedModel) ? raw * FAST_MULTIPLIER : raw;
+  const finalCost = raw * getServiceTierMultiplier(provider, product, resolvedModel, tier);
 
   return {
     estimatedCostUsd: Math.round(finalCost * 10000) / 10000,

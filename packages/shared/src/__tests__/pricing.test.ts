@@ -164,6 +164,24 @@ describe('Fast 模式白名单', () => {
     const normal = calculateCost('google', 'gemini-cli', 'gemini-2.5-flash', tokens);
     expect(fast.estimatedCostUsd).toBe(normal.estimatedCostUsd);
   });
+
+  it('Codex GPT-5.5 priority 应 ×2.5', () => {
+    const priority = calculateCost('openai', 'codex', 'gpt-5.5-priority', tokens);
+    const normal = calculateCost('openai', 'codex', 'gpt-5.5', tokens);
+    expect(priority.estimatedCostUsd).toBeCloseTo(normal.estimatedCostUsd * 2.5, 3);
+  });
+
+  it('Codex GPT-5.4 fast 应 ×2', () => {
+    const fast = calculateCost('openai', 'codex', 'gpt-5.4-fast', tokens);
+    const normal = calculateCost('openai', 'codex', 'gpt-5.4', tokens);
+    expect(fast.estimatedCostUsd).toBeCloseTo(normal.estimatedCostUsd * 2, 3);
+  });
+
+  it('Codex GPT-5-Codex fast 暂无官方倍率时不放大', () => {
+    const fast = calculateCost('openai', 'codex', 'gpt-5-codex-fast', tokens);
+    const normal = calculateCost('openai', 'codex', 'gpt-5-codex', tokens);
+    expect(fast.estimatedCostUsd).toBe(normal.estimatedCostUsd);
+  });
 });
 
 // ─── 多币种折算 ───

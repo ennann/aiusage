@@ -1,4 +1,4 @@
-import { readdir, open } from 'node:fs/promises';
+import { readdir, open, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { createInterface } from 'node:readline';
@@ -7,6 +7,7 @@ import { normalizeModelName, runWithConcurrency, resolveProjectFields, type Proj
 
 const FILE_CONCURRENCY = 16;
 const MAX_LINE_BYTES = 64 * 1024 * 1024; // 64 MB
+type CodexServiceTier = 'fast' | 'priority' | null;
 
 interface CodexRecord {
   type?: string;
@@ -49,6 +50,7 @@ export async function scanCodexDates(
   for (const targetDate of targetDateSet) groupedByDate.set(targetDate, new Map());
 
   const baseDir = codexDir ?? join(homedir(), '.codex');
+  const serviceTier = await detectCodexServiceTier(baseDir);
 
   const sessionFiles = await collectSessionFiles(baseDir);
   if (sessionFiles.length === 0) {
@@ -60,7 +62,7 @@ export async function scanCodexDates(
 
   // 并发流式处理文件
   await runWithConcurrency(sessionFiles, FILE_CONCURRENCY, async (filePath) => {
-    await processCodexFile(filePath, targetDateSet, projectAliases, groupedByDate, globalSeenSigs);
+    await processCodexFile(filePath, targetDateSet, projectAliases, groupedByDate, globalSeenSigs, serviceTier);
   });
 
   return new Map(
@@ -75,6 +77,7 @@ async function processCodexFile(
   projectAliases: Record<string, string> | undefined,
   groupedByDate: Map<string, Map<string, IngestBreakdown>>,
   globalSeenSigs: Set<string>,
+  serviceTier: CodexServiceTier,
 ): Promise<void> {
   let fh;
   try {
@@ -110,7 +113,7 @@ async function processCodexFile(
         const rawModel = record.payload?.model ?? currentModel;
         // 过滤合成消息
         if (rawModel !== '<synthetic>') {
-          currentModel = normalizeModelName(rawModel);
+          currentModel = applyCodexServiceTier(normalizeModelName(rawModel), serviceTier);
         }
         if (record.payload?.cwd) {
           currentProjectFields = resolveProjectFields(record.payload.cwd, projectAliases);
@@ -211,6 +214,31 @@ async function collectSessionFiles(baseDir: string): Promise<string[]> {
   return paths;
 }
 
+async function detectCodexServiceTier(baseDir: string): Promise<CodexServiceTier> {
+  let config = '';
+  try {
+    config = await readFile(join(baseDir, 'config.toml'), 'utf-8');
+  } catch {
+    return null;
+  }
+
+  const serviceTier = config.match(/^\s*service_tier\s*=\s*["']([^"']+)["']/m)?.[1]?.trim().toLowerCase();
+  if (serviceTier === 'priority') return 'priority';
+  if (serviceTier === 'fast') return 'fast';
+
+  const fastMode = config.match(/^\s*fast_mode\s*=\s*(true|false)\s*$/m)?.[1];
+  return fastMode === 'true' ? 'fast' : null;
+}
+
+function applyCodexServiceTier(model: string, serviceTier: CodexServiceTier): string {
+  if (!serviceTier) return model;
+  if (model.endsWith('-fast') || model.endsWith('-priority')) return model;
+  if (model === 'gpt-5.5' || model === 'gpt-5.4') {
+    return `${model}-${serviceTier}`;
+  }
+  return model;
+}
+
 async function walkDir(dir: string, result: string[]): Promise<void> {
   let entries;
   try {
@@ -244,4 +272,3 @@ function toDateKey(date: Date): string {
   const day = String(date.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
 }
-
