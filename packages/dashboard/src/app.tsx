@@ -650,13 +650,6 @@ export function App() {
           <div className="flex flex-wrap justify-center gap-x-4 gap-y-2 text-[11px] text-slate-300 dark:text-slate-600">
             <div className="flex items-center gap-4">
               <a
-                href="/pricing"
-                className="text-slate-400 transition-colors hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300"
-              >
-                {t.pricing}
-              </a>
-              <span className="h-3 w-px bg-slate-200 dark:bg-[#222222]" />
-              <a
                 href="/embed/docs"
                 className="text-slate-400 transition-colors hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300"
               >
