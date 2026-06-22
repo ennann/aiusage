@@ -24,6 +24,7 @@ export function renderReport(report: LocalReport, opts: RenderOptions): string {
   lines.push(`${s.events.padEnd(10)}${fmtInt(report.totals.eventCount)}`);
   lines.push(`${s.tokens.padEnd(10)}${fmtToken(report.totals.totalTokens)}`);
   lines.push(`${s.cost.padEnd(10)}${fmtUsd(report.totals.estimatedCostUsd, opts.detail)}`);
+  lines.push(`${s.pricing.padEnd(10)}${formatPricing(report.pricing)}`);
 
   if (report.daysWithData === 0) {
     lines.push('');
@@ -126,6 +127,15 @@ function getRangeLabel(range: string, lang: Lang): string {
     case 'today': return s.rangeToday;
     default: return range;
   }
+}
+
+function formatPricing(pricing: LocalReport['pricing']): string {
+  const source = pricing.source === 'remote'
+    ? 'remote'
+    : pricing.source === 'cache'
+    ? 'cache'
+    : 'bundled';
+  return `${source} ${pricing.version}`;
 }
 
 /** 计算字符串在终端中的显示宽度（CJK 字符占 2 列） */

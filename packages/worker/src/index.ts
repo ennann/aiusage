@@ -13,7 +13,10 @@ export default {
     const { pathname } = url;
 
     // CORS preflight
-    if (request.method === 'OPTIONS' && pathname.startsWith('/api/v1/public/')) {
+    if (
+      request.method === 'OPTIONS' &&
+      (pathname.startsWith('/api/v1/public/') || pathname.startsWith('/api/pricing/'))
+    ) {
       return new Response(null, { status: 204, headers: corsHeaders() });
     }
 
@@ -57,6 +60,9 @@ export default {
         return handleBreakdowns(url, env);
       }
       if (pathname === '/api/v1/public/pricing' && request.method === 'GET') {
+        return handlePricingApi();
+      }
+      if (pathname === '/api/pricing/catalog' && request.method === 'GET') {
         return handlePricingApi();
       }
 

@@ -80,6 +80,9 @@ jobs:
     needs: build
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v6
       - uses: pnpm/action-setup@v5
@@ -91,18 +94,29 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Build CLI
-        run: pnpm turbo build --filter @aiusage/cli
+      - name: Use npm with trusted publishing support
+        run: npm install -g npm@latest
 
-      - name: Publish CLI (if version is new)
+      - name: Build publishable packages
+        run: pnpm turbo build --filter @aiusage/pricing --filter @aiusage/cli
+
+      - name: Publish packages (if versions are new)
         run: |
-          LOCAL_VERSION=$(node -p "require('./packages/cli/package.json').version")
-          if npm view "@aiusage/cli@${LOCAL_VERSION}" version >/dev/null 2>&1; then
-            echo "CLI v${LOCAL_VERSION} already published, skipping"
-          else
-            NPM_VERSION=$(npm view @aiusage/cli version 2>/dev/null || echo "none")
-            echo "Publishing @aiusage/cli@${LOCAL_VERSION} (npm latest is ${NPM_VERSION})"
-            cd packages/cli && npm publish --access public
-          fi
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          publish_if_new() {
+            local pkg_dir="$1"
+            local pkg_name
+            local local_version
+            local npm_version
+            pkg_name=$(node -p "require('./${pkg_dir}/package.json').name")
+            local_version=$(node -p "require('./${pkg_dir}/package.json').version")
+            if npm view "${pkg_name}@${local_version}" version >/dev/null 2>&1; then
+              echo "${pkg_name} v${local_version} already published, skipping"
+            else
+              npm_version=$(npm view "${pkg_name}" version 2>/dev/null || echo "none")
+              echo "Publishing ${pkg_name}@${local_version} (npm latest is ${npm_version})"
+              (cd "${pkg_dir}" && npm publish --access public --provenance)
+            fi
+          }
+
+          publish_if_new packages/pricing
+          publish_if_new packages/cli

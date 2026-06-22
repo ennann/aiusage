@@ -2,9 +2,10 @@ import { readdir, readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
 import type { IngestBreakdown } from '@aiusage/shared';
-import { calculateCost } from '@aiusage/shared';
+import { calculateCost, type PricingCatalog } from '@aiusage/shared';
 import { scanDates } from './scan.js';
 import { parseTs, dateKey } from './scanners/utils.js';
+import type { PricingInfo } from './pricing.js';
 
 export type ReportRange = '7d' | '1m' | '3m' | 'all' | 'today';
 
@@ -43,6 +44,7 @@ export interface LocalReport {
   daily: DailySummary[];
   bySource: SourceSummary[];
   byModel: ModelSummary[];
+  pricing: PricingInfo;
   pricingWarnings: string[];
 }
 
@@ -50,6 +52,8 @@ interface BuildReportOptions {
   projectAliases?: Record<string, string>;
   /** 直接传入日期列表时忽略 range 参数 */
   dates?: string[];
+  pricingCatalog?: PricingCatalog;
+  pricingInfo?: PricingInfo;
 }
 
 export async function buildLocalReport(
@@ -82,7 +86,7 @@ export async function buildLocalReport(
       daysWithData += 1;
 
       for (const breakdown of result.breakdowns) {
-        const breakdownTotals = toBreakdownTotals(breakdown, pricingWarnings);
+        const breakdownTotals = toBreakdownTotals(breakdown, pricingWarnings, options.pricingCatalog);
         dayTotals.estimatedCostUsd += breakdownTotals.estimatedCostUsd;
         mergeTotals(totals, breakdownTotals);
         mergeTotals(getOrCreate(bySource, `${breakdown.provider}/${breakdown.product}`), breakdownTotals);
@@ -117,6 +121,10 @@ export async function buildLocalReport(
         return { source, model, ...summary };
       })
       .sort((a, b) => b.estimatedCostUsd - a.estimatedCostUsd || b.totalTokens - a.totalTokens),
+    pricing: options.pricingInfo ?? {
+      source: 'bundled',
+      version: options.pricingCatalog?.version ?? 'bundled',
+    },
     pricingWarnings: [...pricingWarnings].sort(),
   };
 }
@@ -535,8 +543,12 @@ function mergeTotals(target: Totals, source: Totals): Totals {
   return target;
 }
 
-function toBreakdownTotals(breakdown: IngestBreakdown, warnings: Set<string>): Totals {
-  const estimatedCostUsd = calculateBreakdownCost(breakdown, warnings);
+function toBreakdownTotals(
+  breakdown: IngestBreakdown,
+  warnings: Set<string>,
+  pricingCatalog?: PricingCatalog,
+): Totals {
+  const estimatedCostUsd = calculateBreakdownCost(breakdown, warnings, pricingCatalog);
   return {
     eventCount: breakdown.eventCount,
     inputTokens: breakdown.inputTokens,
@@ -561,7 +573,11 @@ function toBreakdownTotals(breakdown: IngestBreakdown, warnings: Set<string>): T
  *
  * 失败/估算情况注入 warning 给上层报告展示。
  */
-export function calculateBreakdownCost(breakdown: IngestBreakdown, warnings: Set<string>): number {
+export function calculateBreakdownCost(
+  breakdown: IngestBreakdown,
+  warnings: Set<string>,
+  pricingCatalog?: PricingCatalog,
+): number {
   if (breakdown.costUSD != null && breakdown.costUSD > 0) {
     return breakdown.costUSD;
   }
@@ -578,6 +594,7 @@ export function calculateBreakdownCost(breakdown: IngestBreakdown, warnings: Set
       cacheWrite1hTokens: breakdown.cacheWrite1hTokens,
       outputTokens: breakdown.outputTokens,
     },
+    pricingCatalog ? { catalog: pricingCatalog } : {},
   );
 
   if (result.costStatus === 'unavailable') {
