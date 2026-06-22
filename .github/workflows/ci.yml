@@ -104,6 +104,7 @@ jobs:
         run: |
           publish_if_new() {
             local pkg_dir="$1"
+            local allow_first_publish="${2:-true}"
             local pkg_name
             local local_version
             local npm_version
@@ -113,10 +114,14 @@ jobs:
               echo "${pkg_name} v${local_version} already published, skipping"
             else
               npm_version=$(npm view "${pkg_name}" version 2>/dev/null || echo "none")
+              if [ "${npm_version}" = "none" ] && [ "${allow_first_publish}" != "true" ]; then
+                echo "${pkg_name} has not been published before; skipping first publish until npm package permissions are created"
+                return 0
+              fi
               echo "Publishing ${pkg_name}@${local_version} (npm latest is ${npm_version})"
               (cd "${pkg_dir}" && npm publish --access public --provenance)
             fi
           }
 
-          publish_if_new packages/pricing
-          publish_if_new packages/cli
+          publish_if_new packages/cli true
+          publish_if_new packages/pricing false

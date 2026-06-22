@@ -19,6 +19,7 @@
   },
   "files": [
     "dist",
+    "pricing-catalog.json",
     "README.md",
     "LICENSE"
   ],

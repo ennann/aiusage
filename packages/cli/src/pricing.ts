@@ -10,6 +10,8 @@ const DEFAULT_CACHE_TTL_HOURS = 24;
 const FETCH_TIMEOUT_MS = 5000;
 
 const NPM_CDN_URLS = [
+  'https://cdn.jsdelivr.net/npm/@aiusage/cli@latest/pricing-catalog.json',
+  'https://unpkg.com/@aiusage/cli@latest/pricing-catalog.json',
   'https://cdn.jsdelivr.net/npm/@aiusage/pricing@latest/catalog.json',
   'https://unpkg.com/@aiusage/pricing@latest/catalog.json',
 ];
