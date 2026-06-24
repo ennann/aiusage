@@ -4,6 +4,7 @@ import { handleIngest } from './routes/ingest.js';
 import { handleOverview } from './routes/overview.js';
 import { handleBreakdowns } from './routes/breakdowns.js';
 import { handlePricingApi } from './routes/pricing-api.js';
+import { handleTextTokens } from './routes/text-metrics.js';
 import { corsHeaders, jsonError } from './utils/response.js';
 import type { Env } from './types.js';
 
@@ -63,6 +64,9 @@ export default {
       }
       if (pathname === '/api/v1/public/breakdowns' && request.method === 'GET') {
         return handleBreakdowns(url, env);
+      }
+      if (pathname === '/api/v1/public/text/tokens' && request.method === 'GET') {
+        return handleTextTokens(url, env);
       }
       if (pathname === '/api/v1/public/pricing' && request.method === 'GET') {
         return handlePricingApi();
