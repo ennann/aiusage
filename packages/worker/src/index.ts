@@ -41,6 +41,11 @@ export default {
         return new Response(null, { status: 204 });
       }
 
+      if (pathname === '/pricing' || pathname === '/embed/docs') {
+        const indexUrl = new URL('/index.html', url);
+        return env.ASSETS.fetch(new Request(indexUrl.toString(), request));
+      }
+
       // ── 设备接口 ──
       if (pathname === '/api/v1/health' && request.method === 'GET') {
         return handleHealth(env);

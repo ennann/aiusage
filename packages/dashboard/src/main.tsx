@@ -12,7 +12,7 @@ if ('scrollRestoration' in history) {
 }
 window.scrollTo(0, 0);
 
-const path = window.location.pathname;
+const path = window.location.pathname.replace(/\/+$/, '') || '/';
 const isEmbed = path.startsWith('/embed') && !path.startsWith('/embed/docs');
 
 function Page() {
