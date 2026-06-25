@@ -1,2 +1,3 @@
--- Add session_count to track distinct conversation sessions (vs API request events)
-ALTER TABLE daily_usage_breakdown ADD COLUMN session_count INTEGER NOT NULL DEFAULT 0;
+-- Production already has this column from a manual rollout.
+-- Keep this migration as a no-op so D1 can mark it applied.
+SELECT 1;
