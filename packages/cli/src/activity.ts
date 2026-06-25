@@ -10,6 +10,7 @@ const MAX_LINE_BYTES = 64 * 1024 * 1024; // 64 MB
 
 export type ActivityConfidence = 'exact' | 'proxy';
 export type ActivityKind =
+  | 'user_message'
   | 'function_call'
   | 'custom_tool_call'
   | 'tool_call'
@@ -51,6 +52,7 @@ export interface ActivityDailySummary {
   usageDate: string;
   exactCount: number;
   proxyCount: number;
+  userMessageCount: number;
 }
 
 export interface ActivityReport {
@@ -173,8 +175,9 @@ export async function buildActivityReport(
       usageDate,
       exactCount: sumByConfidence(dayItems, 'exact'),
       proxyCount: sumByConfidence(dayItems, 'proxy'),
+      userMessageCount: sumUserMessages(dayItems),
     };
-  }).filter(day => requestedDates || day.exactCount > 0 || day.proxyCount > 0);
+  }).filter(day => requestedDates || day.exactCount > 0 || day.proxyCount > 0 || day.userMessageCount > 0);
 
   return {
     range,
@@ -215,7 +218,7 @@ export async function buildActivityReport(
     notes: [
       'Claude Code 的 Skill/Agent 来自结构化 tool_use，口径为 exact。',
       'Codex 的 skill_proxy 来自命令中读取 SKILL.md 的痕迹，只能表示代理信号。',
-      '该报告只读取本地 Session，不参与 sync，也不改变服务端 schema。',
+      'sync 会上传按日聚合后的 activity 指标，不上传原始消息内容。',
     ],
   };
 }
@@ -278,7 +281,7 @@ export function renderActivityReport(report: ActivityReport, opts: { emoji: bool
     lines.push('');
     lines.push('每日');
     for (const day of report.daily) {
-      lines.push(`  ${day.usageDate}: exact ${fmt(day.exactCount)} / proxy ${fmt(day.proxyCount)}`);
+      lines.push(`  ${day.usageDate}: exact ${fmt(day.exactCount)} / proxy ${fmt(day.proxyCount)} / user ${fmt(day.userMessageCount)}`);
     }
   }
 
@@ -384,6 +387,8 @@ function handleCodexResponseItem(
       addUserMessage(acc, {
         provider: 'openai',
         product: 'codex',
+        usageDate,
+        projectFields,
         sessionId,
         timestamp,
         content: extractCodexMessageText(item.content),
@@ -472,6 +477,8 @@ function handleCodexEvent(
     addUserMessage(acc, {
       provider: 'openai',
       product: 'codex',
+      usageDate,
+      projectFields,
       sessionId,
       timestamp: record.timestamp ?? '',
       content: stringValue(record.payload?.message),
@@ -580,6 +587,8 @@ async function processClaudeFile(filePath: string, fallbackFields: ProjectFields
         addUserMessage(acc, {
           provider: 'anthropic',
           product: 'claude-code',
+          usageDate,
+          projectFields,
           sessionId,
           timestamp: record.timestamp ?? '',
           content: extractClaudeMessageText(record.message?.content),
@@ -687,6 +696,8 @@ function addUserMessage(
   input: {
     provider: 'openai' | 'anthropic';
     product: 'codex' | 'claude-code';
+    usageDate: string;
+    projectFields: ProjectFields;
     sessionId: string;
     timestamp: string;
     content?: string;
@@ -701,7 +712,19 @@ function addUserMessage(
     : normalized
     ? `${source}:user_message:${input.sessionId}:${input.timestamp}:${normalized}`
     : `${source}:user_message:${input.fallbackKey}`;
+  if (acc.stats.userMessages.has(key)) return;
   acc.stats.userMessages.add(key);
+  addActivity(acc, {
+    usageDate: input.usageDate,
+    provider: input.provider,
+    product: input.product,
+    projectFields: input.projectFields,
+    sessionId: input.sessionId,
+    kind: 'user_message',
+    name: 'user_message',
+    confidence: 'exact',
+    dedupeKey: `activity:${key}`,
+  });
 }
 
 function acceptsDate(acc: ActivityAccumulator, usageDate: string): boolean {
@@ -887,7 +910,11 @@ function summarize(
 }
 
 function sumByConfidence(items: ActivityItem[], confidence: ActivityConfidence): number {
-  return items.reduce((sum, item) => sum + (item.confidence === confidence ? item.count : 0), 0);
+  return items.reduce((sum, item) => sum + (item.kind !== 'user_message' && item.confidence === confidence ? item.count : 0), 0);
+}
+
+function sumUserMessages(items: ActivityItem[]): number {
+  return items.reduce((sum, item) => sum + (item.kind === 'user_message' ? item.count : 0), 0);
 }
 
 function isToolLikeKind(kind: ActivityKind): boolean {
@@ -902,6 +929,7 @@ function isToolLikeKind(kind: ActivityKind): boolean {
 
 function labelKind(kind: ActivityKind): string {
   switch (kind) {
+    case 'user_message': return 'User Message';
     case 'function_call': return 'Function Call';
     case 'custom_tool_call': return 'Custom Tool Call';
     case 'tool_call': return 'Tool Call';

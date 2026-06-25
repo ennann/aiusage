@@ -6,7 +6,7 @@ import { scanAnthropicApiDates } from './scanners/anthropic-admin-api.js';
 import { scanAnthropicCsvDates } from './scanners/anthropic-csv.js';
 import { buildLocalReport, parseReportRange } from './report.js';
 import { renderReport } from './render.js';
-import { buildActivityReport, renderActivityReport } from './activity.js';
+import { buildActivityReport, renderActivityReport, type ActivityItem } from './activity.js';
 import {
   type AIUsageConfig,
   type SyncTarget,
@@ -24,7 +24,8 @@ import { disableSchedule, enableSchedule, formatInterval, getScheduleStatus, par
 import { runDoctor } from './doctor.js';
 import { getVersion } from './version.js';
 import { discoverProjects } from './project.js';
-import { applyPrivacy } from './privacy.js';
+import { applyPrivacy, applyProjectPrivacy } from './privacy.js';
+import type { IngestActivityItem, IngestDay } from '@aiusage/shared';
 import { getPricingStatus, resolvePricingCatalog } from './pricing.js';
 
 const argv = process.argv.slice(2);
@@ -362,11 +363,20 @@ async function runSync(flags: Record<string, string | boolean>, positionals: str
   // 扫描一次，所有 target 共享结果
   console.log(`扫描 ${targetDates.length} 天 (${targetDates[0]} ~ ${targetDates[targetDates.length - 1]}) ...`);
 
-  const results = await scanDates(targetDates, { projectAliases: config.projectAliases });
+  const [results, activityReport] = await Promise.all([
+    scanDates(targetDates, { projectAliases: config.projectAliases }),
+    buildActivityReport('all', { dates: targetDates, projectAliases: config.projectAliases }),
+  ]);
   const visibility = config.privacy?.projectVisibility;
-  const allDays = results
-    .filter(r => r.breakdowns.length > 0)
-    .map(r => ({ usageDate: r.usageDate, breakdowns: applyPrivacy(r.breakdowns, visibility) }));
+  const resultsByDate = new Map(results.map(result => [result.usageDate, result]));
+  const activityByDate = buildActivityPayloadByDate(activityReport.items, visibility);
+  const allDays: IngestDay[] = targetDates
+    .map((usageDate) => {
+      const breakdowns = applyPrivacy(resultsByDate.get(usageDate)?.breakdowns ?? [], visibility);
+      const activity = activityByDate.get(usageDate);
+      return { usageDate, breakdowns, activity };
+    })
+    .filter(day => day.breakdowns.length > 0 || (day.activity?.items.length ?? 0) > 0);
 
   if (allDays.length === 0) {
     console.log('没有可上传的数据。');
@@ -422,6 +432,31 @@ async function runSync(flags: Record<string, string | boolean>, positionals: str
     uploadedDays: allDays.map(day => day.usageDate),
     results: uploadResults,
   }, null, 2));
+}
+
+function buildActivityPayloadByDate(
+  items: ActivityItem[],
+  visibility: Parameters<typeof applyProjectPrivacy>[1],
+): Map<string, { items: IngestActivityItem[] }> {
+  const map = new Map<string, { items: IngestActivityItem[] }>();
+  const sanitized = applyProjectPrivacy(items, visibility);
+  for (const item of sanitized) {
+    const day = map.get(item.usageDate) ?? { items: [] };
+    day.items.push({
+      provider: item.provider,
+      product: item.product,
+      source: item.source,
+      project: item.project,
+      projectDisplay: item.projectDisplay,
+      projectAlias: item.projectAlias,
+      kind: item.kind,
+      name: item.name,
+      count: item.count,
+      confidence: item.confidence,
+    });
+    map.set(item.usageDate, day);
+  }
+  return map;
 }
 
 async function runImport(flags: Record<string, string | boolean>, positionals: string[] = []) {

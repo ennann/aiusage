@@ -28,6 +28,7 @@ export interface DeviceInfo {
 export interface IngestDay {
   usageDate: string;
   breakdowns: IngestBreakdown[];
+  activity?: IngestActivityDay;
 }
 
 export interface IngestBreakdown {
@@ -48,6 +49,23 @@ export interface IngestBreakdown {
   outputTokens: number;
   reasoningOutputTokens: number;
   costUSD?: number;
+}
+
+export interface IngestActivityDay {
+  items: IngestActivityItem[];
+}
+
+export interface IngestActivityItem {
+  provider: Provider;
+  product: Product;
+  source: string;
+  project: string;
+  projectDisplay?: string;
+  projectAlias?: string;
+  kind: string;
+  name: string;
+  count: number;
+  confidence: 'exact' | 'proxy';
 }
 
 // ── API 响应 ──

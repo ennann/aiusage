@@ -11,6 +11,7 @@ export const TOTAL_TOKENS_SQL = `
 `;
 
 const PROJECT_DISPLAY_SQL = `COALESCE(b.project_alias, b.project_display)`;
+const ACTIVITY_PROJECT_DISPLAY_SQL = `COALESCE(a.project_alias, a.project_display)`;
 
 export type FilterKey = 'deviceId' | 'provider' | 'product' | 'channel' | 'model' | 'project';
 
@@ -66,6 +67,7 @@ export async function handleOverview(url: URL, env: Env): Promise<Response> {
     channels,
     models,
     projects,
+    interactionMetrics,
   ] = await Promise.all([
     env.DB.prepare(`
       SELECT
@@ -196,6 +198,7 @@ export async function handleOverview(url: URL, env: Env): Promise<Response> {
     loadFacetOptions('channel', filters, env),
     loadFacetOptions('model', filters, env),
     loadFacetOptions('project', filters, env),
+    loadInteractionMetrics(filters, env),
   ]);
 
   const activeDays = Number(summary?.active_days ?? 0);
@@ -254,6 +257,7 @@ export async function handleOverview(url: URL, env: Env): Promise<Response> {
       totalTokens: Number(row.total_tokens ?? 0),
       estimatedCostUsd: roundUsd(row.estimated_cost_usd ?? 0),
     })),
+    interactionMetrics,
     filters: {
       selection: {
         range: filters.range,
@@ -394,6 +398,163 @@ async function loadDeviceLabels(deviceIds: string[], env: Env): Promise<Map<stri
 function toFilterKey(column: string): FilterKey {
   if (column === 'device_id') return 'deviceId';
   return column as FilterKey;
+}
+
+async function loadInteractionMetrics(filters: DashboardFilters, env: Env) {
+  const where = buildActivityWhere(filters);
+  let rows;
+  try {
+    rows = await Promise.all([
+    env.DB.prepare(`
+      SELECT
+        COALESCE(SUM(CASE WHEN a.kind != 'user_message' AND a.confidence = 'exact' THEN a.event_count ELSE 0 END), 0) AS exact_count,
+        COALESCE(SUM(CASE WHEN a.kind != 'user_message' AND a.confidence = 'proxy' THEN a.event_count ELSE 0 END), 0) AS proxy_count,
+        COALESCE(SUM(CASE WHEN a.kind = 'user_message' THEN a.event_count ELSE 0 END), 0) AS user_message_count,
+        COALESCE(SUM(CASE WHEN a.kind = 'function_call' THEN a.event_count ELSE 0 END), 0) AS function_call_count,
+        COALESCE(SUM(CASE WHEN a.kind IN ('tool_call', 'custom_tool_call', 'mcp_tool_call') THEN a.event_count ELSE 0 END), 0) AS tool_call_count,
+        COALESCE(SUM(CASE WHEN a.kind = 'skill_call' THEN a.event_count ELSE 0 END), 0) AS skill_call_count,
+        COALESCE(SUM(CASE WHEN a.kind = 'skill_proxy' THEN a.event_count ELSE 0 END), 0) AS skill_proxy_count,
+        COALESCE(SUM(CASE WHEN a.kind = 'agent_call' THEN a.event_count ELSE 0 END), 0) AS subagent_count
+      FROM daily_activity_breakdown a
+      ${where.whereClause}
+    `).bind(...where.params).first<{
+      exact_count: number;
+      proxy_count: number;
+      user_message_count: number;
+      function_call_count: number;
+      tool_call_count: number;
+      skill_call_count: number;
+      skill_proxy_count: number;
+      subagent_count: number;
+    }>(),
+    loadActivityTopList(where, env, `
+      a.kind IN ('function_call', 'custom_tool_call', 'tool_call', 'web_search', 'tool_search', 'image_generation', 'mcp_tool_call')
+    `, `a.source || '|' || a.name`, `a.name || ' (' || a.source || ')'`),
+    loadActivityTopList(where, env, `
+      a.kind IN ('skill_call', 'skill_proxy')
+    `, `a.source || '|' || a.name || '|' || a.confidence`, `a.name || ' (' || CASE WHEN a.confidence = 'proxy' THEN 'proxy' ELSE a.source END || ')'`),
+    loadActivityTopList(where, env, `
+      a.kind = 'agent_call'
+    `, `a.source || '|' || a.name`, `a.name || ' (' || a.source || ')'`),
+    loadActivityTopList(where, env, `
+      a.kind IS NOT NULL
+    `, `a.kind`, `a.kind`),
+    ]);
+  } catch (error) {
+    if (String(error).includes('daily_activity_breakdown')) return emptyInteractionMetrics();
+    throw error;
+  }
+
+  const [summary, topTools, topSkills, topAgents, kindShare] = rows;
+
+  const exactCount = Number(summary?.exact_count ?? 0);
+  const proxyCount = Number(summary?.proxy_count ?? 0);
+  const userMessageCount = Number(summary?.user_message_count ?? 0);
+
+  return {
+    exactCount,
+    proxyCount,
+    userMessageCount,
+    functionCallCount: Number(summary?.function_call_count ?? 0),
+    toolCallCount: Number(summary?.tool_call_count ?? 0),
+    skillCallCount: Number(summary?.skill_call_count ?? 0),
+    skillProxyCount: Number(summary?.skill_proxy_count ?? 0),
+    subagentCount: Number(summary?.subagent_count ?? 0),
+    topTools,
+    topSkills,
+    topAgents,
+    kindShare,
+  };
+}
+
+function emptyInteractionMetrics() {
+  return {
+    exactCount: 0,
+    proxyCount: 0,
+    userMessageCount: 0,
+    functionCallCount: 0,
+    toolCallCount: 0,
+    skillCallCount: 0,
+    skillProxyCount: 0,
+    subagentCount: 0,
+    topTools: [],
+    topSkills: [],
+    topAgents: [],
+    kindShare: [],
+  };
+}
+
+async function loadActivityTopList(
+  where: WhereParts,
+  env: Env,
+  extraCondition: string,
+  keyExpr: string,
+  labelExpr: string,
+) {
+  const combinedWhere = where.whereClause
+    ? `${where.whereClause} AND ${extraCondition}`
+    : `WHERE ${extraCondition}`;
+  const rows = await env.DB.prepare(`
+    SELECT
+      ${keyExpr} AS value,
+      ${labelExpr} AS label,
+      COALESCE(SUM(a.event_count), 0) AS event_count,
+      COALESCE(SUM(CASE WHEN a.confidence = 'proxy' THEN a.event_count ELSE 0 END), 0) AS proxy_count
+    FROM daily_activity_breakdown a
+    ${combinedWhere}
+    GROUP BY value, label
+    ORDER BY event_count DESC, label ASC
+    LIMIT 12
+  `).bind(...where.params).all<{
+    value: string;
+    label: string;
+    event_count: number;
+    proxy_count: number;
+  }>();
+
+  return (rows.results ?? []).map(row => ({
+    value: row.value,
+    label: row.label,
+    eventCount: Number(row.event_count ?? 0),
+    proxyCount: Number(row.proxy_count ?? 0),
+  }));
+}
+
+function buildActivityWhere(filters: DashboardFilters): WhereParts {
+  const clauses: string[] = [];
+  const params: (string | number)[] = [];
+
+  if (filters.minDate) {
+    clauses.push('a.usage_date >= ?');
+    params.push(filters.minDate);
+  }
+  if (filters.deviceId) {
+    clauses.push('a.device_id = ?');
+    params.push(filters.deviceId);
+  }
+  if (filters.provider) {
+    clauses.push('a.provider = ?');
+    params.push(filters.provider);
+  }
+  if (filters.product) {
+    clauses.push('a.product = ?');
+    params.push(filters.product);
+  }
+  if (filters.channel && filters.channel !== 'cli') {
+    clauses.push('1 = 0');
+  }
+  if (filters.model) {
+    clauses.push('1 = 0');
+  }
+  if (filters.project) {
+    clauses.push(`${ACTIVITY_PROJECT_DISPLAY_SQL} = ?`);
+    params.push(filters.project);
+  }
+
+  return {
+    whereClause: clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '',
+    params,
+  };
 }
 
 async function buildSankey(rows: Array<{

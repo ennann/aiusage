@@ -2,6 +2,11 @@ import { createHash } from 'node:crypto';
 import type { IngestBreakdown } from '@aiusage/shared';
 
 export type ProjectVisibility = 'hidden' | 'masked' | 'plain';
+export interface ProjectPrivacyFields {
+  project: string;
+  projectDisplay?: string;
+  projectAlias?: string;
+}
 
 const DEFAULT_VISIBILITY: ProjectVisibility = 'masked';
 
@@ -17,11 +22,18 @@ export function applyPrivacy(
   breakdowns: IngestBreakdown[],
   visibility: ProjectVisibility | undefined,
 ): IngestBreakdown[] {
-  const mode = visibility ?? DEFAULT_VISIBILITY;
-  return breakdowns.map(b => transformOne(b, mode));
+  return applyProjectPrivacy(breakdowns, visibility);
 }
 
-function transformOne(b: IngestBreakdown, mode: ProjectVisibility): IngestBreakdown {
+export function applyProjectPrivacy<T extends ProjectPrivacyFields>(
+  items: T[],
+  visibility: ProjectVisibility | undefined,
+): T[] {
+  const mode = visibility ?? DEFAULT_VISIBILITY;
+  return items.map(item => transformOne(item, mode));
+}
+
+function transformOne<T extends ProjectPrivacyFields>(b: T, mode: ProjectVisibility): T {
   const original = b.project ?? '';
   const display = b.projectDisplay ?? deriveBasename(original);
 

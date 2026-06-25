@@ -2,6 +2,7 @@ import { hostname } from 'node:os';
 import type { AIUsageConfig } from './config.js';
 import { getLocalTimezone } from './config.js';
 import { getVersion } from './version.js';
+import type { IngestDay } from '@aiusage/shared';
 
 const SCHEMA_VERSION = '1.0';
 const DEFAULT_LOOKBACK_DAYS = 7;
@@ -63,22 +64,7 @@ export async function enrollDevice(
 export async function uploadDailyUsage(
   apiBaseUrl: string,
   config: Pick<AIUsageConfig, 'siteId' | 'deviceId' | 'deviceAlias' | 'deviceToken'>,
-  days: Array<{
-    usageDate: string;
-    breakdowns: Array<{
-      provider: string;
-      product: string;
-      channel: string;
-      model: string;
-      project: string;
-      eventCount: number;
-      inputTokens: number;
-      cachedInputTokens: number;
-      cacheWriteTokens: number;
-      outputTokens: number;
-      reasoningOutputTokens: number;
-    }>;
-  }>,
+  days: IngestDay[],
 ): Promise<{
   ok: boolean;
   daysProcessed: number;
