@@ -195,7 +195,8 @@ describe('buildLocalReport', () => {
     expect(warnings.size).toBe(0);
   });
 
-  it('does not use Kiro session credit estimates by default', async () => {
+  it('does not use Kiro session credit estimates when explicitly disabled', async () => {
+    process.env.KIRO_USE_CREDIT_COST = 'false';
     const day = '2026-01-27';
     const dir = join(homeDir, '.kiro', 'sessions', 'cli');
     await mkdir(dir, { recursive: true });

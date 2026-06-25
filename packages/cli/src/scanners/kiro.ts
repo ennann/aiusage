@@ -98,7 +98,7 @@ type KiroTokenUsageMap = Map<string, Map<string, KiroTokenTotals>>;
 const KIRO_TOKEN_SOURCE = 'tokens_generated.jsonl';
 const KIRO_SQLITE_SOURCE = 'devdata.sqlite';
 const KIRO_OVERAGE_CREDIT_RATE_USD = 0.04;
-const KIRO_DEFAULT_CREDIT_COST_ENABLED = false;
+const KIRO_DEFAULT_CREDIT_COST_ENABLED = true;
 const KIRO_TOKEN_MODEL_ALIASES: Record<string, string> = {
   qdev: 'claude-opus-4-6',
   agent: 'claude-opus-4-6',
@@ -190,12 +190,11 @@ export async function scanKiroDates(
 }
 
 function isKiroCreditCostEnabled(): boolean {
-  if (!KIRO_DEFAULT_CREDIT_COST_ENABLED) {
-    const raw = process.env.KIRO_USE_CREDIT_COST?.trim()?.toLowerCase();
-    if (!raw) return false;
+  const raw = process.env.KIRO_USE_CREDIT_COST?.trim()?.toLowerCase();
+  if (raw) {
     return ['1', 'true', 'on', 'yes', 'enabled'].includes(raw);
   }
-  return true;
+  return KIRO_DEFAULT_CREDIT_COST_ENABLED;
 }
 
 function resolveKiroDirs(baseDir?: string): string[] {

@@ -441,7 +441,8 @@ describe('scanKiroDates', () => {
     );
   });
 
-  it('does not add estimated cost from metering_usage credit fields by default', async () => {
+  it('does not add estimated cost from metering_usage credits when explicitly disabled', async () => {
+    process.env.KIRO_USE_CREDIT_COST = 'false';
     const day = '2026-01-27';
     await writeKiroSessionJson(
       join(tmpDir, 'session-credits.json'),
@@ -481,6 +482,35 @@ describe('scanKiroDates', () => {
       }),
     );
     expect(breakdown[0].costUSD ?? 0).toBe(0);
+  });
+
+  it('adds estimated cost from metering_usage credits by default', async () => {
+    const day = '2026-01-27';
+    await writeKiroSessionJson(
+      join(tmpDir, 'session-credits-default.json'),
+      {
+        session_id: 'session-credits-default',
+        created_at: `${day}T10:00:00.000Z`,
+        updated_at: `${day}T10:10:00.000Z`,
+        session_state: {
+          conversation_metadata: {
+            user_turn_metadatas: [
+              {
+                metering_usage: [
+                  { value: 0.5, unit: 'credit' },
+                  { value: 0.25, unit: 'credit' },
+                ],
+              },
+            ],
+          },
+        },
+      },
+    );
+
+    const result = await scanKiroDates([day], tmpDir);
+    const breakdown = result.get(day) ?? [];
+    expect(breakdown).toHaveLength(1);
+    expect(breakdown[0].costUSD).toBe(0.03);
   });
 
   it('adds estimated cost from metering_usage credits when explicitly enabled', async () => {
