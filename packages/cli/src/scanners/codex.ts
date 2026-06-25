@@ -8,6 +8,39 @@ import { normalizeModelName, runWithConcurrency, resolveProjectFields, type Proj
 const FILE_CONCURRENCY = 16;
 const MAX_LINE_BYTES = 64 * 1024 * 1024; // 64 MB
 
+/** 默认扫描的 Codex 数据目录（相对 home），覆盖标准 Codex 及额外客户端 */
+const DEFAULT_CODEX_DIRNAMES = ['.codex', '.codex-kiro'];
+
+/** 解析待扫描的 Codex 基础目录列表 */
+function resolveCodexDirs(codexDir?: string): string[] {
+  if (codexDir) return [codexDir];
+  const home = homedir();
+  return DEFAULT_CODEX_DIRNAMES.map((name) => join(home, name));
+}
+
+interface CodexModelMeta {
+  provider: string;
+  product: string;
+  model: string;
+}
+
+/**
+ * 解析 Codex turn_context 中的模型名。
+ * 部分客户端（如 .codex-kiro）通过 ninerouter 路由第三方模型，
+ * 形如 `kr/claude-opus-4.8`，需按真实 provider 归类并归一化模型名。
+ */
+function resolveCodexModelMeta(rawModel: string): CodexModelMeta {
+  const stripped = rawModel.includes('/') ? rawModel.slice(rawModel.lastIndexOf('/') + 1) : rawModel;
+  const lower = stripped.toLowerCase();
+
+  if (lower.startsWith('claude')) {
+    const model = lower.replace(/\./g, '-').replace(/-\d{8}$/, '');
+    return { provider: 'anthropic', product: 'codex', model };
+  }
+
+  return { provider: 'openai', product: 'codex', model: normalizeModelName(rawModel) };
+}
+
 interface CodexRecord {
   type?: string;
   timestamp?: string;
@@ -48,9 +81,11 @@ export async function scanCodexDates(
   const groupedByDate = new Map<string, Map<string, IngestBreakdown>>();
   for (const targetDate of targetDateSet) groupedByDate.set(targetDate, new Map());
 
-  const baseDir = codexDir ?? join(homedir(), '.codex');
+  const baseDirs = resolveCodexDirs(codexDir);
 
-  const sessionFiles = await collectSessionFiles(baseDir);
+  const sessionFiles = (
+    await Promise.all(baseDirs.map((baseDir) => collectSessionFiles(baseDir)))
+  ).flat();
   if (sessionFiles.length === 0) {
     return new Map([...targetDateSet].map((targetDate) => [targetDate, []]));
   }
@@ -90,6 +125,8 @@ async function processCodexFile(
     });
 
     let currentModel = 'unknown';
+    let currentProvider = 'openai';
+    let currentProduct = 'codex';
     let currentProjectFields: ProjectFields = { project: 'unknown', projectDisplay: 'unknown' };
     let previousTotal: TokenUsage = {};
 
@@ -110,7 +147,10 @@ async function processCodexFile(
         const rawModel = record.payload?.model ?? currentModel;
         // 过滤合成消息
         if (rawModel !== '<synthetic>') {
-          currentModel = normalizeModelName(rawModel);
+          const meta = resolveCodexModelMeta(rawModel);
+          currentModel = meta.model;
+          currentProvider = meta.provider;
+          currentProduct = meta.product;
         }
         if (record.payload?.cwd) {
           currentProjectFields = resolveProjectFields(record.payload.cwd, projectAliases);
@@ -150,7 +190,7 @@ async function processCodexFile(
 
       const grouped = groupedByDate.get(usageDate);
       if (!grouped) continue;
-      const key = `${currentModel}|${currentProjectFields.project}`;
+      const key = `${currentProvider}|${currentModel}|${currentProjectFields.project}`;
 
       const existing = grouped.get(key);
       if (existing) {
@@ -161,8 +201,8 @@ async function processCodexFile(
         existing.reasoningOutputTokens += last.reasoning_output_tokens ?? 0;
       } else {
         grouped.set(key, {
-          provider: 'openai',
-          product: 'codex',
+          provider: currentProvider,
+          product: currentProduct,
           channel: 'cli',
           model: currentModel,
           project: currentProjectFields.project,
@@ -234,4 +274,3 @@ function toDateKey(date: Date): string {
   const day = String(date.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
 }
-

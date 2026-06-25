@@ -153,6 +153,7 @@ export async function runDoctor(lang: Lang = 'zh'): Promise<Check[]> {
   const tools: ToolDef[] = [
     { dir: join(home, '.claude', 'projects'), label: 'Claude Code', exts: ['.jsonl'] },
     { dir: join(home, '.codex'), label: 'Codex CLI', exts: ['.jsonl'] },
+    { dir: join(home, '.codex-kiro'), label: 'Codex Kiro', exts: ['.jsonl'] },
     { dir: join(home, 'Library', 'Application Support', 'Cursor', 'User', 'globalStorage'), label: 'Cursor', exts: ['.vscdb'] },
     { dir: join(home, '.copilot', 'session-state'), label: 'Copilot CLI', exts: ['.jsonl'] },
     { dir: join(home, 'Library', 'Application Support', 'Code', 'logs'), label: 'Copilot VS Code', exts: ['.log'] },

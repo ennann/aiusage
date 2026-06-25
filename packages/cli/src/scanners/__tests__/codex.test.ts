@@ -361,3 +361,45 @@ describe('Integration: real-world duplicate pattern', () => {
     expect(results[0].outputTokens).toBe(450);        // 100+200+150
   });
 });
+
+// ─── ninerouter 路由的第三方模型归类（如 .codex-kiro） ───
+
+describe('ninerouter routed models', () => {
+  it('attributes kr/claude-opus-4.8 to anthropic with normalized model name', async () => {
+    const day = '2025-10-16';
+    const sessionDir = join(tmpDir, 'sessions', '2025', '10', '16');
+    const events = tokenCountEvent(
+      `${day}T10:00:00.000Z`,
+      { input: 3000, cached: 2000, output: 100 },
+      { input: 3000, cached: 2000, output: 100 },
+      'kr/claude-opus-4.8',
+      '/p',
+    );
+    await writeSession(sessionDir, 'rollout-test.jsonl', events);
+
+    const results = await scanCodex(day, tmpDir);
+    expect(results).toHaveLength(1);
+    expect(results[0].provider).toBe('anthropic');
+    expect(results[0].product).toBe('codex');
+    expect(results[0].model).toBe('claude-opus-4-8');
+    expect(results[0].inputTokens).toBe(1000);
+  });
+
+  it('keeps native OpenAI codex models under openai/codex', async () => {
+    const day = '2025-10-16';
+    const sessionDir = join(tmpDir, 'sessions', '2025', '10', '16');
+    const events = tokenCountEvent(
+      `${day}T10:00:00.000Z`,
+      { input: 2000, cached: 1000, output: 50 },
+      { input: 2000, cached: 1000, output: 50 },
+      'gpt-5-codex',
+      '/p',
+    );
+    await writeSession(sessionDir, 'rollout-test.jsonl', events);
+
+    const results = await scanCodex(day, tmpDir);
+    expect(results[0].provider).toBe('openai');
+    expect(results[0].product).toBe('codex');
+    expect(results[0].model).toBe('gpt-5-codex');
+  });
+});

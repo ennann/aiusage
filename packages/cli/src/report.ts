@@ -482,8 +482,11 @@ async function discoverClaudeDates(dates: Set<string>): Promise<void> {
 }
 
 async function discoverCodexDates(dates: Set<string>): Promise<void> {
-  const baseDir = join(homedir(), '.codex');
-  const files = await collectCodexSessionFiles(baseDir);
+  const home = homedir();
+  const baseDirs = ['.codex', '.codex-kiro'].map((name) => join(home, name));
+  const files = (
+    await Promise.all(baseDirs.map((baseDir) => collectCodexSessionFiles(baseDir)))
+  ).flat();
 
   for (const filePath of files) {
     const content = await safeReadUtf8(filePath);
@@ -625,6 +628,8 @@ function mergeTotals(target: Totals, source: Totals): Totals {
 const FAST_MULTIPLIER = 6;
 
 const CLAUDE_PRICING: Record<string, { input: number; cache_write_5m: number; cache_write_1h: number; cache_read: number; output: number }> = {
+  'claude-opus-4-8': { input: 5, cache_write_5m: 6.25, cache_write_1h: 10, cache_read: 0.5, output: 25 },
+  'claude-opus-4-7': { input: 5, cache_write_5m: 6.25, cache_write_1h: 10, cache_read: 0.5, output: 25 },
   'claude-opus-4-6': { input: 5, cache_write_5m: 6.25, cache_write_1h: 10, cache_read: 0.5, output: 25 },
   'claude-opus-4-5': { input: 5, cache_write_5m: 6.25, cache_write_1h: 10, cache_read: 0.5, output: 25 },
   'claude-opus-4-1': { input: 15, cache_write_5m: 18.75, cache_write_1h: 30, cache_read: 1.5, output: 75 },
@@ -728,7 +733,10 @@ export function calculateBreakdownCost(breakdown: IngestBreakdown, warnings: Set
     return breakdown.costUSD;
   }
 
-  if (breakdown.provider === 'anthropic' && breakdown.product === 'claude-code') {
+  if (
+    breakdown.provider === 'anthropic' &&
+    (breakdown.product === 'claude-code' || breakdown.product === 'codex')
+  ) {
     // 检测 fast 模式（model 名以 -fast 结尾）
     const isFast = breakdown.model.endsWith('-fast');
     const baseModel = isFast ? breakdown.model.replace(/-fast$/, '') : breakdown.model;

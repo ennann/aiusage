@@ -284,3 +284,26 @@ describe('getWorstCostStatus', () => {
     expect(getWorstCostStatus([])).toBe('exact');
   });
 });
+
+describe('ninerouter routed Anthropic models under codex product', () => {
+  it('claude-opus-4-8 prices via claude-code fallback table', () => {
+    const r = calculateCost('anthropic', 'codex', 'claude-opus-4-8', {
+      inputTokens: 1_000_000,
+      cachedInputTokens: 0,
+      cacheWriteTokens: 0,
+      outputTokens: 1_000_000,
+    });
+    expect(r.estimatedCostUsd).toBe(30); // 5 input + 25 output
+    expect(r.costStatus).toBe('exact');
+  });
+
+  it('claude-opus-4.8 (dotted) normalizes to claude-opus-4-8', () => {
+    const r = calculateCost('anthropic', 'codex', 'claude-opus-4.8', {
+      inputTokens: 1_000_000,
+      cachedInputTokens: 0,
+      cacheWriteTokens: 0,
+      outputTokens: 0,
+    });
+    expect(r.estimatedCostUsd).toBe(5);
+  });
+});
