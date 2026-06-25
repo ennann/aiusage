@@ -14,6 +14,151 @@ export const DEMO_OVERVIEW: OverviewResponse & { ok: boolean } = {
   "costBearingEvents": 78450,
   "totalCostUsd": 7593.4274,
   "averageDailyCostUsd": 43.8926,
+  "interactionMetrics": {
+      "exactCount": 63217,
+      "proxyCount": 961,
+      "userMessageCount": 5397,
+      "functionCallCount": 27563,
+      "toolCallCount": 29112,
+      "skillCallCount": 46,
+      "skillProxyCount": 961,
+      "subagentCount": 303,
+      "topTools": [
+          {
+              "value": "exec_command (openai/codex)",
+              "label": "exec_command (openai/codex)",
+              "eventCount": 22392
+          },
+          {
+              "value": "Bash (anthropic/claude-code)",
+              "label": "Bash (anthropic/claude-code)",
+              "eventCount": 12747
+          },
+          {
+              "value": "Read (anthropic/claude-code)",
+              "label": "Read (anthropic/claude-code)",
+              "eventCount": 6520
+          },
+          {
+              "value": "Edit (anthropic/claude-code)",
+              "label": "Edit (anthropic/claude-code)",
+              "eventCount": 3451
+          },
+          {
+              "value": "write_stdin (openai/codex)",
+              "label": "write_stdin (openai/codex)",
+              "eventCount": 2411
+          },
+          {
+              "value": "apply_patch (openai/codex)",
+              "label": "apply_patch (openai/codex)",
+              "eventCount": 2391
+          }
+      ],
+      "topSkills": [
+          {
+              "value": "coding-guide (proxy)",
+              "label": "coding-guide (proxy)",
+              "eventCount": 179,
+              "proxyCount": 179
+          },
+          {
+              "value": "ethan-server-ops (proxy)",
+              "label": "ethan-server-ops (proxy)",
+              "eventCount": 58,
+              "proxyCount": 58
+          },
+          {
+              "value": "unknown-skill (proxy)",
+              "label": "unknown-skill (proxy)",
+              "eventCount": 58,
+              "proxyCount": 58
+          },
+          {
+              "value": "swiftui-ui-patterns (proxy)",
+              "label": "swiftui-ui-patterns (proxy)",
+              "eventCount": 44,
+              "proxyCount": 44
+          },
+          {
+              "value": "swiftui-animation (proxy)",
+              "label": "swiftui-animation (proxy)",
+              "eventCount": 29,
+              "proxyCount": 29
+          },
+          {
+              "value": "humanzoo-ops (proxy)",
+              "label": "humanzoo-ops (proxy)",
+              "eventCount": 28,
+              "proxyCount": 28
+          }
+      ],
+      "topAgents": [
+          {
+              "value": "explorer (openai/codex)",
+              "label": "explorer (openai/codex)",
+              "eventCount": 14
+          },
+          {
+              "value": "CLI 代码审计 (anthropic/claude-code)",
+              "label": "CLI 代码审计 (anthropic/claude-code)",
+              "eventCount": 2
+          },
+          {
+              "value": "Dashboard 与发布流程审计 (anthropic/claude-code)",
+              "label": "Dashboard 与发布流程审计 (anthropic/claude-code)",
+              "eventCount": 2
+          },
+          {
+              "value": "Shared/Worker 架构审计 (anthropic/claude-code)",
+              "label": "Shared/Worker 架构审计 (anthropic/claude-code)",
+              "eventCount": 2
+          },
+          {
+              "value": "安全审查核销链路改动 (anthropic/claude-code)",
+              "label": "安全审查核销链路改动 (anthropic/claude-code)",
+              "eventCount": 2
+          },
+          {
+              "value": "安全审计 email auth 改动 (anthropic/claude-code)",
+              "label": "安全审计 email auth 改动 (anthropic/claude-code)",
+              "eventCount": 2
+          }
+      ],
+      "kindShare": [
+          {
+              "value": "Function Call",
+              "label": "Function Call",
+              "eventCount": 27563
+          },
+          {
+              "value": "Tool Call",
+              "label": "Tool Call",
+              "eventCount": 24723
+          },
+          {
+              "value": "Task",
+              "label": "Task",
+              "eventCount": 5398
+          },
+          {
+              "value": "Custom Tool Call",
+              "label": "Custom Tool Call",
+              "eventCount": 2391
+          },
+          {
+              "value": "MCP Tool",
+              "label": "MCP Tool",
+              "eventCount": 1998
+          },
+          {
+              "value": "Skill Proxy",
+              "label": "Skill Proxy",
+              "eventCount": 961,
+              "proxyCount": 961
+          }
+      ]
+  },
   "dailyTrend": [
     {
       "usageDate": "2025-03-01",

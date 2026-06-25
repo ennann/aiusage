@@ -152,7 +152,12 @@ function WidgetRenderer({
       const cards = [
         { label: t.activeDays, value: String(overview?.activeDays ?? 0), suffix: ` / ${overview?.totalDays ?? 0}` },
         { label: t.sessions, value: formatNumber((overview?.totalSessions ?? 0) > 0 ? overview!.totalSessions : (overview?.totalEvents ?? 0)) },
-        { label: t.costPerSession, value: unavailable ? t.unavailable : formatUsd(kpis?.costPerSession ?? 0) },
+        {
+          label: t.userMessages,
+          value: typeof overview?.interactionMetrics?.userMessageCount === 'number'
+            ? formatNumber(overview.interactionMetrics.userMessageCount)
+            : t.unavailable,
+        },
         { label: t.avgDailyCost, value: unavailable ? t.unavailable : formatUsd(overview?.averageDailyCostUsd ?? 0) },
         { label: t.cacheHitRate, value: unavailable ? t.unavailable : formatPercent(kpis?.cacheHitRate ?? 0) },
       ];

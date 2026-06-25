@@ -8,7 +8,7 @@ import type { Locale } from '../i18n';
 
 const WIDGETS = [
   { id: 'stats-row1', nameZh: '指标卡 \u00b7 第一行', nameEn: 'KPI Cards \u00b7 Row 1', descZh: '预估费用、总 Token、输入、输出、缓存命中', descEn: 'Estimated cost, total tokens, input, output, cached tokens', height: 100, supportsItems: true, itemsNoteZh: '索引 0-4', itemsNoteEn: 'Index 0-4' },
-  { id: 'stats-row2', nameZh: '指标卡 \u00b7 第二行', nameEn: 'KPI Cards \u00b7 Row 2', descZh: '活跃天数、会话数、单次费用、日均费用、缓存命中率', descEn: 'Active days, sessions, cost/session, avg daily cost, cache hit rate', height: 100, supportsItems: true, itemsNoteZh: '索引 0-4', itemsNoteEn: 'Index 0-4' },
+  { id: 'stats-row2', nameZh: '指标卡 \u00b7 第二行', nameEn: 'KPI Cards \u00b7 Row 2', descZh: '活跃天数、会话数、用户对话数、日均费用、缓存命中率', descEn: 'Active days, sessions, user messages, avg daily cost, cache hit rate', height: 100, supportsItems: true, itemsNoteZh: '索引 0-4', itemsNoteEn: 'Index 0-4' },
   { id: 'cost-trend', nameZh: '费用趋势', nameEn: 'Cost Trend', descZh: '按天展示费用变化的柱状图，支持多厂商堆叠', descEn: 'Daily cost bar chart with multi-provider stacking', height: 360, supportsItems: false },
   { id: 'token-trend', nameZh: 'Token 趋势', nameEn: 'Token Trend', descZh: '按天展示各类 Token 用量的面积图', descEn: 'Daily token usage area chart by type', height: 380, supportsItems: false },
   { id: 'token-composition', nameZh: 'Token 构成', nameEn: 'Token Composition', descZh: '按天展示 Token 类型分布的堆叠柱状图', descEn: 'Daily token type distribution stacked bar chart', height: 380, supportsItems: false },

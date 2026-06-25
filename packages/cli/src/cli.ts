@@ -6,6 +6,7 @@ import { scanAnthropicApiDates } from './scanners/anthropic-admin-api.js';
 import { scanAnthropicCsvDates } from './scanners/anthropic-csv.js';
 import { buildLocalReport, parseReportRange } from './report.js';
 import { renderReport } from './render.js';
+import { buildActivityReport, renderActivityReport } from './activity.js';
 import {
   type AIUsageConfig,
   type SyncTarget,
@@ -41,6 +42,10 @@ try {
     const parsed = parseArgs(argv.slice(1));
     if (parsed.flags.help) return helpForSubcommand('report');
     await runReport(parsed.flags, parsed.positionals);
+  } else if (command === 'activity') {
+    const parsed = parseArgs(argv.slice(1));
+    if (parsed.flags.help) return helpForSubcommand('activity');
+    await runActivity(parsed.flags, parsed.positionals);
   } else if (command === 'health') {
     const parsed = parseArgs(argv.slice(1));
     if (parsed.flags.help) return helpForSubcommand('health');
@@ -231,6 +236,26 @@ async function runReport(flags: Record<string, string | boolean>, positionals: s
   const detail = flags.detail === true;
 
   console.log(renderReport(report, { lang, emoji, detail }));
+}
+
+async function runActivity(flags: Record<string, string | boolean>, positionals: string[] = []) {
+  const config = await readConfig();
+  assertNoPositionals('activity', positionals, config.lang === 'zh');
+
+  const { dates, range } = resolveDateParams(flags, config);
+  const report = await buildActivityReport(range, {
+    projectAliases: config.projectAliases,
+    dates,
+  });
+
+  if (flags.json) {
+    console.log(JSON.stringify(report, null, 2));
+    return;
+  }
+
+  const emoji = flags['no-emoji'] === true ? false : (config.emoji ?? true);
+  const detail = flags.detail === true;
+  console.log(renderActivityReport(report, { emoji, detail }));
 }
 
 function fmt(n: number): string {
@@ -738,6 +763,7 @@ function printHelp(zh = false) {
   const cmds = zh ? [
     ['scan [--date YYYY-MM-DD|--today|--range 7d|1m|3m] [--json]', '扫描用量明细'],
     ['report [--today] [--range 7d|1m|3m|all] [--detail] [--json]', '本地用量报告'],
+    ['activity [--today] [--range 7d|1m|3m|all] [--detail] [--json]', '本地交互指标'],
     ['sync [--today] [--range 7d|1m|3m]',                         '上传用量到服务端'],
     ['scan/report/sync --from YYYY-MM-DD [--to YYYY-MM-DD]',      '指定日期范围（--start/--end 同义）'],
     ['project [list|alias]',                                  '项目管理与别名设置'],
@@ -751,6 +777,7 @@ function printHelp(zh = false) {
   ] : [
     ['scan [--date YYYY-MM-DD|--today|--range 7d|1m|3m] [--json]', 'Scan usage breakdown'],
     ['report [--today] [--range 7d|1m|3m|all] [--detail] [--json]', 'Local usage report'],
+    ['activity [--today] [--range 7d|1m|3m|all] [--detail] [--json]', 'Local interaction metrics'],
     ['sync [--today] [--range 7d|1m|3m]',                         'Upload usage to server'],
     ['scan/report/sync --from YYYY-MM-DD [--to YYYY-MM-DD]',      'Date range (--start/--end aliases)'],
     ['project [list|alias]',                                 'Project management & aliases'],
@@ -779,6 +806,7 @@ function printUsageHint(zh = false) {
   const cmds = zh ? [
     ['scan [--date YYYY-MM-DD|--range 1m]',   '扫描用量明细'],
     ['report [--today] [--range 7d|1m|3m|all]', '本地用量报告'],
+    ['activity [--range 7d|1m|3m|all]',       '本地交互指标'],
     ['sync [--today] [--range 7d|1m|3m]',     '上传用量到服务端'],
     ['project [list|alias]',                  '项目管理与别名设置'],
     ['pricing [status|update]',               '查看/更新定价目录'],
@@ -788,6 +816,7 @@ function printUsageHint(zh = false) {
   ] : [
     ['scan [--date YYYY-MM-DD|--range 1m]',   'Scan usage breakdown'],
     ['report [--today] [--range 7d|1m|3m|all]', 'Local usage report'],
+    ['activity [--range 7d|1m|3m|all]',       'Local interaction metrics'],
     ['sync [--today] [--range 7d|1m|3m]',     'Upload usage to server'],
     ['project [list|alias]',                  'Project management & aliases'],
     ['pricing [status|update]',               'Pricing catalog management'],

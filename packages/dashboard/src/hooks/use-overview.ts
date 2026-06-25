@@ -79,12 +79,7 @@ export function useOverview(filters: FiltersState) {
     const cachedTokens = arrSum(tc.map((d) => d.cachedInputTokens));
     const denominator = inputTokens + cachedTokens;
     const cacheHitRate = denominator > 0 ? (cachedTokens / denominator) * 100 : 0;
-    const costDivisor = overview.totalSessions > 0
-      ? overview.totalSessions
-      : (overview.costBearingEvents ?? overview.totalEvents);
-    const costPerSession = costDivisor > 0
-      ? overview.totalCostUsd / costDivisor : 0;
-    return { totalTokens, inputTokens, outputTokens, cachedTokens, cacheHitRate, costPerSession };
+    return { totalTokens, inputTokens, outputTokens, cachedTokens, cacheHitRate };
   }, [overview]);
 
   const metricAvailability = useMemo(() => {

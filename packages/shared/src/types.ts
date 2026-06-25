@@ -100,7 +100,30 @@ export interface OverviewResponse {
   channelCostShare: ShareItem[];
   sankey: SankeyGraph;
   heatmap: HeatmapDay[];
+  interactionMetrics?: InteractionMetricsPayload;
   filters: DashboardFiltersPayload;
+}
+
+export interface InteractionMetricItem {
+  value: string;
+  label: string;
+  eventCount: number;
+  proxyCount?: number;
+}
+
+export interface InteractionMetricsPayload {
+  exactCount: number;
+  proxyCount: number;
+  userMessageCount?: number;
+  functionCallCount: number;
+  toolCallCount: number;
+  skillCallCount: number;
+  skillProxyCount: number;
+  subagentCount: number;
+  topTools: InteractionMetricItem[];
+  topSkills: InteractionMetricItem[];
+  topAgents: InteractionMetricItem[];
+  kindShare: InteractionMetricItem[];
 }
 
 export interface DailyTrendItem {
