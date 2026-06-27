@@ -104,6 +104,10 @@ const KIRO_TOKEN_MODEL_ALIASES: Record<string, string> = {
   agent: 'claude-opus-4-6',
 };
 
+// Kiro 会话偶尔缺失模型信息（无 rts_model_state / metadata），
+// 这类会话默认归类为当前默认模型，避免出现无法计费的 unknown。
+const KIRO_DEFAULT_MODEL = 'claude-opus-4-8';
+
 export async function scanKiroDates(
   targetDates: string[],
   baseDir?: string,
@@ -241,7 +245,8 @@ function getModelNameFromData(data: KiroChatRecord | KiroSessionRecord): string 
 }
 
 function getModelName(data: KiroRecord): string {
-  return normalizeModelName(getModelNameFromData(data));
+  const resolved = normalizeModelName(getModelNameFromData(data));
+  return resolved === 'unknown' ? KIRO_DEFAULT_MODEL : resolved;
 }
 
 function getModelNameFromMetadata(metadata?: KiroMetadata): string {

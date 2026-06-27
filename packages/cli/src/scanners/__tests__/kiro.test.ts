@@ -148,7 +148,7 @@ describe('scanKiroDates', () => {
     expect(breakdown[0].eventCount).toBe(1);
   });
 
-  it('defaults model to unknown when model metadata is missing', async () => {
+  it('defaults model to claude-opus-4-8 when model metadata is missing', async () => {
     const day = '2026-01-18';
     await writeKiroChat(
       join(tmpDir, 'missing-model.chat'),
@@ -163,7 +163,7 @@ describe('scanKiroDates', () => {
     const result = await scanKiroDates([day], tmpDir);
     const breakdown = result.get(day) ?? [];
     expect(breakdown).toHaveLength(1);
-    expect(breakdown[0].model).toBe('unknown');
+    expect(breakdown[0].model).toBe('claude-opus-4-8');
     expect(breakdown[0].provider).toBe('kiro');
   });
 
