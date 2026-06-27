@@ -571,7 +571,7 @@ export function App() {
           {/* ── Flow & Share ── */}
           <div className="fade-up grid gap-4 lg:grid-cols-5" style={{ animationDelay: '300ms' }}>
             <div className="card p-6 lg:col-span-3">
-              <SectionHeader title={t.tokenFlow} />
+              <SectionHeader title={t.costFlow} />
               {unavailable ? (
                 <EmptyState label={t.tokenUnavailable} />
               ) : (

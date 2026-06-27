@@ -217,7 +217,7 @@ function WidgetRenderer({
     case 'flow':
       return (
         <>
-          <SectionHeader title={t.tokenFlow} />
+          <SectionHeader title={t.costFlow} />
           {unavailable ? (
             <EmptyState label={t.tokenUnavailable} />
           ) : (
