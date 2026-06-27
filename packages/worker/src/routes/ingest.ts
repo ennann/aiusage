@@ -51,14 +51,23 @@ export async function handleIngest(request: Request, env: Env): Promise<Response
     for (const b of day.breakdowns) {
       const cacheWrite5mTokens = b.cacheWrite5mTokens ?? b.cacheWriteTokens;
       const cacheWrite1hTokens = b.cacheWrite1hTokens ?? 0;
-      const cost = calculateCost(b.provider, b.product, b.model, {
-        inputTokens: b.inputTokens,
-        cachedInputTokens: b.cachedInputTokens,
-        cacheWriteTokens: b.cacheWriteTokens,
-        cacheWrite5mTokens,
-        cacheWrite1hTokens,
-        outputTokens: b.outputTokens,
-      });
+      // 优先使用 CLI 预算的费用（如 Kiro 积分计费、Codex JSONL 自带 costUSD），
+      // 这类来源本地无 token 数据，服务端按 token 计费会得到 0。
+      const cost =
+        typeof b.costUSD === 'number' && b.costUSD > 0
+          ? {
+              estimatedCostUsd: Math.round(b.costUSD * 10000) / 10000,
+              costStatus: 'estimated' as CostStatus,
+              pricingVersion: 'client-supplied',
+            }
+          : calculateCost(b.provider, b.product, b.model, {
+              inputTokens: b.inputTokens,
+              cachedInputTokens: b.cachedInputTokens,
+              cacheWriteTokens: b.cacheWriteTokens,
+              cacheWrite5mTokens,
+              cacheWrite1hTokens,
+              outputTokens: b.outputTokens,
+            });
 
       costStatuses.push(cost.costStatus);
       dayTotalCost += cost.estimatedCostUsd;
