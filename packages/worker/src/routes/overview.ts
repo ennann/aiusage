@@ -165,16 +165,16 @@ export async function handleOverview(url: URL, env: Env): Promise<Response> {
       SELECT
         b.model,
         ${PROJECT_DISPLAY_SQL} AS project,
-        COALESCE(SUM(${TOTAL_TOKENS_SQL}), 0) AS total_tokens
+        COALESCE(SUM(b.estimated_cost_usd), 0) AS total_cost
       FROM daily_usage_breakdown b
       ${where.whereClause}
       GROUP BY b.model, ${PROJECT_DISPLAY_SQL}
-      HAVING COALESCE(SUM(${TOTAL_TOKENS_SQL}), 0) > 0
-      ORDER BY total_tokens DESC, b.model ASC, project ASC
+      HAVING COALESCE(SUM(b.estimated_cost_usd), 0) > 0
+      ORDER BY total_cost DESC, b.model ASC, project ASC
     `).bind(...where.params).all<{
       model: string;
       project: string;
-      total_tokens: number;
+      total_cost: number;
     }>(),
     env.DB.prepare(`
       SELECT
@@ -399,7 +399,7 @@ function toFilterKey(column: string): FilterKey {
 async function buildSankey(rows: Array<{
   model: string;
   project: string;
-  total_tokens: number;
+  total_cost: number;
 }>, env: Env): Promise<{
   nodes: Array<{ id: string; label: string; layer: number; totalTokens: number }>;
   links: Array<{ source: string; target: string; value: number }>;
@@ -409,8 +409,9 @@ async function buildSankey(rows: Array<{
   const flowLinks = new Map<string, number>();
 
   for (const row of rows) {
-    const value = Number(row.total_tokens ?? 0);
-    if (!value) continue;
+    // Flow 以「费用 (USD)」为权重，让 Kiro 等仅有费用、无 token 的工具也能出现在流向图中。
+    const value = roundUsd(row.total_cost ?? 0);
+    if (value <= 0) continue;
 
     modelTotals.set(row.model, (modelTotals.get(row.model) ?? 0) + value);
     projectTotals.set(row.project, (projectTotals.get(row.project) ?? 0) + value);
