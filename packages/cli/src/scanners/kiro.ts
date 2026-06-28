@@ -1,8 +1,9 @@
 import { createHash } from 'node:crypto';
-import { copyFile, mkdtemp, readFile, rm, stat } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
+import { copyFile, mkdtemp, readFile, readdir, rm, stat } from 'node:fs/promises';
+import { createReadStream, existsSync } from 'node:fs';
+import { createInterface } from 'node:readline';
 import { homedir, tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import type { IngestBreakdown } from '@aiusage/shared';
 import {
   dateKey,
@@ -11,7 +12,7 @@ import {
   initDateMap,
   accumulate,
   finalize,
-  emptyResult,
+  runWithConcurrency,
 } from './utils.js';
 
 /**
@@ -97,6 +98,7 @@ type KiroTokenUsageMap = Map<string, Map<string, KiroTokenTotals>>;
 
 const KIRO_TOKEN_SOURCE = 'tokens_generated.jsonl';
 const KIRO_SQLITE_SOURCE = 'devdata.sqlite';
+const KIRO_CLI_DB_SOURCE = 'data.sqlite3';
 const KIRO_OVERAGE_CREDIT_RATE_USD = 0.04;
 const KIRO_DEFAULT_CREDIT_COST_ENABLED = true;
 const KIRO_TOKEN_MODEL_ALIASES: Record<string, string> = {
@@ -124,10 +126,10 @@ export async function scanKiroDates(
     )
   ).flat();
 
-  if (files.length === 0) return emptyResult(targetDateSet);
-
   const groupedByDate = initDateMap(targetDateSet);
   const seenExecutionIds = new Set<string>();
+  // 跨存储去重：记录已计入费用的会话/对话 id，避免新存储重复计费
+  const creditedConvIds = new Set<string>();
 
   for (const filePath of files) {
     let raw: string;
@@ -155,39 +157,26 @@ export async function scanKiroDates(
     if (!dayMap) continue;
 
     const model = getModelName(data);
-    const project = 'unknown';
     const estimatedCostUsd = shouldEstimateKiroCreditCost ? extractKiroCreditsFromRecord(data) : 0;
 
-    accumulate(
-      dayMap,
-      `${model}|${project}`,
-      {
-        provider: 'kiro',
-        product: 'kiro',
-        channel: 'cli',
-        model,
-        project,
-        projectDisplay: 'unknown',
-        inputTokens: 0,
-        cachedInputTokens: 0,
-        cacheWriteTokens: 0,
-        outputTokens: 0,
-        reasoningOutputTokens: 0,
-      },
-      { input: 0, cached: 0, cacheWrite: 0, output: 0, reasoning: 0 },
-    );
+    accumulate(dayMap, `${model}|unknown`, kiroBreakdownBase(model), KIRO_ZERO_TOKENS);
 
     if (estimatedCostUsd > 0) {
-      const usageDateMap = tokenUsage.get(usageDate) ?? new Map<string, KiroTokenTotals>();
-      const usageTotals = usageDateMap.get(model);
-      if (usageTotals) {
-        usageTotals.costUSD = (usageTotals.costUSD ?? 0) + estimatedCostUsd;
-      } else {
-        usageDateMap.set(model, { input: 0, output: 0, costUSD: estimatedCostUsd });
-      }
-      tokenUsage.set(usageDate, usageDateMap);
+      addCreditCost(tokenUsage, usageDate, model, estimatedCostUsd);
+      const sessionId = 'session_id' in data && typeof data.session_id === 'string' ? data.session_id.trim() : '';
+      if (sessionId) creditedConvIds.add(sessionId);
     }
   }
+
+  // 读取新版 Kiro 存储（CLI sqlite conversations_v2 + agent messages.jsonl），按 conversation id 去重
+  await applyKiroCreditStores(
+    groupedByDate,
+    tokenUsage,
+    creditedConvIds,
+    shouldEstimateKiroCreditCost,
+    targetDateSet,
+    baseDir,
+  );
 
   applyKiroTokenUsage(groupedByDate, tokenUsage);
   return finalize(groupedByDate);
@@ -228,6 +217,325 @@ function resolveKiroDirs(baseDir?: string): string[] {
     ),
     join(homedir(), '.kiro', 'sessions', 'cli'),
   ];
+}
+
+// ── 新版 Kiro 存储（credit 费用）──────────────────────────────
+// 旧版只读取 ~/.kiro/sessions/cli/*.json 的 metering_usage。新版 Kiro 把用量写到：
+//   1) ~/Library/Application Support/kiro-cli/data.sqlite3 的 conversations_v2(usage_info)
+//   2) ~/.kiro/sessions/<workspace>/sess_*/messages.jsonl 的 usage_summary(promptTurnSummaries)
+// 这里读取这两类存储，并按 conversation id 跨存储去重，避免重复计费。
+
+const KIRO_ZERO_TOKENS = { input: 0, cached: 0, cacheWrite: 0, output: 0, reasoning: 0 };
+
+interface KiroCreditContribution {
+  convId: string;
+  model: string;
+  perDate: Map<string, number>; // date -> 原始 credits（尚未乘费率）
+}
+
+interface KiroConvRow {
+  conversation_id?: unknown;
+  value?: unknown;
+  updated_at?: unknown;
+}
+
+interface KiroMessageLine {
+  timestamp?: string | number;
+  payload?: { type?: string; timestamp?: string | number; promptTurnSummaries?: unknown };
+}
+
+function kiroBreakdownBase(model: string): Omit<IngestBreakdown, 'eventCount'> {
+  return {
+    provider: 'kiro',
+    product: 'kiro',
+    channel: 'cli',
+    model,
+    project: 'unknown',
+    projectDisplay: 'unknown',
+    inputTokens: 0,
+    cachedInputTokens: 0,
+    cacheWriteTokens: 0,
+    outputTokens: 0,
+    reasoningOutputTokens: 0,
+  };
+}
+
+function addCreditCost(tokenUsage: KiroTokenUsageMap, date: string, model: string, costUsd: number): void {
+  const dayMap = tokenUsage.get(date) ?? new Map<string, KiroTokenTotals>();
+  const totals = dayMap.get(model);
+  if (totals) {
+    totals.costUSD = (totals.costUSD ?? 0) + costUsd;
+  } else {
+    dayMap.set(model, { input: 0, output: 0, costUSD: costUsd });
+  }
+  tokenUsage.set(date, dayMap);
+}
+
+function resolveKiroModel(raw?: unknown): string {
+  const value = typeof raw === 'string' ? raw.trim() : '';
+  if (!value) return 'unknown';
+  return normalizeModelName(value);
+}
+
+// 递归累加任意 JSON 中 unit === 'credit' 的用量（value 或 usage 字段）
+function sumCreditUnits(root: unknown): number {
+  let total = 0;
+  const stack: unknown[] = [root];
+  while (stack.length > 0) {
+    const node = stack.pop();
+    if (Array.isArray(node)) {
+      for (const item of node) stack.push(item);
+      continue;
+    }
+    if (node && typeof node === 'object') {
+      const obj = node as Record<string, unknown>;
+      if (typeof obj.unit === 'string' && obj.unit.toLowerCase() === 'credit') {
+        const value = parseCreditValue(obj.value ?? obj.usage);
+        if (value > 0) total += value;
+      }
+      for (const key of Object.keys(obj)) stack.push(obj[key]);
+    }
+  }
+  return total;
+}
+
+function dateWindowMs(dates: Set<string>): { startMs: number; endMs: number } {
+  let min = Number.POSITIVE_INFINITY;
+  let max = Number.NEGATIVE_INFINITY;
+  for (const d of dates) {
+    const start = new Date(`${d}T00:00:00`).getTime();
+    const end = new Date(`${d}T23:59:59.999`).getTime();
+    if (Number.isFinite(start) && start < min) min = start;
+    if (Number.isFinite(end) && end > max) max = end;
+  }
+  if (!Number.isFinite(min) || !Number.isFinite(max)) {
+    return { startMs: 0, endMs: Date.now() + 86_400_000 };
+  }
+  // 两端各放宽一天，避免时区边界漏读；最终按 dateKey 精确过滤
+  return { startMs: min - 86_400_000, endMs: max + 86_400_000 };
+}
+
+function resolveKiroSessionRoots(baseDir?: string): string[] {
+  const envDir = process.env.KIRO_SESSIONS_DIR?.trim();
+  if (envDir) return [envDir];
+  if (baseDir) return [baseDir];
+  return [join(homedir(), '.kiro', 'sessions')];
+}
+
+function resolveKiroCliDbPaths(baseDir?: string): string[] {
+  const envPath = process.env.KIRO_CLI_DB_PATH?.trim();
+  if (envPath) return [envPath];
+  if (baseDir) return [join(baseDir, KIRO_CLI_DB_SOURCE)];
+  return [join(homedir(), 'Library', 'Application Support', 'kiro-cli', KIRO_CLI_DB_SOURCE)];
+}
+
+async function applyKiroCreditStores(
+  groupedByDate: ReturnType<typeof initDateMap>,
+  tokenUsage: KiroTokenUsageMap,
+  creditedConvIds: Set<string>,
+  shouldEstimate: boolean,
+  targetDateSet: Set<string>,
+  baseDir?: string,
+): Promise<void> {
+  const contributions = [
+    ...await readKiroAgentSessionContributions(resolveKiroSessionRoots(baseDir), targetDateSet),
+    ...await readKiroCliDbContributions(resolveKiroCliDbPaths(baseDir), targetDateSet),
+  ];
+
+  for (const contribution of contributions) {
+    if (!contribution.convId || creditedConvIds.has(contribution.convId)) continue;
+    let counted = false;
+    for (const [date, credits] of contribution.perDate) {
+      const dayMap = groupedByDate.get(date);
+      if (!dayMap) continue;
+      accumulate(dayMap, `${contribution.model}|unknown`, kiroBreakdownBase(contribution.model), KIRO_ZERO_TOKENS);
+      if (shouldEstimate && credits > 0) {
+        addCreditCost(tokenUsage, date, contribution.model, credits * KIRO_OVERAGE_CREDIT_RATE_USD);
+      }
+      counted = true;
+    }
+    if (counted) creditedConvIds.add(contribution.convId);
+  }
+}
+
+// ── agent 会话：~/.kiro/sessions/<workspace>/sess_*/messages.jsonl ──
+
+async function readKiroAgentSessionContributions(
+  roots: string[],
+  targetDateSet: Set<string>,
+): Promise<KiroCreditContribution[]> {
+  const { startMs } = dateWindowMs(targetDateSet);
+  const logs = (await Promise.all(roots.map((root) => findKiroMessageLogs(root)))).flat();
+  const out: KiroCreditContribution[] = [];
+
+  await runWithConcurrency(logs, 6, async (msgPath) => {
+    try {
+      const info = await stat(msgPath);
+      if (info.mtimeMs < startMs) return; // 会话最后修改早于窗口，整段跳过
+    } catch {
+      return;
+    }
+    const sessDir = dirname(msgPath);
+    const { model, convId } = await readSessionMeta(sessDir);
+    const perDate = new Map<string, number>();
+    await streamUsageSummaries(msgPath, (ts, credits) => {
+      const date = dateKey(ts);
+      if (!targetDateSet.has(date)) return;
+      perDate.set(date, (perDate.get(date) ?? 0) + credits);
+    });
+    if (perDate.size > 0) out.push({ convId, model, perDate });
+  });
+
+  return out;
+}
+
+async function findKiroMessageLogs(root: string): Promise<string[]> {
+  const out: string[] = [];
+  let topEntries;
+  try {
+    topEntries = await readdir(root, { withFileTypes: true });
+  } catch {
+    return out;
+  }
+  for (const entry of topEntries) {
+    if (!entry.isDirectory() || entry.name === 'cli' || entry.name === 'snapshots') continue;
+    const dirPath = join(root, entry.name);
+    const direct = join(dirPath, 'messages.jsonl');
+    if (existsSync(direct)) out.push(direct);
+
+    let subEntries;
+    try {
+      subEntries = await readdir(dirPath, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const sub of subEntries) {
+      if (!sub.isDirectory() || sub.name === 'snapshots') continue;
+      const nested = join(dirPath, sub.name, 'messages.jsonl');
+      if (existsSync(nested)) out.push(nested);
+    }
+  }
+  return out;
+}
+
+async function readSessionMeta(sessDir: string): Promise<{ model: string; convId: string }> {
+  let model = 'unknown';
+  let convId = basename(sessDir).replace(/^sess_/, '');
+  try {
+    const raw = await readFile(join(sessDir, 'session.json'), 'utf-8');
+    const meta = JSON.parse(raw) as { id?: unknown; modelId?: unknown; model_id?: unknown; model?: unknown };
+    model = resolveKiroModel(meta.modelId ?? meta.model_id ?? meta.model);
+    if (typeof meta.id === 'string' && meta.id.trim()) {
+      convId = meta.id.trim().replace(/^sess_/, '');
+    }
+  } catch {
+    // 缺少 session.json 时使用默认模型与目录名推导的 id
+  }
+  return { model, convId };
+}
+
+function streamUsageSummaries(
+  msgPath: string,
+  onTurn: (ts: Date, credits: number) => void,
+): Promise<void> {
+  return new Promise<void>((resolve) => {
+    const rl = createInterface({ input: createReadStream(msgPath, { encoding: 'utf-8' }), crlfDelay: Infinity });
+    rl.on('line', (line) => {
+      if (!line.includes('usage_summary')) return;
+      let record: KiroMessageLine;
+      try {
+        record = JSON.parse(line) as KiroMessageLine;
+      } catch {
+        return;
+      }
+      const payload = record.payload;
+      if (!payload || payload.type !== 'usage_summary') return;
+      const ts = parseTs(record.timestamp ?? payload.timestamp);
+      if (!ts) return;
+      const credits = sumCreditUnits(payload.promptTurnSummaries ?? payload);
+      if (credits > 0) onTurn(ts, credits);
+    });
+    rl.on('close', resolve);
+    rl.on('error', () => resolve());
+  });
+}
+
+// ── CLI 数据库：~/Library/Application Support/kiro-cli/data.sqlite3 (conversations_v2) ──
+
+async function readKiroCliDbContributions(
+  dbPaths: string[],
+  targetDateSet: Set<string>,
+): Promise<KiroCreditContribution[]> {
+  const { startMs, endMs } = dateWindowMs(targetDateSet);
+  const out: KiroCreditContribution[] = [];
+
+  for (const dbPath of dbPaths) {
+    if (!existsSync(dbPath)) continue;
+    let rows: KiroConvRow[];
+    try {
+      rows = await readConversationsV2Rows(dbPath, startMs, endMs);
+    } catch {
+      continue; // 表不存在或无法读取时跳过该库
+    }
+    for (const row of rows) {
+      const value = typeof row.value === 'string' ? row.value : '';
+      if (!value) continue;
+      let parsed: { model_info?: { model_id?: unknown; model_name?: unknown } };
+      try {
+        parsed = JSON.parse(value);
+      } catch {
+        continue;
+      }
+      const credits = sumCreditUnits(parsed);
+      if (!(credits > 0)) continue;
+      const updatedAt = Number(row.updated_at);
+      if (!Number.isFinite(updatedAt)) continue;
+      const date = dateKey(new Date(updatedAt));
+      if (!targetDateSet.has(date)) continue;
+      const model = resolveKiroModel(parsed.model_info?.model_id ?? parsed.model_info?.model_name);
+      const convId = typeof row.conversation_id === 'string' && row.conversation_id.trim()
+        ? row.conversation_id.trim()
+        : `kiro-db:${date}:${credits}`;
+      out.push({ convId, model, perDate: new Map([[date, credits]]) });
+    }
+  }
+
+  return out;
+}
+
+async function readConversationsV2Rows(dbPath: string, startMs: number, endMs: number): Promise<KiroConvRow[]> {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { DatabaseSync } = require('node:sqlite') as typeof import('node:sqlite');
+    return readConversationsV2FromDb(dbPath, startMs, endMs, DatabaseSync);
+  } catch (error) {
+    if (error instanceof Error && /database is locked/i.test(error.message)) {
+      return withKiroDbSnapshot(dbPath, (snapshotPath) => readConversationsV2FromDb(snapshotPath, startMs, endMs));
+    }
+    throw error;
+  }
+}
+
+function readConversationsV2FromDb(
+  dbPath: string,
+  startMs: number,
+  endMs: number,
+  dbApi?: typeof import('node:sqlite').DatabaseSync,
+): KiroConvRow[] {
+  if (!dbApi) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    ({ DatabaseSync: dbApi } = require('node:sqlite') as typeof import('node:sqlite'));
+  }
+
+  const db = new dbApi(dbPath, { open: true });
+  try {
+    const stmt = db.prepare(
+      'SELECT conversation_id, value, updated_at FROM conversations_v2 WHERE updated_at BETWEEN ? AND ?',
+    );
+    return (stmt.all(startMs, endMs) as unknown[]) as KiroConvRow[];
+  } finally {
+    db.close();
+  }
 }
 
 function getModelNameFromData(data: KiroChatRecord | KiroSessionRecord): string {
