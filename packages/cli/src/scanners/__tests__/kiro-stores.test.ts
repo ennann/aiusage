@@ -165,13 +165,14 @@ describe('scanKiroDates new stores', () => {
 
   it('does not double-count a conversation present in both the cli session and the agent store', async () => {
     const day = '2026-02-13';
-    // 旧版 cli 会话（带 metering credits），session_id = dup-conv
+    // 旧版 cli 会话（带 metering credits），session_id = dup-conv，显式指定模型以便区分
     await writeFile(
       join(baseDir, 'dup.json'),
       JSON.stringify({
         session_id: 'dup-conv',
         created_at: `${day}T12:00:00.000`,
         session_state: {
+          rts_model_state: { model_info: { model_id: 'claude-sonnet-4' } },
           conversation_metadata: {
             user_turn_metadatas: [{ metering_usage: [{ value: 0.5, unit: 'credit' }] }],
           },
@@ -190,8 +191,9 @@ describe('scanKiroDates new stores', () => {
 
     const result = await scanKiroDates([day], baseDir);
     const breakdown = result.get(day) ?? [];
-    // 只计入 cli 的 0.5 credit => 0.02，agent 的 100 credit 被去重跳过
+    // 只计入 cli 的 0.5 credit => 0.02；agent 的 100 credit 同 id 被去重跳过
     expect(sumCost(breakdown)).toBeCloseTo(0.02, 6);
+    expect(breakdown.some((b) => b.model === 'claude-sonnet-4')).toBe(true);
     expect(breakdown.some((b) => b.model === 'claude-opus-4-8')).toBe(false);
   });
 
