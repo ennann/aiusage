@@ -214,4 +214,29 @@ describe('scanKiroDates new stores', () => {
     expect(breakdown[0].eventCount).toBe(1);
     expect(breakdown[0].costUSD ?? 0).toBe(0);
   });
+
+  it('attributes a multi-day cli session by each turn end_timestamp', async () => {
+    const day1 = '2026-03-10';
+    const day2 = '2026-03-11';
+    await writeFile(
+      join(baseDir, 'multiday.json'),
+      JSON.stringify({
+        session_id: 'multiday-1',
+        created_at: `${day1}T20:00:00.000`, // session created day1 evening
+        session_state: {
+          conversation_metadata: {
+            user_turn_metadatas: [
+              { end_timestamp: `${day1}T20:30:00.000`, metering_usage: [{ value: 10, unit: 'credit' }] },
+              { end_timestamp: `${day2}T01:00:00.000`, metering_usage: [{ value: 25, unit: 'credit' }] },
+            ],
+          },
+        },
+      }),
+      'utf-8',
+    );
+
+    const result = await scanKiroDates([day1, day2], baseDir);
+    expect((result.get(day1) ?? [])[0]?.costUSD).toBeCloseTo(0.4, 6); // 10 credits
+    expect((result.get(day2) ?? [])[0]?.costUSD).toBeCloseTo(1.0, 6); // 25 credits
+  });
 });

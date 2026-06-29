@@ -45,6 +45,9 @@ interface KiroSessionState {
   };
   conversation_metadata?: {
     user_turn_metadatas?: Array<{
+      end_timestamp?: string | number;
+      start_timestamp?: string | number;
+      timestamp?: string | number;
       metering_usage?: Array<{
         value?: number | string;
         unit?: string;
@@ -153,19 +156,34 @@ export async function scanKiroDates(
     const eventTs = await getEventDate(data, filePath);
     if (!eventTs) continue;
     const usageDate = dateKey(eventTs);
+    const model = getModelName(data);
+
+    // 费用按每个 turn 的 end_timestamp 归日，正确拆分跨天的长会话；
+    // 无 turn 时间戳时回退到会话日期。
+    const creditsByDate = shouldEstimateKiroCreditCost
+      ? extractKiroCreditsByDate(data, usageDate)
+      : new Map<string, number>();
+
+    if (creditsByDate.size > 0) {
+      let counted = false;
+      for (const [date, credits] of creditsByDate) {
+        const dm = groupedByDate.get(date);
+        if (!dm) continue; // turn 日期不在目标窗口内
+        accumulate(dm, `${model}|unknown`, kiroBreakdownBase(model), KIRO_ZERO_TOKENS);
+        if (credits > 0) addCreditCost(tokenUsage, date, model, credits * KIRO_OVERAGE_CREDIT_RATE_USD);
+        counted = true;
+      }
+      if (counted) {
+        const sessionId = 'session_id' in data && typeof data.session_id === 'string' ? data.session_id.trim() : '';
+        if (sessionId) creditedConvIds.add(sessionId);
+        continue;
+      }
+    }
+
+    // 无可计费 turn（空壳会话 / 费用停用 / 相关日期不在窗口）：在会话日期记一次事件
     const dayMap = groupedByDate.get(usageDate);
     if (!dayMap) continue;
-
-    const model = getModelName(data);
-    const estimatedCostUsd = shouldEstimateKiroCreditCost ? extractKiroCreditsFromRecord(data) : 0;
-
     accumulate(dayMap, `${model}|unknown`, kiroBreakdownBase(model), KIRO_ZERO_TOKENS);
-
-    if (estimatedCostUsd > 0) {
-      addCreditCost(tokenUsage, usageDate, model, estimatedCostUsd);
-      const sessionId = 'session_id' in data && typeof data.session_id === 'string' ? data.session_id.trim() : '';
-      if (sessionId) creditedConvIds.add(sessionId);
-    }
   }
 
   // 读取新版 Kiro 存储（CLI sqlite conversations_v2 + agent messages.jsonl），按 conversation id 去重
@@ -754,25 +772,30 @@ function readKiroTokenRowsFromDb(dbPath: string, dbApi?: typeof import('node:sql
   }
 }
 
-function extractKiroCreditsFromRecord(data: KiroSessionRecord): number {
-  const meteringEntries = data.session_state?.conversation_metadata?.user_turn_metadatas ?? [];
-  if (!Array.isArray(meteringEntries) || meteringEntries.length === 0) return 0;
+// 按每个 turn 的 end_timestamp 把 credit 归到对应日期（跨天会话正确拆分）。
+// turn 无时间戳时回退到 fallbackDate（会话日期）。返回原始 credit 数（未乘费率）。
+function extractKiroCreditsByDate(data: KiroSessionRecord, fallbackDate: string): Map<string, number> {
+  const byDate = new Map<string, number>();
+  const turns = data.session_state?.conversation_metadata?.user_turn_metadatas;
+  if (!Array.isArray(turns) || turns.length === 0) return byDate;
 
-  const totalCredits = meteringEntries.reduce((sum, turnMeta) => {
-    const usageEntries = turnMeta.metering_usage;
-    if (!Array.isArray(usageEntries) || usageEntries.length === 0) return sum;
+  for (const turn of turns) {
+    const usageEntries = turn?.metering_usage;
+    if (!Array.isArray(usageEntries) || usageEntries.length === 0) continue;
 
-    const turnCredits = usageEntries.reduce((innerSum, usage) => {
-      if (typeof usage?.unit !== 'string' || usage.unit.toLowerCase() !== 'credit') return innerSum;
-      const value = parseCreditValue(usage.value);
-      return innerSum + value;
-    }, 0);
+    let credits = 0;
+    for (const usage of usageEntries) {
+      if (typeof usage?.unit === 'string' && usage.unit.toLowerCase() === 'credit') {
+        credits += parseCreditValue(usage.value);
+      }
+    }
+    if (credits <= 0) continue;
 
-    return sum + turnCredits;
-  }, 0);
-
-  if (totalCredits <= 0) return 0;
-  return totalCredits * KIRO_OVERAGE_CREDIT_RATE_USD;
+    const ts = parseTs(turn.end_timestamp ?? turn.start_timestamp ?? turn.timestamp);
+    const date = ts ? dateKey(ts) : fallbackDate;
+    byDate.set(date, (byDate.get(date) ?? 0) + credits);
+  }
+  return byDate;
 }
 
 function parseCreditValue(value: unknown): number {
