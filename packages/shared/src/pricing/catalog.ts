@@ -10,7 +10,7 @@ import { github } from './data/github.js';
 import { sourcegraph } from './data/sourcegraph.js';
 import { inflection, cursor, droid, opencode } from './data/placeholders.js';
 
-export const PRICING_VERSION = '2026-06-22-codex-tier-v1';
+export const PRICING_VERSION = '2026-07-02-claude-5-v1';
 
 /**
  * 模型别名（精确匹配优先于前缀回退）。
