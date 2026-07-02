@@ -43,6 +43,8 @@ describe('calculateCost — 关键模型', () => {
   it.each([
     ['anthropic', 'claude-code', 'claude-opus-4-8', 30], // 5 + 25
     ['anthropic', 'claude-code', 'claude-opus-4-7', 30], // 5 + 25
+    ['anthropic', 'claude-code', 'claude-fable-5', 60], // 10 + 50
+    ['anthropic', 'claude-code', 'claude-sonnet-5', 12], // current intro: 2 + 10
     ['anthropic', 'claude-code', 'claude-sonnet-4-6', 18],
     ['openai', 'codex', 'gpt-5.4', 17.5], // 2.5 + 15
     ['openai', 'codex', 'gpt-5.5-pro', 210], // 30 + 180
@@ -59,6 +61,34 @@ describe('calculateCost — 关键模型', () => {
     const r = calculateCost('anthropic', 'claude-code', 'totally-unknown', tokens);
     expect(r.costStatus).toBe('unavailable');
     expect(r.estimatedCostUsd).toBe(0);
+  });
+
+  it('Claude Fable 5 includes cache read/write pricing', () => {
+    const r = calculateCost('anthropic', 'claude-code', 'claude-fable-5', {
+      inputTokens: 1_000_000,
+      cachedInputTokens: 1_000_000,
+      cacheWriteTokens: 1_500_000,
+      cacheWrite5mTokens: 1_000_000,
+      cacheWrite1hTokens: 500_000,
+      outputTokens: 200_000,
+    });
+    // 10 + 1 + 12.5 + 10 + 10 = $43.5
+    expect(r.estimatedCostUsd).toBe(43.5);
+    expect(r.costStatus).toBe('exact');
+  });
+
+  it('Claude Sonnet 5 includes current introductory cache read/write pricing', () => {
+    const r = calculateCost('anthropic', 'claude-code', 'claude-sonnet-5', {
+      inputTokens: 1_000_000,
+      cachedInputTokens: 1_000_000,
+      cacheWriteTokens: 1_500_000,
+      cacheWrite5mTokens: 1_000_000,
+      cacheWrite1hTokens: 500_000,
+      outputTokens: 200_000,
+    });
+    // 2 + 0.2 + 2.5 + 2 + 2 = $8.7
+    expect(r.estimatedCostUsd).toBe(8.7);
+    expect(r.costStatus).toBe('exact');
   });
 
   it('版本后缀别名（alias）解析为 exact', () => {
