@@ -628,6 +628,8 @@ function mergeTotals(target: Totals, source: Totals): Totals {
 const FAST_MULTIPLIER = 6;
 
 const CLAUDE_PRICING: Record<string, { input: number; cache_write_5m: number; cache_write_1h: number; cache_read: number; output: number }> = {
+  'claude-fable-5': { input: 10, cache_write_5m: 12.5, cache_write_1h: 20, cache_read: 1, output: 50 },
+  'claude-sonnet-5': { input: 2, cache_write_5m: 2.5, cache_write_1h: 4, cache_read: 0.2, output: 10 },
   'claude-opus-4-8': { input: 5, cache_write_5m: 6.25, cache_write_1h: 10, cache_read: 0.5, output: 25 },
   'claude-opus-4-7': { input: 5, cache_write_5m: 6.25, cache_write_1h: 10, cache_read: 0.5, output: 25 },
   'claude-opus-4-6': { input: 5, cache_write_5m: 6.25, cache_write_1h: 10, cache_read: 0.5, output: 25 },
