@@ -16,7 +16,7 @@ export interface PricingCatalog {
 
 // 第一版内置定价目录，后续可改为读取 JSON 文件或 KV
 const catalog: PricingCatalog = {
-  version: '2026-06-24-official-v3',
+  version: '2026-07-02-official-v4',
   aliases: {
     'claude-sonnet-4-6-20250301': 'claude-sonnet-4-6',
     'claude-opus-4-6-20250301': 'claude-opus-4-6',
@@ -26,6 +26,20 @@ const catalog: PricingCatalog = {
     anthropic: {
       'claude-code': {
         models: {
+          'claude-fable-5': {
+            input_per_million_usd: 10,
+            output_per_million_usd: 50,
+            cache_write_5m_per_million_usd: 12.5,
+            cache_write_1h_per_million_usd: 20,
+            cached_input_per_million_usd: 1,
+          },
+          'claude-sonnet-5': {
+            input_per_million_usd: 2,
+            output_per_million_usd: 10,
+            cache_write_5m_per_million_usd: 2.5,
+            cache_write_1h_per_million_usd: 4,
+            cached_input_per_million_usd: 0.2,
+          },
           'claude-sonnet-4-6': {
             input_per_million_usd: 3,
             output_per_million_usd: 15,
