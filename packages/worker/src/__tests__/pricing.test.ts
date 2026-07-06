@@ -46,6 +46,20 @@ describe('calculateCost: 基本计费', () => {
     expect(result.costStatus).toBe('exact');
   });
 
+  it('Claude fable-5 uses the live catalog rate', () => {
+    const result = calculateCost('anthropic', 'claude-code', 'claude-fable-5', {
+      inputTokens: 69_082,
+      cachedInputTokens: 17_777_634,
+      cacheWriteTokens: 808_558,
+      cacheWrite5mTokens: 0,
+      cacheWrite1hTokens: 808_558,
+      outputTokens: 117_211,
+    });
+
+    expect(result.estimatedCostUsd).toBe(40.5002);
+    expect(result.costStatus).toBe('exact');
+  });
+
   it('Codex gpt-5.4 基本 input/output 计费', () => {
     // gpt-5.4: input=$2.5/M, output=$15/M
     const result = calculateCost('openai', 'codex', 'gpt-5.4', {

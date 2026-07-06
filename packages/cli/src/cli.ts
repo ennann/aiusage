@@ -271,8 +271,9 @@ async function runSync(flags: Record<string, string | boolean>) {
   console.log(`扫描 ${targetDates.length} 天 (${targetDates[0]} ~ ${targetDates[targetDates.length - 1]}) ...`);
 
   const results = await scanDates(targetDates, { projectAliases: config.projectAliases });
+  const includeEmptyDays = flags['include-empty'] === true;
   const allDays = results
-    .filter(r => r.breakdowns.length > 0)
+    .filter(r => includeEmptyDays || r.breakdowns.length > 0)
     .map(r => ({ usageDate: r.usageDate, breakdowns: r.breakdowns }));
 
   if (allDays.length === 0) {
@@ -620,7 +621,7 @@ function printHelp(zh = false) {
   const cmds = zh ? [
     ['scan [--date YYYY-MM-DD] [--json]',                    '扫描某日用量明细'],
     ['report [--today] [--range 7d|1m|3m|all] [--detail] [--json]', '本地用量报告'],
-    ['sync [--today] [--range 7d|1m|3m|all]',                     '上传用量到服务端'],
+    ['sync [--today] [--range 7d|1m|3m|all] [--include-empty]',   '上传用量到服务端'],
     ['report/sync --from YYYY-MM-DD [--to YYYY-MM-DD]',           '指定日期范围（--start/--end 同义）'],
     ['project [list|alias]',                                  '项目管理与别名设置'],
     ['schedule [on|off|status] [--every 5m]',                '定时同步管理'],
@@ -632,7 +633,7 @@ function printHelp(zh = false) {
   ] : [
     ['scan [--date YYYY-MM-DD] [--json]',                    'Scan daily usage breakdown'],
     ['report [--today] [--range 7d|1m|3m|all] [--detail] [--json]', 'Local usage report'],
-    ['sync [--today] [--range 7d|1m|3m|all]',                     'Upload usage to server'],
+    ['sync [--today] [--range 7d|1m|3m|all] [--include-empty]',   'Upload usage to server'],
     ['report/sync --from YYYY-MM-DD [--to YYYY-MM-DD]',           'Date range (--start/--end aliases)'],
     ['project [list|alias]',                                 'Project management & aliases'],
     ['schedule [on|off|status] [--every 5m]',                'Scheduled sync management'],

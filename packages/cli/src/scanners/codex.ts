@@ -1,4 +1,4 @@
-import { readdir, open } from 'node:fs/promises';
+import { readdir, open, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { createInterface } from 'node:readline';
@@ -7,6 +7,9 @@ import { normalizeModelName, runWithConcurrency, resolveProjectFields, type Proj
 
 const FILE_CONCURRENCY = 16;
 const MAX_LINE_BYTES = 64 * 1024 * 1024; // 64 MB
+const REPLAY_SCAN_MIN_FILE_BYTES = 1024 * 1024;
+const REPLAY_MIN_TOKEN_EVENTS = 200;
+const REPLAY_MAX_SPAN_MS = 60_000;
 
 /** 默认扫描的 Codex 数据目录（相对 home），覆盖标准 Codex 及额外客户端 */
 const DEFAULT_CODEX_DIRNAMES = ['.codex', '.codex-kiro'];
@@ -63,6 +66,11 @@ interface TokenUsage {
   total_tokens?: number;
 }
 
+interface CodexSessionFile {
+  path: string;
+  isArchived: boolean;
+}
+
 export async function scanCodex(
   targetDate: string,
   codexDir?: string,
@@ -94,8 +102,8 @@ export async function scanCodexDates(
   const globalSeenSigs = new Set<string>();
 
   // 并发流式处理文件
-  await runWithConcurrency(sessionFiles, FILE_CONCURRENCY, async (filePath) => {
-    await processCodexFile(filePath, targetDateSet, projectAliases, groupedByDate, globalSeenSigs);
+  await runWithConcurrency(sessionFiles, FILE_CONCURRENCY, async (file) => {
+    await processCodexFile(file, targetDateSet, projectAliases, groupedByDate, globalSeenSigs);
   });
 
   return new Map(
@@ -105,15 +113,19 @@ export async function scanCodexDates(
 
 /** 流式逐行读取单个 Codex JSONL 文件 */
 async function processCodexFile(
-  filePath: string,
+  file: CodexSessionFile,
   targetDateSet: Set<string>,
   projectAliases: Record<string, string> | undefined,
   groupedByDate: Map<string, Map<string, IngestBreakdown>>,
   globalSeenSigs: Set<string>,
 ): Promise<void> {
+  if (await isReplayDump(file)) {
+    return;
+  }
+
   let fh;
   try {
-    fh = await open(filePath, 'r');
+    fh = await open(file.path, 'r');
   } catch {
     return;
   }
@@ -222,26 +234,26 @@ async function processCodexFile(
   }
 }
 
-async function collectSessionFiles(baseDir: string): Promise<string[]> {
-  const paths: string[] = [];
+async function collectSessionFiles(baseDir: string): Promise<CodexSessionFile[]> {
+  const paths: CodexSessionFile[] = [];
 
   // archived_sessions/*.jsonl
   const archivedDir = join(baseDir, 'archived_sessions');
   try {
     const files = await readdir(archivedDir);
     for (const f of files) {
-      if (f.endsWith('.jsonl')) paths.push(join(archivedDir, f));
+      if (f.endsWith('.jsonl')) paths.push({ path: join(archivedDir, f), isArchived: true });
     }
   } catch { /* ignore */ }
 
   // sessions/**/*.jsonl (递归)
   const sessionsDir = join(baseDir, 'sessions');
-  await walkDir(sessionsDir, paths);
+  await walkDir(sessionsDir, paths, false);
 
   return paths;
 }
 
-async function walkDir(dir: string, result: string[]): Promise<void> {
+async function walkDir(dir: string, result: CodexSessionFile[], isArchived: boolean): Promise<void> {
   let entries;
   try {
     entries = await readdir(dir, { withFileTypes: true });
@@ -251,10 +263,70 @@ async function walkDir(dir: string, result: string[]): Promise<void> {
   for (const entry of entries) {
     const fullPath = join(dir, entry.name);
     if (entry.isDirectory()) {
-      await walkDir(fullPath, result);
+      await walkDir(fullPath, result, isArchived);
     } else if (entry.name.endsWith('.jsonl')) {
-      result.push(fullPath);
+      result.push({ path: fullPath, isArchived });
     }
+  }
+}
+
+async function isReplayDump(file: CodexSessionFile): Promise<boolean> {
+  if (!file.isArchived) {
+    try {
+      const fileStat = await stat(file.path);
+      if (fileStat.size < REPLAY_SCAN_MIN_FILE_BYTES) return false;
+    } catch {
+      return false;
+    }
+  }
+
+  let fh;
+  try {
+    fh = await open(file.path, 'r');
+  } catch {
+    return false;
+  }
+
+  try {
+    const rl = createInterface({
+      input: fh.createReadStream({ encoding: 'utf-8' }),
+      crlfDelay: Infinity,
+    });
+
+    let tokenEvents = 0;
+    let minTime = Number.POSITIVE_INFINITY;
+    let maxTime = 0;
+
+    for await (const line of rl) {
+      if (!line) continue;
+      if (Buffer.byteLength(line) > MAX_LINE_BYTES) continue;
+
+      let record: CodexRecord;
+      try {
+        record = JSON.parse(line);
+      } catch {
+        continue;
+      }
+
+      if (record.type !== 'event_msg') continue;
+      if (record.payload?.type !== 'token_count') continue;
+
+      const ts = parseTimestamp(record.timestamp)?.getTime();
+      if (!ts) continue;
+
+      tokenEvents += 1;
+      minTime = Math.min(minTime, ts);
+      maxTime = Math.max(maxTime, ts);
+
+      if (tokenEvents >= REPLAY_MIN_TOKEN_EVENTS && maxTime - minTime > REPLAY_MAX_SPAN_MS) {
+        return false;
+      }
+    }
+
+    return tokenEvents >= REPLAY_MIN_TOKEN_EVENTS
+      && maxTime - minTime <= REPLAY_MAX_SPAN_MS;
+  } finally {
+    await fh.close();
   }
 }
 

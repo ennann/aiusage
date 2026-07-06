@@ -324,6 +324,116 @@ describe('Fix 4: file glob includes all .jsonl files', () => {
   });
 });
 
+// ─── Archived replay dumps should not be counted as live usage ───
+
+describe('Archived Codex replay dumps', () => {
+  it('still scans ordinary archived sessions', async () => {
+    const day = '2025-10-16';
+    const archivedDir = join(tmpDir, 'archived_sessions');
+    const lines = [
+      ...tokenCountEvent(
+        `${day}T10:00:00.000Z`,
+        { input: 3000, cached: 2000, output: 100 },
+        { input: 3000, cached: 2000, output: 100 },
+      ),
+      ...tokenCountEvent(
+        `${day}T10:05:00.000Z`,
+        { input: 4000, cached: 3000, output: 150 },
+        { input: 7000, cached: 5000, output: 250 },
+      ),
+    ];
+
+    await writeSession(archivedDir, 'rollout-ordinary.jsonl', lines);
+
+    const results = await scanCodex(day, tmpDir);
+    expect(results).toHaveLength(1);
+    expect(results[0].eventCount).toBe(2);
+    expect(results[0].inputTokens).toBe(2000);
+    expect(results[0].cachedInputTokens).toBe(5000);
+    expect(results[0].outputTokens).toBe(250);
+  });
+
+  it('skips dense archived replay dumps with implausible timestamps', async () => {
+    const day = '2025-10-16';
+    const archivedDir = join(tmpDir, 'archived_sessions');
+    const sessionDir = join(tmpDir, 'sessions', '2025', '10', '16');
+
+    const replayLines: object[] = [
+      { type: 'turn_context', timestamp: `${day}T10:00:00.000Z`, payload: { model: 'gpt-5-codex', cwd: '/archived-replay' } },
+    ];
+    for (let i = 1; i <= 205; i += 1) {
+      replayLines.push({
+        type: 'event_msg',
+        timestamp: `${day}T10:00:00.${String(i % 1000).padStart(3, '0')}Z`,
+        payload: {
+          type: 'token_count',
+          info: {
+            last_token_usage: { input_tokens: 1000, cached_input_tokens: 500, output_tokens: 10 },
+            total_token_usage: { input_tokens: i * 1000, cached_input_tokens: i * 500, output_tokens: i * 10 },
+          },
+        },
+      });
+    }
+
+    await writeSession(archivedDir, 'rollout-replay.jsonl', replayLines);
+    await writeSession(sessionDir, 'rollout-real.jsonl', tokenCountEvent(
+      `${day}T11:00:00.000Z`,
+      { input: 3000, cached: 1000, output: 100 },
+      { input: 3000, cached: 1000, output: 100 },
+      'gpt-5-codex',
+      '/real-session',
+    ));
+
+    const results = await scanCodex(day, tmpDir);
+    expect(results).toHaveLength(1);
+    expect(results[0].project).toBe('/real-session');
+    expect(results[0].eventCount).toBe(1);
+    expect(results[0].inputTokens).toBe(2000);
+    expect(results[0].cachedInputTokens).toBe(1000);
+    expect(results[0].outputTokens).toBe(100);
+  });
+
+  it('skips dense large replay dumps even when they are still under sessions', async () => {
+    const day = '2025-10-16';
+    const sessionDir = join(tmpDir, 'sessions', '2025', '10', '16');
+
+    const replayLines: object[] = [
+      { type: 'turn_context', timestamp: `${day}T10:00:00.000Z`, payload: { model: 'gpt-5-codex', cwd: '/session-replay' } },
+    ];
+    for (let i = 1; i <= 205; i += 1) {
+      replayLines.push({
+        type: 'event_msg',
+        timestamp: `${day}T10:00:00.${String(i % 1000).padStart(3, '0')}Z`,
+        padding: 'x'.repeat(6000),
+        payload: {
+          type: 'token_count',
+          info: {
+            last_token_usage: { input_tokens: 1000, cached_input_tokens: 500, output_tokens: 10 },
+            total_token_usage: { input_tokens: i * 1000, cached_input_tokens: i * 500, output_tokens: i * 10 },
+          },
+        },
+      });
+    }
+
+    await writeSession(sessionDir, 'rollout-replay.jsonl', replayLines);
+    await writeSession(sessionDir, 'rollout-real.jsonl', tokenCountEvent(
+      `${day}T11:00:00.000Z`,
+      { input: 4000, cached: 1000, output: 80 },
+      { input: 4000, cached: 1000, output: 80 },
+      'gpt-5-codex',
+      '/real-session',
+    ));
+
+    const results = await scanCodex(day, tmpDir);
+    expect(results).toHaveLength(1);
+    expect(results[0].project).toBe('/real-session');
+    expect(results[0].eventCount).toBe(1);
+    expect(results[0].inputTokens).toBe(3000);
+    expect(results[0].cachedInputTokens).toBe(1000);
+    expect(results[0].outputTokens).toBe(80);
+  });
+});
+
 // ─── Integration: multiple fixes together ───
 
 describe('Integration: real-world duplicate pattern', () => {
