@@ -277,6 +277,7 @@ async function runSync(flags: Record<string, string | boolean>) {
     buildActivityReport(range, { projectAliases: config.projectAliases, dates: targetDates }),
   ]);
   const activityByDate = groupActivityItemsByDate(activityReport.items);
+  const includeEmptyDays = flags['include-empty'] === true;
   const allDays: IngestDay[] = results
     .map((r) => {
       const activityItems = activityByDate.get(r.usageDate);
@@ -286,7 +287,7 @@ async function runSync(flags: Record<string, string | boolean>) {
         ...(activityItems?.length ? { activity: { items: activityItems } } : {}),
       };
     })
-    .filter(day => day.breakdowns.length > 0 || (day.activity?.items.length ?? 0) > 0);
+    .filter(day => includeEmptyDays || day.breakdowns.length > 0 || (day.activity?.items.length ?? 0) > 0);
 
   if (allDays.length === 0) {
     console.log('没有可上传的数据。');
@@ -633,7 +634,7 @@ function printHelp(zh = false) {
   const cmds = zh ? [
     ['scan [--date YYYY-MM-DD] [--json]',                    '扫描某日用量明细'],
     ['report [--today] [--range 7d|1m|3m|all] [--detail] [--json]', '本地用量报告'],
-    ['sync [--today] [--range 7d|1m|3m|all]',                     '上传用量到服务端'],
+    ['sync [--today] [--range 7d|1m|3m|all] [--include-empty]',   '上传用量到服务端'],
     ['report/sync --from YYYY-MM-DD [--to YYYY-MM-DD]',           '指定日期范围（--start/--end 同义）'],
     ['project [list|alias]',                                  '项目管理与别名设置'],
     ['schedule [on|off|status] [--every 5m]',                '定时同步管理'],
@@ -645,7 +646,7 @@ function printHelp(zh = false) {
   ] : [
     ['scan [--date YYYY-MM-DD] [--json]',                    'Scan daily usage breakdown'],
     ['report [--today] [--range 7d|1m|3m|all] [--detail] [--json]', 'Local usage report'],
-    ['sync [--today] [--range 7d|1m|3m|all]',                     'Upload usage to server'],
+    ['sync [--today] [--range 7d|1m|3m|all] [--include-empty]',   'Upload usage to server'],
     ['report/sync --from YYYY-MM-DD [--to YYYY-MM-DD]',           'Date range (--start/--end aliases)'],
     ['project [list|alias]',                                 'Project management & aliases'],
     ['schedule [on|off|status] [--every 5m]',                'Scheduled sync management'],

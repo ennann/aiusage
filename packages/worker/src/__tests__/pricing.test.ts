@@ -61,6 +61,20 @@ describe('calculateCost: 基本计费', () => {
     expect(result.costStatus).toBe('exact');
   });
 
+  it('Claude fable-5 uses the live repair-row rate', () => {
+    const result = calculateCost('anthropic', 'claude-code', 'claude-fable-5', {
+      inputTokens: 69_082,
+      cachedInputTokens: 17_777_634,
+      cacheWriteTokens: 808_558,
+      cacheWrite5mTokens: 0,
+      cacheWrite1hTokens: 808_558,
+      outputTokens: 117_211,
+    });
+
+    expect(result.estimatedCostUsd).toBe(40.5002);
+    expect(result.costStatus).toBe('exact');
+  });
+
   it('Claude sonnet-5 uses current introductory pricing', () => {
     // sonnet-5: input=$2/M, cached=$0.20/M, 5m write=$2.50/M, 1h write=$4/M, output=$10/M
     const result = calculateCost('anthropic', 'claude-code', 'claude-sonnet-5', {

@@ -16,7 +16,7 @@ export interface PricingCatalog {
 
 // 第一版内置定价目录，后续可改为读取 JSON 文件或 KV
 const catalog: PricingCatalog = {
-  version: '2026-07-02-official-v4',
+  version: '2026-07-06-official-v4',
   aliases: {
     'claude-sonnet-4-6-20250301': 'claude-sonnet-4-6',
     'claude-opus-4-6-20250301': 'claude-opus-4-6',
