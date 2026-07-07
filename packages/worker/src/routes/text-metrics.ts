@@ -1,4 +1,4 @@
-import { jsonError, corsHeaders } from '../utils/response.js';
+import { PUBLIC_READ_CACHE_HEADERS, jsonError, corsHeaders } from '../utils/response.js';
 import { buildWhere, parseFilters, TOTAL_TOKENS_SQL } from './overview.js';
 import type { Env } from '../types.js';
 
@@ -22,8 +22,8 @@ export async function handleTextTokens(url: URL, env: Env): Promise<Response> {
     status: 200,
     headers: {
       ...corsHeaders(),
+      ...PUBLIC_READ_CACHE_HEADERS,
       'Content-Type': 'text/plain; charset=utf-8',
-      'Cache-Control': 'no-store',
     },
   });
 }

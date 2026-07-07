@@ -1,5 +1,5 @@
 import { DEFAULT_BREAKDOWN_LIMIT, MAX_BREAKDOWN_LIMIT } from '@aiusage/shared';
-import { jsonError, jsonOk } from '../utils/response.js';
+import { PUBLIC_READ_CACHE_HEADERS, jsonError, jsonOk } from '../utils/response.js';
 import { toPublicProjectName } from '../utils/privacy.js';
 import type { Env } from '../types.js';
 
@@ -150,7 +150,7 @@ export async function handleBreakdowns(url: URL, env: Env): Promise<Response> {
     },
     sort,
     order,
-  }, true);
+  }, true, PUBLIC_READ_CACHE_HEADERS);
 }
 
 function readTextParam(url: URL, key: string): string | null {
