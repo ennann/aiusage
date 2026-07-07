@@ -46,7 +46,22 @@ describe('calculateCost: 基本计费', () => {
     expect(result.costStatus).toBe('exact');
   });
 
-  it('Claude fable-5 uses the live catalog rate', () => {
+  it('Claude fable-5 公开价目表计费', () => {
+    // fable-5: input=$10/M, cached=$1/M, 5m write=$12.50/M, 1h write=$20/M, output=$50/M
+    const result = calculateCost('anthropic', 'claude-code', 'claude-fable-5', {
+      inputTokens: 1_000_000,
+      cachedInputTokens: 1_000_000,
+      cacheWriteTokens: 1_500_000,
+      cacheWrite5mTokens: 1_000_000,
+      cacheWrite1hTokens: 500_000,
+      outputTokens: 200_000,
+    });
+    // 10 + 1 + 12.5 + 10 + 10 = $43.5
+    expect(result.estimatedCostUsd).toBe(43.5);
+    expect(result.costStatus).toBe('exact');
+  });
+
+  it('Claude fable-5 uses the live repair-row rate', () => {
     const result = calculateCost('anthropic', 'claude-code', 'claude-fable-5', {
       inputTokens: 69_082,
       cachedInputTokens: 17_777_634,
@@ -57,6 +72,21 @@ describe('calculateCost: 基本计费', () => {
     });
 
     expect(result.estimatedCostUsd).toBe(40.5002);
+    expect(result.costStatus).toBe('exact');
+  });
+
+  it('Claude sonnet-5 uses current introductory pricing', () => {
+    // sonnet-5: input=$2/M, cached=$0.20/M, 5m write=$2.50/M, 1h write=$4/M, output=$10/M
+    const result = calculateCost('anthropic', 'claude-code', 'claude-sonnet-5', {
+      inputTokens: 1_000_000,
+      cachedInputTokens: 1_000_000,
+      cacheWriteTokens: 1_500_000,
+      cacheWrite5mTokens: 1_000_000,
+      cacheWrite1hTokens: 500_000,
+      outputTokens: 200_000,
+    });
+    // 2 + 0.2 + 2.5 + 2 + 2 = $8.7
+    expect(result.estimatedCostUsd).toBe(8.7);
     expect(result.costStatus).toBe('exact');
   });
 

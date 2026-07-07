@@ -30,6 +30,12 @@ export function formatNumber(v: number): string {
   return new Intl.NumberFormat('en-US').format(Number(v || 0));
 }
 
+export function formatTokens(v: number, locale: Locale = 'en'): string {
+  const n = Number(v || 0);
+  if (n < 1000) return formatNumber(n);
+  return `${formatCompact(n, locale)} (${formatNumber(n)})`;
+}
+
 export function formatPercent(v: number): string {
   return `${Number(v || 0).toFixed(1)}%`;
 }

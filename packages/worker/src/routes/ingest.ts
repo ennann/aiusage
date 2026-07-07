@@ -1,4 +1,4 @@
-import type { IngestPayload, CostStatus } from '@aiusage/shared';
+import type { IngestActivityItem, IngestPayload, CostStatus } from '@aiusage/shared';
 import { jsonOk, jsonError } from '../utils/response.js';
 import { verifyDeviceToken } from '../utils/token.js';
 import { calculateCost, getWorstCostStatus } from '../utils/pricing.js';
@@ -191,6 +191,7 @@ export async function handleIngest(request: Request, env: Env, ctx?: ExecutionCo
     }
 
     await env.DB.batch(statements);
+    await replaceActivityMetrics(env, tokenPayload.deviceId, day.usageDate, day.activity?.items ?? [], now);
 
     costSummary[day.usageDate] = {
       estimatedCostUsd: Math.round(dayTotalCost * 10000) / 10000,
@@ -230,4 +231,54 @@ function topCostEntry(costs: Map<string, number>): { key: string; cost: number }
   }
 
   return { key: topKey, cost: Math.round(topCost * 10000) / 10000 };
+}
+
+async function replaceActivityMetrics(
+  env: Env,
+  deviceId: string,
+  usageDate: string,
+  items: IngestActivityItem[],
+  now: string,
+): Promise<void> {
+  try {
+    await env.DB.prepare('DELETE FROM daily_activity_breakdown WHERE device_id = ? AND usage_date = ?')
+      .bind(deviceId, usageDate)
+      .run();
+
+    for (const item of items) {
+      const count = Math.max(0, Math.floor(Number(item.count ?? 0)));
+      if (count === 0) continue;
+      const rawProject = item.project || 'unknown';
+      const isFullPath = rawProject.startsWith('/') || /^[A-Z]:\\/i.test(rawProject);
+      const projectDisplay = item.projectDisplay ?? (isFullPath ? rawProject.split('/').filter(Boolean).pop() || 'unknown' : rawProject);
+
+      await env.DB.prepare(`
+        INSERT INTO daily_activity_breakdown
+          (device_id, usage_date, provider, product, source, project,
+           project_display, project_alias, kind, name, confidence, event_count,
+           created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `)
+        .bind(
+          deviceId,
+          usageDate,
+          item.provider || 'unknown',
+          item.product || 'unknown',
+          item.source || `${item.provider || 'unknown'}/${item.product || 'unknown'}`,
+          rawProject,
+          projectDisplay,
+          item.projectAlias ?? null,
+          item.kind || 'unknown',
+          item.name || 'unknown',
+          item.confidence === 'proxy' ? 'proxy' : 'exact',
+          count,
+          now,
+          now,
+        )
+        .run();
+    }
+  } catch (error) {
+    if (String(error).includes('daily_activity_breakdown')) return;
+    throw error;
+  }
 }

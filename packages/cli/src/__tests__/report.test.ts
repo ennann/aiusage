@@ -195,6 +195,60 @@ describe('buildLocalReport', () => {
     expect(warnings.size).toBe(0);
   });
 
+  it('estimates Claude Fable 5 using current public rates', async () => {
+    const { calculateBreakdownCost } = await import('../report.js');
+    const warnings = new Set<string>();
+    const cost = calculateBreakdownCost(
+      {
+        provider: 'anthropic',
+        product: 'claude-code',
+        channel: 'cli',
+        model: 'claude-fable-5',
+        project: 'unknown',
+        projectDisplay: 'unknown',
+        eventCount: 1,
+        inputTokens: 1_000_000,
+        cachedInputTokens: 1_000_000,
+        cacheWriteTokens: 1_500_000,
+        cacheWrite5mTokens: 1_000_000,
+        cacheWrite1hTokens: 500_000,
+        outputTokens: 200_000,
+        reasoningOutputTokens: 0,
+      },
+      warnings,
+    );
+
+    expect(cost).toBe(43.5);
+    expect(warnings.size).toBe(0);
+  });
+
+  it('estimates Claude Sonnet 5 using current introductory public rates', async () => {
+    const { calculateBreakdownCost } = await import('../report.js');
+    const warnings = new Set<string>();
+    const cost = calculateBreakdownCost(
+      {
+        provider: 'anthropic',
+        product: 'claude-code',
+        channel: 'cli',
+        model: 'claude-sonnet-5',
+        project: 'unknown',
+        projectDisplay: 'unknown',
+        eventCount: 1,
+        inputTokens: 1_000_000,
+        cachedInputTokens: 1_000_000,
+        cacheWriteTokens: 1_500_000,
+        cacheWrite5mTokens: 1_000_000,
+        cacheWrite1hTokens: 500_000,
+        outputTokens: 200_000,
+        reasoningOutputTokens: 0,
+      },
+      warnings,
+    );
+
+    expect(cost).toBe(8.7);
+    expect(warnings.size).toBe(0);
+  });
+
   it('does not use Kiro session credit estimates when explicitly disabled', async () => {
     process.env.KIRO_USE_CREDIT_COST = 'false';
     const day = '2026-01-27';

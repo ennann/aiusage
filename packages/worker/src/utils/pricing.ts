@@ -26,6 +26,20 @@ const catalog: PricingCatalog = {
     anthropic: {
       'claude-code': {
         models: {
+          'claude-fable-5': {
+            input_per_million_usd: 10,
+            output_per_million_usd: 50,
+            cache_write_5m_per_million_usd: 12.5,
+            cache_write_1h_per_million_usd: 20,
+            cached_input_per_million_usd: 1,
+          },
+          'claude-sonnet-5': {
+            input_per_million_usd: 2,
+            output_per_million_usd: 10,
+            cache_write_5m_per_million_usd: 2.5,
+            cache_write_1h_per_million_usd: 4,
+            cached_input_per_million_usd: 0.2,
+          },
           'claude-sonnet-4-6': {
             input_per_million_usd: 3,
             output_per_million_usd: 15,
@@ -60,13 +74,6 @@ const catalog: PricingCatalog = {
             cache_write_5m_per_million_usd: 6.25,
             cache_write_1h_per_million_usd: 10,
             cached_input_per_million_usd: 0.5,
-          },
-          'claude-fable-5': {
-            input_per_million_usd: 10,
-            output_per_million_usd: 50,
-            cache_write_5m_per_million_usd: 12.5,
-            cache_write_1h_per_million_usd: 20,
-            cached_input_per_million_usd: 1,
           },
           'claude-opus-4-7': {
             input_per_million_usd: 5,

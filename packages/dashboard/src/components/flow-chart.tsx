@@ -1,6 +1,6 @@
 import { Sankey, ResponsiveContainer, Tooltip } from 'recharts';
 import type { SankeyGraph } from '@aiusage/shared';
-import { formatCompact } from '../utils/format';
+import { formatUsd } from '../utils/format';
 import { transformSankey } from '../utils/data';
 import { EmptyState } from './chart-helpers';
 
@@ -58,7 +58,7 @@ export function FlowChart({ data }: { data?: SankeyGraph }) {
                 return (
                   <div className="rounded-lg border border-slate-200/90 bg-white/96 px-3 py-2 text-[12px] shadow-lg backdrop-blur dark:border-white/10 dark:bg-[#1a1a1a]/96">
                     <div className="font-medium text-slate-700 dark:text-slate-200">{srcNode.name} → {tgtNode.name}</div>
-                    <div className="mt-0.5 tabular-nums text-slate-500 dark:text-slate-400">{formatCompact(val)} tokens</div>
+                    <div className="mt-0.5 tabular-nums text-slate-500 dark:text-slate-400">{formatUsd(val)}</div>
                   </div>
                 );
               }
@@ -66,7 +66,7 @@ export function FlowChart({ data }: { data?: SankeyGraph }) {
                 return (
                   <div className="rounded-lg border border-slate-200/90 bg-white/96 px-3 py-2 text-[12px] shadow-lg backdrop-blur dark:border-white/10 dark:bg-[#1a1a1a]/96">
                     <div className="font-medium text-slate-700 dark:text-slate-200">{nodeName}</div>
-                    {val > 0 && <div className="mt-0.5 tabular-nums text-slate-500 dark:text-slate-400">{formatCompact(val)} tokens</div>}
+                    {val > 0 && <div className="mt-0.5 tabular-nums text-slate-500 dark:text-slate-400">{formatUsd(val)}</div>}
                   </div>
                 );
               }

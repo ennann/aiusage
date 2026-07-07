@@ -5,6 +5,7 @@ import { scanDate, scanDates } from './scan.js';
 import { scanAnthropicApiDates } from './scanners/anthropic-admin-api.js';
 import { scanAnthropicCsvDates } from './scanners/anthropic-csv.js';
 import { buildLocalReport, parseReportRange } from './report.js';
+import { buildActivityReport, groupActivityItemsByDate } from './activity.js';
 import { renderReport } from './render.js';
 import {
   type AIUsageConfig,
@@ -23,6 +24,7 @@ import { disableSchedule, enableSchedule, formatInterval, getScheduleStatus, par
 import { runDoctor } from './doctor.js';
 import { getVersion } from './version.js';
 import { discoverProjects } from './project.js';
+import type { IngestDay } from '@aiusage/shared';
 
 const argv = process.argv.slice(2);
 const command = argv[0];
@@ -262,7 +264,7 @@ async function runSync(flags: Record<string, string | boolean>) {
     : allTargets;
 
   // ── 日期解析 ──
-  const { dates: targetDates } = resolveDateParams(flags, config);
+  const { dates: targetDates, range } = resolveDateParams(flags, config);
   if (!targetDates) {
     throw new Error('sync --range all 需要明确日期范围，请改用 --from YYYY-MM-DD --to YYYY-MM-DD');
   }
@@ -270,11 +272,22 @@ async function runSync(flags: Record<string, string | boolean>) {
   // 扫描一次，所有 target 共享结果
   console.log(`扫描 ${targetDates.length} 天 (${targetDates[0]} ~ ${targetDates[targetDates.length - 1]}) ...`);
 
-  const results = await scanDates(targetDates, { projectAliases: config.projectAliases });
+  const [results, activityReport] = await Promise.all([
+    scanDates(targetDates, { projectAliases: config.projectAliases }),
+    buildActivityReport(range, { projectAliases: config.projectAliases, dates: targetDates }),
+  ]);
+  const activityByDate = groupActivityItemsByDate(activityReport.items);
   const includeEmptyDays = flags['include-empty'] === true;
-  const allDays = results
-    .filter(r => includeEmptyDays || r.breakdowns.length > 0)
-    .map(r => ({ usageDate: r.usageDate, breakdowns: r.breakdowns }));
+  const allDays: IngestDay[] = results
+    .map((r) => {
+      const activityItems = activityByDate.get(r.usageDate);
+      return {
+        usageDate: r.usageDate,
+        breakdowns: r.breakdowns,
+        ...(activityItems?.length ? { activity: { items: activityItems } } : {}),
+      };
+    })
+    .filter(day => includeEmptyDays || day.breakdowns.length > 0 || (day.activity?.items.length ?? 0) > 0);
 
   if (allDays.length === 0) {
     console.log('没有可上传的数据。');
@@ -344,7 +357,7 @@ async function runImport(flags: Record<string, string | boolean>, positionals: s
   // Detect mode: CSV files passed as positional args vs Admin API
   const csvFiles = positionals.filter(p => p.endsWith('.csv'));
 
-  let allDays: Array<{ usageDate: string; breakdowns: import('@aiusage/shared').IngestBreakdown[] }>;
+  let allDays: IngestDay[];
 
   if (csvFiles.length > 0) {
     // CSV mode: scan all provided files and determine date range from flags or auto-detect
