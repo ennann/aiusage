@@ -16,7 +16,7 @@ export interface PricingCatalog {
 
 // 第一版内置定价目录，后续可改为读取 JSON 文件或 KV
 const catalog: PricingCatalog = {
-  version: '2026-07-06-official-v4',
+  version: '2026-07-09-official-v5',
   aliases: {
     'claude-sonnet-4-6-20250301': 'claude-sonnet-4-6',
     'claude-opus-4-6-20250301': 'claude-opus-4-6',
@@ -144,6 +144,27 @@ const catalog: PricingCatalog = {
     openai: {
       codex: {
         models: {
+          'gpt-5.6-sol': {
+            input_per_million_usd: 5,
+            output_per_million_usd: 30,
+            cached_input_per_million_usd: 0.5,
+            cache_write_5m_per_million_usd: 0,
+            cache_write_1h_per_million_usd: 0,
+          },
+          'gpt-5.6-terra': {
+            input_per_million_usd: 2.5,
+            output_per_million_usd: 15,
+            cached_input_per_million_usd: 0.25,
+            cache_write_5m_per_million_usd: 0,
+            cache_write_1h_per_million_usd: 0,
+          },
+          'gpt-5.6-luna': {
+            input_per_million_usd: 1,
+            output_per_million_usd: 6,
+            cached_input_per_million_usd: 0.1,
+            cache_write_5m_per_million_usd: 0,
+            cache_write_1h_per_million_usd: 0,
+          },
           'gpt-5.5': {
             input_per_million_usd: 5,
             output_per_million_usd: 30,
