@@ -647,6 +647,9 @@ const CLAUDE_PRICING: Record<string, { input: number; cache_write_5m: number; ca
 };
 
 const OPENAI_PRICING: Record<string, { input: number; cached_input: number | null; output: number; estimated: boolean }> = {
+  'gpt-5.6-sol': { input: 5, cached_input: 0.5, output: 30, estimated: false },
+  'gpt-5.6-terra': { input: 2.5, cached_input: 0.25, output: 15, estimated: false },
+  'gpt-5.6-luna': { input: 1, cached_input: 0.1, output: 6, estimated: false },
   'gpt-5.5': { input: 5, cached_input: 0.5, output: 30, estimated: false },
   'gpt-5.4-pro': { input: 30, cached_input: null, output: 180, estimated: false },
   'gpt-5.4': { input: 2.5, cached_input: 0.25, output: 15, estimated: false },

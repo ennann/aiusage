@@ -115,6 +115,32 @@ describe('calculateCost: 基本计费', () => {
     expect(result.estimatedCostUsd).toBe(20.5);
     expect(result.costStatus).toBe('exact');
   });
+
+  it('Codex gpt-5.6-sol 基本 input/output 计费', () => {
+    // gpt-5.6-sol: input=$5/M, cached input=$0.50/M, output=$30/M
+    const result = calculateCost('openai', 'codex', 'gpt-5.6-sol', {
+      inputTokens: 1_000_000,
+      cachedInputTokens: 1_000_000,
+      cacheWriteTokens: 0,
+      outputTokens: 500_000,
+    });
+    // 1*5 + 1*0.5 + 0.5*30 = $20.5
+    expect(result.estimatedCostUsd).toBe(20.5);
+    expect(result.costStatus).toBe('exact');
+  });
+
+  it('Codex gpt-5.6-luna 使用低档单价计费', () => {
+    // gpt-5.6-luna: input=$1/M, cached input=$0.10/M, output=$6/M
+    const result = calculateCost('openai', 'codex', 'gpt-5.6-luna', {
+      inputTokens: 1_000_000,
+      cachedInputTokens: 1_000_000,
+      cacheWriteTokens: 0,
+      outputTokens: 500_000,
+    });
+    // 1*1 + 1*0.1 + 0.5*6 = $4.1
+    expect(result.estimatedCostUsd).toBe(4.1);
+    expect(result.costStatus).toBe('exact');
+  });
 });
 
 // ─── calculateCost: cached input ───
