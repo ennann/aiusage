@@ -2,7 +2,7 @@ import { readdir, open, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { createInterface } from 'node:readline';
-import type { IngestBreakdown } from '@aiusage/shared';
+import { calculateCost, type IngestBreakdown } from '@aiusage/shared';
 import { normalizeModelName, runWithConcurrency, resolveProjectFields, type ProjectFields } from './utils.js';
 
 const FILE_CONCURRENCY = 16;
@@ -160,6 +160,15 @@ async function processCodexFile(
       // In Codex JSONL, input_tokens includes cached_input_tokens.
       // Subtract to get the non-cached portion so cost formula works uniformly.
       const nonCachedInput = Math.max(0, (last.input_tokens ?? 0) - (last.cached_input_tokens ?? 0));
+      const cachedInput = last.cached_input_tokens ?? 0;
+      const output = last.output_tokens ?? 0;
+      const eventCost = calculateCost('openai', 'codex', currentModel, {
+        inputTokens: nonCachedInput,
+        cachedInputTokens: cachedInput,
+        cacheWriteTokens: 0,
+        outputTokens: output,
+      });
+      const exactEventCost = eventCost.costStatus === 'exact' ? eventCost.estimatedCostUsd : undefined;
 
       const grouped = groupedByDate.get(usageDate);
       if (!grouped) continue;
@@ -169,11 +178,15 @@ async function processCodexFile(
       if (existing) {
         existing.eventCount += 1;
         existing.inputTokens += nonCachedInput;
-        existing.cachedInputTokens += last.cached_input_tokens ?? 0;
-        existing.outputTokens += last.output_tokens ?? 0;
+        existing.cachedInputTokens += cachedInput;
+        existing.outputTokens += output;
         existing.reasoningOutputTokens += last.reasoning_output_tokens ?? 0;
+        if (exactEventCost !== undefined) {
+          existing.costUSD = (existing.costUSD ?? 0) + exactEventCost;
+          existing.pricingVersion = eventCost.pricingVersion;
+        }
       } else {
-        grouped.set(key, {
+        const breakdown: IngestBreakdown = {
           provider: 'openai',
           product: 'codex',
           channel: 'cli',
@@ -183,11 +196,16 @@ async function processCodexFile(
           projectAlias: currentProjectFields.projectAlias,
           eventCount: 1,
           inputTokens: nonCachedInput,
-          cachedInputTokens: last.cached_input_tokens ?? 0,
+          cachedInputTokens: cachedInput,
           cacheWriteTokens: 0,
-          outputTokens: last.output_tokens ?? 0,
+          outputTokens: output,
           reasoningOutputTokens: last.reasoning_output_tokens ?? 0,
-        });
+        };
+        if (exactEventCost !== undefined) {
+          breakdown.costUSD = exactEventCost;
+          breakdown.pricingVersion = eventCost.pricingVersion;
+        }
+        grouped.set(key, breakdown);
       }
     }
   } finally {
@@ -233,7 +251,14 @@ async function detectCodexServiceTier(baseDir: string): Promise<CodexServiceTier
 function applyCodexServiceTier(model: string, serviceTier: CodexServiceTier): string {
   if (!serviceTier) return model;
   if (model.endsWith('-fast') || model.endsWith('-priority')) return model;
-  if (model === 'gpt-5.5' || model === 'gpt-5.4') {
+  const supportsFast = model === 'gpt-5.5' || model === 'gpt-5.4';
+  const supportsPriority =
+    model === 'gpt-5.6' ||
+    model === 'gpt-5.6-sol' ||
+    model === 'gpt-5.6-terra' ||
+    model === 'gpt-5.6-luna' ||
+    supportsFast;
+  if ((serviceTier === 'fast' && supportsFast) || (serviceTier === 'priority' && supportsPriority)) {
     return `${model}-${serviceTier}`;
   }
   return model;

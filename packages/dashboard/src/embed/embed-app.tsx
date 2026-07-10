@@ -1,10 +1,11 @@
-import { useEffect, useRef, useMemo } from 'react';
+import { useEffect, useRef, useMemo, useState } from 'react';
 import { parseEmbedParams } from './parse-params';
-import type { EmbedTheme } from './types';
+import type { EmbedCurrency, EmbedLocale, EmbedTheme } from './types';
 import type { ThemeMode } from '../theme';
 import { applyTheme } from '../theme';
 import { I18N, type Locale, type T } from '../i18n';
 import { useOverview, type OverviewPayload } from '../hooks/use-overview';
+import { useCurrencyStore, useFetchCnyRate } from '../hooks/use-cny-rate';
 import { TOKEN_SERIES, getChartColors, getTokenColor, providerLabel } from '../constants';
 import { useIsDark } from '../hooks/use-dark';
 import {
@@ -33,7 +34,7 @@ function useAutoResize(widget: string | null) {
     if (!root) return;
 
     const notify = () => {
-      const h = Math.ceil(root.scrollHeight);
+      const h = Math.ceil(Math.max(root.scrollHeight, root.getBoundingClientRect().height) + 2);
       if (h === lastHeight.current) return;
       lastHeight.current = h;
       window.parent.postMessage(
@@ -55,6 +56,12 @@ function useAutoResize(widget: string | null) {
 
 function embedThemeToMode(et: EmbedTheme): ThemeMode {
   return et === 'auto' ? 'system' : et;
+}
+
+function resolveEmbedLocale(locale: EmbedLocale): Locale {
+  if (locale !== 'auto') return locale;
+  const lang = navigator.languages?.[0] || navigator.language || 'en';
+  return lang.toLowerCase().startsWith('zh') ? 'zh' : 'en';
 }
 
 const tokenLegendLabels: Record<string, keyof T> = {
@@ -112,6 +119,7 @@ function WidgetRenderer({
   metricAvailability,
   t,
   locale,
+  currency,
 }: {
   widget: string;
   items: number[] | null;
@@ -120,6 +128,7 @@ function WidgetRenderer({
   metricAvailability: ReturnType<typeof useOverview>['metricAvailability'];
   t: T;
   locale: Locale;
+  currency: EmbedCurrency;
 }) {
   const isDark = useIsDark();
   const unavailable = metricAvailability.tokenMetricsUnavailable;
@@ -138,7 +147,7 @@ function WidgetRenderer({
     /* ── KPI Row 1 ── */
     case 'stats-row1': {
       const cards = [
-        { label: t.estimatedCost, value: unavailable ? t.unavailable : formatUsd(overview?.totalCostUsd ?? 0), highlight: true },
+        { label: t.estimatedCost, value: unavailable ? t.unavailable : formatUsd(overview?.totalCostUsd ?? 0, currency), highlight: true },
         { label: t.totalTokens, value: unavailable ? t.unavailable : formatCompact(kpis?.totalTokens ?? 0, locale) },
         { label: t.inputTokens, value: unavailable ? t.unavailable : formatCompact(kpis?.inputTokens ?? 0, locale) },
         { label: t.outputTokens, value: unavailable ? t.unavailable : formatCompact(kpis?.outputTokens ?? 0, locale) },
@@ -158,7 +167,7 @@ function WidgetRenderer({
             ? formatNumber(overview.interactionMetrics.userMessageCount)
             : t.unavailable,
         },
-        { label: t.avgDailyCost, value: unavailable ? t.unavailable : formatUsd(overview?.averageDailyCostUsd ?? 0) },
+        { label: t.avgDailyCost, value: unavailable ? t.unavailable : formatUsd(overview?.averageDailyCostUsd ?? 0, currency) },
         { label: t.cacheHitRate, value: unavailable ? t.unavailable : formatPercent(kpis?.cacheHitRate ?? 0) },
       ];
       return <StatsRow cards={cards} items={items} />;
@@ -168,7 +177,7 @@ function WidgetRenderer({
     case 'cost-trend':
       return (
         <>
-          <SectionHeader title={t.costTrend} stat={unavailable ? t.unavailable : formatUsd(overview?.totalCostUsd ?? 0)} />
+          <SectionHeader title={t.costTrend} stat={unavailable ? t.unavailable : formatUsd(overview?.totalCostUsd ?? 0, currency)} />
           {unavailable ? (
             <EmptyState label={t.costUnavailable} />
           ) : (
@@ -176,6 +185,7 @@ function WidgetRenderer({
               <CostTrendChart
                 data={overview?.dailyTrend ?? []}
                 providerTrend={overview?.providerDailyTrend ?? []}
+                currency={currency}
               />
             </ChartBoundary>
           )}
@@ -252,7 +262,7 @@ function WidgetRenderer({
         eventCount: d.eventCount,
       }));
 
-      const centerLabel = formatUsd(overview?.totalCostUsd ?? 0);
+      const centerLabel = formatUsd(overview?.totalCostUsd ?? 0, currency);
       const colors = getChartColors(isDark);
 
       const sections = [
@@ -278,6 +288,7 @@ function WidgetRenderer({
                 data={sec.data}
                 colors={sec.colors}
                 centerLabel={centerLabel}
+                currency={currency}
               />
             </div>
           ))}
@@ -294,16 +305,37 @@ function WidgetRenderer({
 
 export function EmbedApp() {
   const params = useMemo(() => parseEmbedParams(window.location.search), []);
-  const locale = params.locale;
+  const [hostTheme, setHostTheme] = useState<EmbedTheme | null>(null);
+  const locale = resolveEmbedLocale(params.locale);
   const t = I18N[locale] as T;
+  useFetchCnyRate();
+  useCurrencyStore();
 
   // Auto-resize: post height to parent on every content change
   useAutoResize(params.widget);
 
+  // Embed mode: hide iframe-internal scrollbars and allow host theme sync.
+  useEffect(() => {
+    document.body.classList.add('embed-mode');
+    return () => document.body.classList.remove('embed-mode');
+  }, []);
+
+  useEffect(() => {
+    const onMessage = (event: MessageEvent) => {
+      const data = event.data as { source?: string; theme?: unknown } | null;
+      if (!data || data.source !== 'aiusage-host') return;
+      if (data.theme === 'light' || data.theme === 'dark' || data.theme === 'auto') {
+        setHostTheme(data.theme);
+      }
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, []);
+
   // Apply theme
   useEffect(() => {
-    applyTheme(embedThemeToMode(params.theme));
-  }, [params.theme]);
+    applyTheme(embedThemeToMode(hostTheme ?? params.theme));
+  }, [hostTheme, params.theme]);
 
   // Transparent background
   useEffect(() => {
@@ -326,23 +358,15 @@ export function EmbedApp() {
   );
   const { overview, kpis, metricAvailability, loading, error } = useOverview(filters);
 
-  // No widget
+  let content: React.ReactNode;
   if (!params.widget) {
-    return <div className="p-4 text-sm text-slate-400">Missing ?widget= parameter</div>;
-  }
-
-  // Error
-  if (error) {
-    return <div className="p-4 text-sm text-red-400">{error}</div>;
-  }
-
-  // Loading (only show skeleton on first load)
-  if (loading && !overview) {
-    return <LoadingSkeleton />;
-  }
-
-  return (
-    <div className="embed-root">
+    content = <div className="p-4 text-sm text-slate-400">Missing ?widget= parameter</div>;
+  } else if (error) {
+    content = <div className="p-4 text-sm text-red-400">{error}</div>;
+  } else if (loading && !overview) {
+    content = <LoadingSkeleton />;
+  } else {
+    content = (
       <WidgetRenderer
         widget={params.widget}
         items={params.items}
@@ -351,7 +375,14 @@ export function EmbedApp() {
         metricAvailability={metricAvailability}
         t={t}
         locale={locale}
+        currency={params.currency}
       />
+    );
+  }
+
+  return (
+    <div className="embed-root">
+      {content}
     </div>
   );
 }

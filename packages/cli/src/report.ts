@@ -2,7 +2,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
 import type { IngestBreakdown } from '@aiusage/shared';
-import { calculateCost, type PricingCatalog } from '@aiusage/shared';
+import { calculateCost, PRICING_VERSION, type PricingCatalog } from '@aiusage/shared';
 import { scanDates } from './scan.js';
 import { parseTs, dateKey } from './scanners/utils.js';
 import type { PricingInfo } from './pricing.js';
@@ -578,7 +578,10 @@ export function calculateBreakdownCost(
   warnings: Set<string>,
   pricingCatalog?: PricingCatalog,
 ): number {
-  if (breakdown.costUSD != null && breakdown.costUSD > 0) {
+  const effectivePricingVersion = pricingCatalog?.version ?? PRICING_VERSION;
+  const sourceCostMatchesCatalog =
+    breakdown.pricingVersion == null || breakdown.pricingVersion === effectivePricingVersion;
+  if (breakdown.costUSD != null && breakdown.costUSD > 0 && sourceCostMatchesCatalog) {
     return breakdown.costUSD;
   }
 
@@ -594,13 +597,18 @@ export function calculateBreakdownCost(
       cacheWrite1hTokens: breakdown.cacheWrite1hTokens,
       outputTokens: breakdown.outputTokens,
     },
-    pricingCatalog ? { catalog: pricingCatalog } : {},
+    {
+      ...(pricingCatalog ? { catalog: pricingCatalog } : {}),
+      requestCount: breakdown.eventCount,
+    },
   );
 
   if (result.costStatus === 'unavailable') {
     warnings.add(`${breakdown.provider}/${breakdown.product}/${breakdown.model} 暂无定价配置，已跳过成本估算。`);
   } else if (result.costStatus === 'estimated' && result.resolvedModel && result.resolvedModel !== breakdown.model) {
     warnings.add(`${breakdown.model} 已按 ${result.resolvedModel} 的公开单价估算。`);
+  } else if (result.costStatus === 'estimated' && result.matchedTierIndex !== undefined) {
+    warnings.add(`${breakdown.model} 的阶梯价格已按每事件平均输入量估算。`);
   }
 
   return result.estimatedCostUsd;

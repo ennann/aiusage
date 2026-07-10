@@ -10,7 +10,7 @@ import { github } from './data/github.js';
 import { sourcegraph } from './data/sourcegraph.js';
 import { inflection, cursor, droid, opencode } from './data/placeholders.js';
 
-export const PRICING_VERSION = '2026-06-22-codex-tier-v1';
+export const PRICING_VERSION = '2026-07-10-gpt-5.6-v1';
 
 /**
  * 模型别名（精确匹配优先于前缀回退）。
@@ -22,6 +22,7 @@ const aliases: Record<string, string> = {
   'claude-opus-4-6-20250301': 'claude-opus-4-6',
   'claude-haiku-4-5-20251001': 'claude-haiku-4-5',
   'claude-sonnet-4.6': 'claude-sonnet-4-6',
+  'gpt-5.6': 'gpt-5.6-sol',
   'codex-auto-review': 'gpt-5.4',
 };
 

@@ -23,6 +23,9 @@ const FAST_SUPPORTED = new Set<string>([
 type ServiceTierSuffix = 'fast' | 'priority' | null;
 
 const OPENAI_CODEX_TIER_MULTIPLIERS: Record<string, number> = {
+  'gpt-5.6-sol': 2,
+  'gpt-5.6-terra': 2,
+  'gpt-5.6-luna': 2,
   'gpt-5.5': 2.5,
   'gpt-5.4': 2,
 };
@@ -46,6 +49,7 @@ function getServiceTierMultiplier(
   if (!tier) return 1;
 
   if (provider === 'openai' && product === 'codex') {
+    if (tier === 'fast' && resolvedModel.startsWith('gpt-5.6-')) return 1;
     return OPENAI_CODEX_TIER_MULTIPLIERS[resolvedModel] ?? 1;
   }
 
@@ -120,6 +124,8 @@ function toUsd(amount: number, currency: ModelPricing['currency'], catalog: Pric
 export interface CalculateCostOptions {
   /** 自定义 catalog，便于 Worker 用 env 覆盖汇率等参数。 */
   catalog?: PricingCatalog;
+  /** 聚合 breakdown 包含的请求/事件数；用于按平均单请求 input 估算阶梯。 */
+  requestCount?: number;
 }
 
 export function calculateCost(
@@ -156,14 +162,18 @@ export function calculateCost(
   let matchedTierIndex: number | undefined;
   if (pricing.tiers && pricing.tiers.length > 0) {
     const totalIn = tokens.inputTokens + tokens.cachedInputTokens + tokens.cacheWriteTokens;
-    const { tier, index } = selectTier(pricing.tiers, totalIn);
+    const requestCount = Math.max(1, Math.floor(options.requestCount ?? 1));
+    const tierInput = totalIn / requestCount;
+    const { tier, index } = selectTier(pricing.tiers, tierInput);
     unit = tier;
     matchedTierIndex = index;
+    if (requestCount > 1) costStatus = 'estimated';
   } else {
     unit = {
       input_per_million: pricing.input_per_million ?? 0,
       output_per_million: pricing.output_per_million ?? 0,
       cached_input_per_million: pricing.cached_input_per_million ?? null,
+      cache_write_per_million: pricing.cache_write_per_million,
       cache_write_5m_per_million: pricing.cache_write_5m_per_million ?? 0,
       cache_write_1h_per_million: pricing.cache_write_1h_per_million ?? 0,
     };
@@ -172,13 +182,19 @@ export function calculateCost(
   // cache_write_5m/1h 在阶梯档位里如果没填，回退到顶层
   const cw5Rate = unit.cache_write_5m_per_million ?? pricing.cache_write_5m_per_million ?? 0;
   const cw1hRate = unit.cache_write_1h_per_million ?? pricing.cache_write_1h_per_million ?? 0;
+  const hasGenericCacheWriteRate =
+    unit.cache_write_per_million !== undefined || pricing.cache_write_per_million !== undefined;
+  const genericCwRate = unit.cache_write_per_million ?? pricing.cache_write_per_million ?? 0;
   const cachedRate = unit.cached_input_per_million ?? pricing.cached_input_per_million ?? 0;
+  const cacheWriteCost = hasGenericCacheWriteRate
+    ? (tokens.cacheWriteTokens / 1_000_000) * genericCwRate
+    : ((tokens.cacheWrite5mTokens ?? tokens.cacheWriteTokens) / 1_000_000) * cw5Rate +
+      ((tokens.cacheWrite1hTokens ?? 0) / 1_000_000) * cw1hRate;
 
   let raw =
     (tokens.inputTokens / 1_000_000) * (unit.input_per_million ?? 0) +
     (tokens.cachedInputTokens / 1_000_000) * (cachedRate ?? 0) +
-    ((tokens.cacheWrite5mTokens ?? tokens.cacheWriteTokens) / 1_000_000) * cw5Rate +
-    ((tokens.cacheWrite1hTokens ?? 0) / 1_000_000) * cw1hRate +
+    cacheWriteCost +
     (tokens.outputTokens / 1_000_000) * (unit.output_per_million ?? 0);
 
   // 折算 currency → USD

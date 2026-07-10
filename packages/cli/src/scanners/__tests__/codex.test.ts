@@ -124,7 +124,70 @@ describe('Fix 1: non-cached input cost formula', () => {
   });
 });
 
+describe('Codex tiered pricing', () => {
+  it('accumulates mixed short and long requests at their individual tiers', async () => {
+    const day = '2026-07-10';
+    const sessionDir = join(tmpDir, 'sessions', '2026', '07', '10');
+    const lines = [
+      ...tokenCountEvent(
+        `${day}T10:00:00.000Z`,
+        { input: 100_000, cached: 0, output: 10_000 },
+        { input: 100_000, cached: 0, output: 10_000 },
+        'gpt-5.6-sol',
+      ),
+      ...tokenCountEvent(
+        `${day}T10:05:00.000Z`,
+        { input: 400_000, cached: 0, output: 10_000 },
+        { input: 500_000, cached: 0, output: 20_000 },
+        'gpt-5.6-sol',
+      ),
+    ];
+    await writeSession(sessionDir, 'rollout-test.jsonl', lines);
+
+    const [result] = await scanCodex(day, tmpDir);
+    expect(result.eventCount).toBe(2);
+    expect(result.inputTokens).toBe(500_000);
+    expect(result.outputTokens).toBe(20_000);
+    expect(result.costUSD).toBeCloseTo(5.25, 4);
+    expect(result.pricingVersion).toMatch(/^2026-07-10/);
+  });
+});
+
 describe('Codex service tier', () => {
+  it('adds priority suffix for GPT-5.6 Codex usage', async () => {
+    const day = '2026-07-10';
+    await writeFile(join(tmpDir, 'config.toml'), 'service_tier = "priority"\n');
+    const sessionDir = join(tmpDir, 'sessions', '2026', '07', '10');
+    const events = tokenCountEvent(
+      `${day}T10:00:00.000Z`,
+      { input: 10000, cached: 8000, output: 500 },
+      { input: 10000, cached: 8000, output: 500 },
+      'gpt-5.6-sol',
+    );
+    await writeSession(sessionDir, 'rollout-test.jsonl', events);
+
+    const results = await scanCodex(day, tmpDir);
+    expect(results).toHaveLength(1);
+    expect(results[0].model).toBe('gpt-5.6-sol-priority');
+  });
+
+  it('does not add fast suffix to GPT-5.6 while Codex Fast is unsupported', async () => {
+    const day = '2026-07-10';
+    await writeFile(join(tmpDir, 'config.toml'), 'service_tier = "fast"\n');
+    const sessionDir = join(tmpDir, 'sessions', '2026', '07', '10');
+    const events = tokenCountEvent(
+      `${day}T10:00:00.000Z`,
+      { input: 10000, cached: 8000, output: 500 },
+      { input: 10000, cached: 8000, output: 500 },
+      'gpt-5.6-sol',
+    );
+    await writeSession(sessionDir, 'rollout-test.jsonl', events);
+
+    const results = await scanCodex(day, tmpDir);
+    expect(results).toHaveLength(1);
+    expect(results[0].model).toBe('gpt-5.6-sol');
+  });
+
   it('adds priority suffix for supported GPT-5.5 Codex usage', async () => {
     const day = '2026-06-22';
     await writeFile(join(tmpDir, 'config.toml'), 'service_tier = "priority"\n');

@@ -20,6 +20,7 @@ export interface PricingTier {
   input_per_million: number;
   output_per_million: number;
   cached_input_per_million?: number | null;
+  cache_write_per_million?: number;
   cache_write_5m_per_million?: number;
   cache_write_1h_per_million?: number;
 }
@@ -42,6 +43,8 @@ export interface ModelPricing {
   input_per_million?: number;
   output_per_million?: number;
   cached_input_per_million?: number | null;
+  /** 不区分缓存时长的通用 cache write 价格（如 OpenAI GPT-5.6） */
+  cache_write_per_million?: number;
   cache_write_5m_per_million?: number;
   cache_write_1h_per_million?: number;
 
