@@ -233,7 +233,14 @@ async function detectCodexServiceTier(baseDir: string): Promise<CodexServiceTier
 function applyCodexServiceTier(model: string, serviceTier: CodexServiceTier): string {
   if (!serviceTier) return model;
   if (model.endsWith('-fast') || model.endsWith('-priority')) return model;
-  if (model === 'gpt-5.5' || model === 'gpt-5.4') {
+  const supportsFast = model === 'gpt-5.5' || model === 'gpt-5.4';
+  const supportsPriority =
+    model === 'gpt-5.6' ||
+    model === 'gpt-5.6-sol' ||
+    model === 'gpt-5.6-terra' ||
+    model === 'gpt-5.6-luna' ||
+    supportsFast;
+  if ((serviceTier === 'fast' && supportsFast) || (serviceTier === 'priority' && supportsPriority)) {
     return `${model}-${serviceTier}`;
   }
   return model;

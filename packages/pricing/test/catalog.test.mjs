@@ -9,4 +9,8 @@ test('catalog.json exposes the public pricing catalog', async () => {
   assert.match(catalog.version, /^\d{4}-\d{2}-\d{2}/);
   assert.ok(catalog.providers?.openai?.codex);
   assert.ok(catalog.providers?.anthropic?.['claude-code']);
+  assert.equal(catalog.aliases?.['gpt-5.6'], 'gpt-5.6-sol');
+  assert.equal(catalog.providers.openai.codex.models['gpt-5.6-sol']?.input_per_million, 5);
+  assert.equal(catalog.providers.openai.codex.models['gpt-5.6-terra']?.input_per_million, 2.5);
+  assert.equal(catalog.providers.openai.codex.models['gpt-5.6-luna']?.input_per_million, 1);
 });

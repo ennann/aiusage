@@ -51,14 +51,20 @@ export async function handleIngest(request: Request, env: Env): Promise<Response
     for (const b of day.breakdowns) {
       const cacheWrite5mTokens = b.cacheWrite5mTokens ?? b.cacheWriteTokens;
       const cacheWrite1hTokens = b.cacheWrite1hTokens ?? 0;
-      const cost = calculateCost(b.provider, b.product, b.model, {
-        inputTokens: b.inputTokens,
-        cachedInputTokens: b.cachedInputTokens,
-        cacheWriteTokens: b.cacheWriteTokens,
-        cacheWrite5mTokens,
-        cacheWrite1hTokens,
-        outputTokens: b.outputTokens,
-      });
+      const cost = calculateCost(
+        b.provider,
+        b.product,
+        b.model,
+        {
+          inputTokens: b.inputTokens,
+          cachedInputTokens: b.cachedInputTokens,
+          cacheWriteTokens: b.cacheWriteTokens,
+          cacheWrite5mTokens,
+          cacheWrite1hTokens,
+          outputTokens: b.outputTokens,
+        },
+        { requestCount: b.eventCount },
+      );
 
       costStatuses.push(cost.costStatus);
       dayTotalCost += cost.estimatedCostUsd;

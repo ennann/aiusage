@@ -594,13 +594,18 @@ export function calculateBreakdownCost(
       cacheWrite1hTokens: breakdown.cacheWrite1hTokens,
       outputTokens: breakdown.outputTokens,
     },
-    pricingCatalog ? { catalog: pricingCatalog } : {},
+    {
+      ...(pricingCatalog ? { catalog: pricingCatalog } : {}),
+      requestCount: breakdown.eventCount,
+    },
   );
 
   if (result.costStatus === 'unavailable') {
     warnings.add(`${breakdown.provider}/${breakdown.product}/${breakdown.model} 暂无定价配置，已跳过成本估算。`);
   } else if (result.costStatus === 'estimated' && result.resolvedModel && result.resolvedModel !== breakdown.model) {
     warnings.add(`${breakdown.model} 已按 ${result.resolvedModel} 的公开单价估算。`);
+  } else if (result.costStatus === 'estimated' && result.matchedTierIndex !== undefined) {
+    warnings.add(`${breakdown.model} 的阶梯价格已按每事件平均输入量估算。`);
   }
 
   return result.estimatedCostUsd;

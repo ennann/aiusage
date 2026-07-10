@@ -40,6 +40,7 @@ packages/shared/src/pricing/
 | `currency: 'USD' \| 'CNY'` | 价格币种。Worker 端结算时按 `catalog.fx` 折算到 USD |
 | `input_per_million` / `output_per_million` | 基础单价 / 1M tokens |
 | `cached_input_per_million` | cache hit 价（Anthropic 叫 cache_read，Kimi 叫缓存命中） |
+| `cache_write_per_million` | 不区分缓存时长的通用 cache write 价（如 OpenAI GPT-5.6） |
 | `cache_write_5m_per_million` / `cache_write_1h_per_million` | Anthropic 风格 prompt caching write |
 | `tiers?: PricingTier[]` | 阶梯定价：按 input token 数命中不同档位（Qwen / Gemini 2.5 Pro / GLM 等） |
 | `effective_from` / `effective_to` | 价格生效区间（审计用） |
@@ -51,6 +52,7 @@ packages/shared/src/pricing/
 
 ```ts
 'claude-opus-4-7-20260201': 'claude-opus-4-7'  // 带日期后缀的版本号
+'gpt-5.6': 'gpt-5.6-sol'                       // 官方系列别名 → Sol
 'codex-auto-review': 'gpt-5.4'                  // 工具内部模型 → 实际推理模型
 ```
 
@@ -81,6 +83,8 @@ tiers: [
   {                     input_per_million: 20, output_per_million: 200 },
 ]
 ```
+
+CLI / Worker 对按日聚合的 breakdown 会用 `totalInputTokens / eventCount` 估算单请求 input 档位，并将 `costStatus` 标为 `estimated`，避免多个短请求因日汇总超过阈值而整体误入长上下文价格。
 
 > **限制**：Gemini 2.5 Flash 等模型还按 **output** 长度分档；GLM-4.7 同样有 input × output 双维度。当前实现只按 input 命中，output 分档暂用保守取低档（标了 `notes`）。
 

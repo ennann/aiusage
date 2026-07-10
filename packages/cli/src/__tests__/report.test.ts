@@ -139,4 +139,26 @@ describe('calculateBreakdownCost', () => {
     // codex-auto-review 是 catalog 里的显式 alias → gpt-5.4，按 exact 处理，不应有 warning
     expect([...warnings]).toEqual([]);
   });
+
+  it('estimates aggregated GPT-5.6 usage from average per-event input', async () => {
+    const { calculateBreakdownCost } = await import('../report.js');
+    const warnings = new Set<string>();
+
+    const cost = calculateBreakdownCost({
+      provider: 'openai',
+      product: 'codex',
+      channel: 'cli',
+      model: 'gpt-5.6-sol',
+      project: '/tmp/project',
+      eventCount: 2,
+      inputTokens: 400_000,
+      cachedInputTokens: 0,
+      cacheWriteTokens: 0,
+      outputTokens: 20_000,
+      reasoningOutputTokens: 0,
+    }, warnings);
+
+    expect(cost).toBe(2.6);
+    expect([...warnings]).toEqual(['gpt-5.6-sol 的阶梯价格已按每事件平均输入量估算。']);
+  });
 });

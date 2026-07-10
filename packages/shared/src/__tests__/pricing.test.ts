@@ -44,6 +44,9 @@ describe('calculateCost — 关键模型', () => {
     ['anthropic', 'claude-code', 'claude-opus-4-8', 30], // 5 + 25
     ['anthropic', 'claude-code', 'claude-opus-4-7', 30], // 5 + 25
     ['anthropic', 'claude-code', 'claude-sonnet-4-6', 18],
+    ['openai', 'codex', 'gpt-5.6-sol', 55], // 长上下文：10 + 45
+    ['openai', 'codex', 'gpt-5.6-terra', 27.5], // 长上下文：5 + 22.5
+    ['openai', 'codex', 'gpt-5.6-luna', 11], // 长上下文：2 + 9
     ['openai', 'codex', 'gpt-5.4', 17.5], // 2.5 + 15
     ['openai', 'codex', 'gpt-5.5-pro', 210], // 30 + 180
     ['openai', 'codex', 'o3-deep-research', 25], // 5 + 20，修正后
@@ -171,6 +174,18 @@ describe('Fast 模式白名单', () => {
     expect(priority.estimatedCostUsd).toBeCloseTo(normal.estimatedCostUsd * 2.5, 3);
   });
 
+  it('Codex GPT-5.6 Terra priority 应 ×2', () => {
+    const priority = calculateCost('openai', 'codex', 'gpt-5.6-terra-priority', tokens);
+    const normal = calculateCost('openai', 'codex', 'gpt-5.6-terra', tokens);
+    expect(priority.estimatedCostUsd).toBeCloseTo(normal.estimatedCostUsd * 2, 3);
+  });
+
+  it('Codex GPT-5.6 Fast 尚未获官方支持时不放大', () => {
+    const fast = calculateCost('openai', 'codex', 'gpt-5.6-sol-fast', tokens);
+    const normal = calculateCost('openai', 'codex', 'gpt-5.6-sol', tokens);
+    expect(fast.estimatedCostUsd).toBe(normal.estimatedCostUsd);
+  });
+
   it('Codex GPT-5.4 fast 应 ×2', () => {
     const fast = calculateCost('openai', 'codex', 'gpt-5.4-fast', tokens);
     const normal = calculateCost('openai', 'codex', 'gpt-5.4', tokens);
@@ -214,6 +229,45 @@ describe('多币种折算', () => {
 // ─── 阶梯定价 ───
 
 describe('阶梯定价', () => {
+  it('GPT-5.6 Sol 的 gpt-5.6 别名命中短上下文价格', () => {
+    const r = calculateCost('openai', 'codex', 'gpt-5.6', {
+      inputTokens: 100_000,
+      cachedInputTokens: 100_000,
+      cacheWriteTokens: 50_000,
+      cacheWrite5mTokens: 50_000,
+      cacheWrite1hTokens: 0,
+      outputTokens: 20_000,
+    });
+    // 0.1*$5 + 0.1*$0.5 + 0.05*$6.25 + 0.02*$30 = $1.4625
+    expect(r.resolvedModel).toBe('gpt-5.6-sol');
+    expect(r.matchedTierIndex).toBe(0);
+    expect(r.costStatus).toBe('exact');
+    expect(r.estimatedCostUsd).toBeCloseTo(1.4625, 4);
+  });
+
+  it('GPT-5.6 Sol 超过 272K input 后整次请求命中长上下文价格', () => {
+    const r = calculateCost('openai', 'codex', 'gpt-5.6-sol', {
+      inputTokens: 300_000,
+      cachedInputTokens: 0,
+      cacheWriteTokens: 0,
+      outputTokens: 100_000,
+    });
+    expect(r.matchedTierIndex).toBe(1);
+    expect(r.estimatedCostUsd).toBeCloseTo(7.5, 4); // 0.3*$10 + 0.1*$45
+  });
+
+  it('GPT-5.6 Sol 的聚合用量按平均单请求 input 选择阶梯', () => {
+    const r = calculateCost('openai', 'codex', 'gpt-5.6-sol', {
+      inputTokens: 400_000,
+      cachedInputTokens: 0,
+      cacheWriteTokens: 0,
+      outputTokens: 20_000,
+    }, { requestCount: 2 });
+    expect(r.matchedTierIndex).toBe(0);
+    expect(r.costStatus).toBe('estimated');
+    expect(r.estimatedCostUsd).toBeCloseTo(2.6, 4); // 两个 200K + 10K output 的短请求
+  });
+
   it('Qwen3-coder-plus ≤32K 命中第 0 档', () => {
     const r = calculateCost('alibaba', 'qwen-code', 'qwen3-coder-plus', {
       inputTokens: 10_000,
