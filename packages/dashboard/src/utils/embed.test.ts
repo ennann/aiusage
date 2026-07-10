@@ -9,6 +9,11 @@ test('legacy embed URLs without locale remain English', () => {
   assert.equal(params.currency, 'auto');
 });
 
+test('legacy unknown locale values still fall back to English', () => {
+  const params = parseEmbedParams('?widget=stats-row1&locale=fr');
+  assert.equal(params.locale, 'en');
+});
+
 test('embed params accept explicit auto locale and CNY currency', () => {
   const params = parseEmbedParams('?widget=stats-row1&locale=auto&currency=cny');
   assert.equal(params.locale, 'auto');

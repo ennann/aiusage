@@ -24,9 +24,9 @@ export function parseEmbedParams(search: string): EmbedParams {
   const theme: EmbedTheme =
     rawTheme === 'light' || rawTheme === 'dark' ? rawTheme : 'auto';
 
-  const rawLocale = p.get('locale') ?? 'en';
+  const rawLocale = p.get('locale');
   const locale: EmbedLocale =
-    rawLocale === 'en' || rawLocale === 'zh' ? rawLocale : 'auto';
+    rawLocale === 'auto' || rawLocale === 'en' || rawLocale === 'zh' ? rawLocale : 'en';
 
   const rawCurrency = (p.get('currency') ?? 'auto').toUpperCase();
   const currency: EmbedCurrency =
