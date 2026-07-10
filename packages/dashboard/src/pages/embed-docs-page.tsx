@@ -1,14 +1,17 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { useLayout } from '../components/layout';
 import type { Locale } from '../i18n';
+import type { EmbedCurrency, EmbedLocale } from '../embed/types';
+import { AUTO_RESIZE_SCRIPT } from '../embed/host-script';
+import { buildEmbedUrl } from '../embed/parse-params';
 
 // ────────────────────────────────────────
 // Widget definitions
 // ────────────────────────────────────────
 
 const WIDGETS = [
-  { id: 'stats-row1', nameZh: '指标卡 \u00b7 第一行', nameEn: 'KPI Cards \u00b7 Row 1', descZh: '预估费用、总 Token、输入、输出、缓存命中', descEn: 'Estimated cost, total tokens, input, output, cached tokens', height: 100, supportsItems: true, itemsNoteZh: '索引 0-4', itemsNoteEn: 'Index 0-4' },
-  { id: 'stats-row2', nameZh: '指标卡 \u00b7 第二行', nameEn: 'KPI Cards \u00b7 Row 2', descZh: '活跃天数、会话数、用户对话数、日均费用、缓存命中率', descEn: 'Active days, sessions, user messages, avg daily cost, cache hit rate', height: 100, supportsItems: true, itemsNoteZh: '索引 0-4', itemsNoteEn: 'Index 0-4' },
+  { id: 'stats-row1', nameZh: '指标卡 \u00b7 第一行', nameEn: 'KPI Cards \u00b7 Row 1', descZh: '预估费用、总 Token、输入、输出、缓存命中', descEn: 'Estimated cost, total tokens, input, output, cached tokens', height: 128, supportsItems: true, itemsNoteZh: '索引 0-4', itemsNoteEn: 'Index 0-4' },
+  { id: 'stats-row2', nameZh: '指标卡 \u00b7 第二行', nameEn: 'KPI Cards \u00b7 Row 2', descZh: '活跃天数、会话数、用户对话数、日均费用、缓存命中率', descEn: 'Active days, sessions, user messages, avg daily cost, cache hit rate', height: 128, supportsItems: true, itemsNoteZh: '索引 0-4', itemsNoteEn: 'Index 0-4' },
   { id: 'cost-trend', nameZh: '费用趋势', nameEn: 'Cost Trend', descZh: '按天展示费用变化的柱状图，支持多厂商堆叠', descEn: 'Daily cost bar chart with multi-provider stacking', height: 360, supportsItems: false },
   { id: 'token-trend', nameZh: 'Token 趋势', nameEn: 'Token Trend', descZh: '按天展示各类 Token 用量的面积图', descEn: 'Daily token usage area chart by type', height: 380, supportsItems: false },
   { id: 'token-composition', nameZh: 'Token 构成', nameEn: 'Token Composition', descZh: '按天展示 Token 类型分布的堆叠柱状图', descEn: 'Daily token type distribution stacked bar chart', height: 380, supportsItems: false },
@@ -17,6 +20,15 @@ const WIDGETS = [
 ] as const;
 
 type WidgetId = (typeof WIDGETS)[number]['id'];
+
+function detectHostTheme(): 'light' | 'dark' {
+  const root = document.documentElement;
+  const body = document.body;
+  const value = ((root.getAttribute('data-theme')) || (body?.getAttribute('data-theme')) || '').toLowerCase();
+  if (root.classList.contains('dark') || body?.classList.contains('dark') || value === 'dark') return 'dark';
+  if (root.classList.contains('light') || body?.classList.contains('light') || value === 'light') return 'light';
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
 
 // ────────────────────────────────────────
 // Segmented control (local, compact)
@@ -105,26 +117,6 @@ function CopyButton({ text, label, copiedLabel }: { text: string; label: string;
 }
 
 // ────────────────────────────────────────
-// Auto-resize script
-// ────────────────────────────────────────
-
-const AUTO_RESIZE_SCRIPT = `<script>
-window.addEventListener('message', function(e) {
-  if (e.data && e.data.source === 'aiusage-embed' && e.data.height) {
-    var frames = document.querySelectorAll('iframe');
-    frames.forEach(function(f) {
-      try {
-        var url = new URL(f.src, location.origin);
-        if (url.searchParams.get('widget') === e.data.widget) {
-          f.style.height = e.data.height + 'px';
-        }
-      } catch(err) {}
-    });
-  }
-});
-</script>`;
-
-// ────────────────────────────────────────
 // Common params table data
 // ────────────────────────────────────────
 
@@ -136,7 +128,8 @@ function getParamsTable(locale: Locale) {
     { name: 'range', values: '7d, 30d, 90d, month, all', default: '30d', desc: isZh ? '数据时间范围' : 'Data time range', required: false },
     { name: 'theme', values: 'light, dark, auto', default: 'auto', desc: isZh ? '颜色主题' : 'Color theme', required: false },
     { name: 'transparent', values: '0, 1, true', default: '0', desc: isZh ? '启用透明背景' : 'Enable transparent background', required: false },
-    { name: 'locale', values: 'en, zh', default: 'en', desc: isZh ? '界面语言' : 'Interface language', required: false },
+    { name: 'locale', values: 'auto, en, zh', default: 'en', desc: isZh ? '界面语言；auto 跟随浏览器语言' : 'Interface language; auto follows browser language', required: false },
+    { name: 'currency', values: 'auto, USD, CNY', default: 'auto', desc: isZh ? '费用货币；auto 使用全局货币偏好' : 'Cost currency; auto uses global currency preference', required: false },
     { name: 'deviceId', values: isZh ? '设备标识' : 'device identifier', default: '-', desc: isZh ? '仅显示指定设备的数据' : 'Show data for a specific device only', required: false },
     { name: 'product', values: isZh ? '产品标识' : 'product identifier', default: '-', desc: isZh ? '仅显示指定产品的数据' : 'Show data for a specific product only', required: false },
   ];
@@ -154,9 +147,11 @@ export function EmbedDocsPage() {
   const [selectedWidget, setSelectedWidget] = useState<WidgetId>(WIDGETS[0].id);
   const [themeOpt, setThemeOpt] = useState<'auto' | 'light' | 'dark'>('auto');
   const [range, setRange] = useState<'7d' | '30d' | '90d' | 'month' | 'all'>('30d');
-  const [selectedLocale, setSelectedLocale] = useState<'en' | 'zh'>('en');
+  const [selectedLocale, setSelectedLocale] = useState<EmbedLocale>('auto');
+  const [currencyOpt, setCurrencyOpt] = useState<EmbedCurrency>('auto');
   const [transparent, setTransparent] = useState(false);
   const [items, setItems] = useState('');
+  const previewFrameRef = useRef<HTMLIFrameElement | null>(null);
 
   const widget = WIDGETS.find((w) => w.id === selectedWidget)!;
 
@@ -167,15 +162,59 @@ export function EmbedDocsPage() {
     params.set('theme', themeOpt);
     params.set('range', range);
     params.set('locale', selectedLocale);
+    params.set('currency', currencyOpt);
     if (transparent) params.set('transparent', '1');
     if (widget.supportsItems && items.trim()) params.set('items', items.trim());
-    return `/embed?${params.toString()}`;
-  }, [selectedWidget, themeOpt, range, selectedLocale, transparent, items, widget.supportsItems]);
+    return buildEmbedUrl(window.location.origin, params);
+  }, [selectedWidget, themeOpt, range, selectedLocale, currencyOpt, transparent, items, widget.supportsItems]);
+
+  const [previewHeight, setPreviewHeight] = useState<number>(widget.height);
+
+  useEffect(() => {
+    setPreviewHeight(widget.height);
+  }, [iframeSrc, widget.height]);
+
+  useEffect(() => {
+    const onMessage = (event: MessageEvent) => {
+      const data = event.data as { source?: string; widget?: string; height?: number } | null;
+      if (
+        !data ||
+        data.source !== 'aiusage-embed' ||
+        event.source !== previewFrameRef.current?.contentWindow ||
+        typeof data.height !== 'number'
+      ) return;
+      setPreviewHeight(Math.max(widget.height, Math.ceil(data.height)));
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [selectedWidget, widget.height]);
+
+  useEffect(() => {
+    if (themeOpt !== 'auto') return;
+    const syncTheme = () => {
+      previewFrameRef.current?.contentWindow?.postMessage(
+        { source: 'aiusage-host', theme: detectHostTheme() },
+        '*',
+      );
+    };
+
+    syncTheme();
+    const observer = new MutationObserver(syncTheme);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'data-theme'] });
+    if (document.body) observer.observe(document.body, { attributes: true, attributeFilter: ['class', 'data-theme'] });
+    const mql = window.matchMedia('(prefers-color-scheme: dark)');
+    mql.addEventListener('change', syncTheme);
+
+    return () => {
+      observer.disconnect();
+      mql.removeEventListener('change', syncTheme);
+    };
+  }, [iframeSrc, themeOpt]);
 
   // Build iframe HTML code
   const iframeCode = useMemo(() => {
     const h = widget.height;
-    return `<iframe src="${iframeSrc}" width="100%" height="${h}" style="border:none;" loading="lazy"></iframe>`;
+    return `<iframe src="${iframeSrc}" width="100%" height="${h}" style="border:none;display:block;overflow:hidden;" scrolling="no" loading="lazy"></iframe>`;
   }, [iframeSrc, widget.height]);
 
   const paramsTable = useMemo(() => getParamsTable(locale), [locale]);
@@ -259,10 +298,25 @@ export function EmbedDocsPage() {
             <Seg
               value={selectedLocale}
               options={[
+                { value: 'auto' as const, label: 'Auto' },
                 { value: 'en' as const, label: 'EN' },
                 { value: 'zh' as const, label: '中' },
               ]}
               onChange={setSelectedLocale}
+            />
+          </div>
+
+          {/* Currency */}
+          <div className="flex items-center gap-2">
+            <span className="text-[12px] text-slate-400 dark:text-slate-500">{t.currency}</span>
+            <Seg
+              value={currencyOpt}
+              options={[
+                { value: 'auto' as const, label: 'Auto' },
+                { value: 'USD' as const, label: 'USD' },
+                { value: 'CNY' as const, label: 'CNY' },
+              ]}
+              onChange={setCurrencyOpt}
             />
           </div>
 
@@ -297,12 +351,22 @@ export function EmbedDocsPage() {
         </div>
         <div className="rounded-lg border-2 border-dashed border-slate-200 p-2 dark:border-white/10">
           <iframe
+            ref={previewFrameRef}
             key={iframeSrc}
             src={iframeSrc}
             width="100%"
-            height={widget.height}
-            style={{ border: 'none', display: 'block' }}
+            height={previewHeight}
+            scrolling="no"
+            style={{ border: 'none', display: 'block', overflow: 'hidden' }}
             loading="lazy"
+            onLoad={() => {
+              if (themeOpt === 'auto') {
+                previewFrameRef.current?.contentWindow?.postMessage(
+                  { source: 'aiusage-host', theme: detectHostTheme() },
+                  '*',
+                );
+              }
+            }}
           />
         </div>
       </div>

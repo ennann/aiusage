@@ -8,6 +8,8 @@ export type EmbedWidget =
   | 'share';
 
 export type EmbedTheme = 'light' | 'dark' | 'auto';
+export type EmbedLocale = 'en' | 'zh' | 'auto';
+export type EmbedCurrency = 'USD' | 'CNY' | 'auto';
 
 export interface EmbedParams {
   widget: EmbedWidget | null;
@@ -15,7 +17,8 @@ export interface EmbedParams {
   range: string;
   theme: EmbedTheme;
   transparent: boolean;
-  locale: 'en' | 'zh';
+  locale: EmbedLocale;
+  currency: EmbedCurrency;
   deviceId: string;
   product: string;
 }

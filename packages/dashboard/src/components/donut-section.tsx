@@ -3,8 +3,15 @@ import { Cell, Pie, PieChart, ResponsiveContainer } from "recharts";
 import { ChartContainer } from "./ui/chart";
 import { formatUsd, formatUsdFull, arrSum, foldItems } from "../utils/format";
 import { EmptyState } from "./chart-helpers";
+import type { CurrencyMode } from "../hooks/use-cny-rate";
 
-export function ProviderBars({ data }: { data: Array<{ label: string; estimatedCostUsd: number }> }) {
+export function ProviderBars({
+    data,
+    currency = 'auto',
+}: {
+    data: Array<{ label: string; estimatedCostUsd: number }>;
+    currency?: CurrencyMode;
+}) {
     if (!data.length) return <EmptyState label="No data" />;
     const max = Math.max(...data.map((d) => d.estimatedCostUsd), 1);
     return (
@@ -17,7 +24,7 @@ export function ProviderBars({ data }: { data: Array<{ label: string; estimatedC
                         <div key={item.label}>
                             <div className="mb-1 flex items-baseline justify-between text-[12px]">
                                 <span className="font-medium text-slate-700 dark:text-slate-300">{item.label}</span>
-                                <span className="tabular-nums font-medium text-slate-900 dark:text-slate-300">{formatUsd(item.estimatedCostUsd)}</span>
+                                <span className="tabular-nums font-medium text-slate-900 dark:text-slate-300">{formatUsd(item.estimatedCostUsd, currency)}</span>
                             </div>
                             <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-[#1a1a1a]">
                                 <div className="h-full rounded-full bg-slate-800 dark:bg-slate-300 transition-all duration-500" style={{ width: `${pct}%` }} />
@@ -35,11 +42,13 @@ export function DonutSection({
     data,
     colors,
     centerLabel,
+    currency = 'auto',
 }: {
     title: string;
     data: Array<{ label: string; value: string; estimatedCostUsd: number; eventCount: number }>;
     colors: string[];
     centerLabel: string;
+    currency?: CurrencyMode;
 }) {
     const sorted = [...data].sort((a, b) => b.estimatedCostUsd - a.estimatedCostUsd);
     const folded = foldItems(sorted, 6);
@@ -100,7 +109,7 @@ export function DonutSection({
                             style={{ left: tip.x, top: tip.y }}
                         >
                             <div className="text-[11px] text-slate-500 dark:text-slate-400">{tip.label}</div>
-                            <div className="mt-1 text-[11px] font-semibold tabular-nums text-slate-950 dark:text-slate-300">{formatUsdFull(tip.value)}</div>
+                            <div className="mt-1 text-[11px] font-semibold tabular-nums text-slate-950 dark:text-slate-300">{formatUsdFull(tip.value, currency)}</div>
                         </div>
                     )}
                 </div>
@@ -114,7 +123,7 @@ export function DonutSection({
                                 <span className="truncate text-right text-slate-500 dark:text-slate-400">{item.label}</span>
                                 <span className="h-[7px] w-[7px] rounded-full" style={{ backgroundColor: colors[i % colors.length] }} />
                                 <span className="text-right tabular-nums text-slate-400 dark:text-slate-500">{pct.toFixed(1)}%</span>
-                                <span className="text-right font-medium tabular-nums text-slate-900 dark:text-slate-300">{formatUsd(item.estimatedCostUsd)}</span>
+                                <span className="text-right font-medium tabular-nums text-slate-900 dark:text-slate-300">{formatUsd(item.estimatedCostUsd, currency)}</span>
                             </div>
                         );
                     })}

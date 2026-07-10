@@ -130,6 +130,13 @@ body {
 }
 
 /* Embed mode */
+html:has(body.embed-mode),
+body.embed-mode,
+body.embed-mode #root {
+  min-height: auto;
+  overflow: hidden;
+}
+
 .embed-root {
   padding: 8px;
   min-height: auto;
