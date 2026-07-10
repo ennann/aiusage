@@ -95,6 +95,33 @@ describe('buildLocalReport', () => {
 });
 
 describe('calculateBreakdownCost', () => {
+  it('only trusts scanner cost when the selected catalog version matches', async () => {
+    const { calculateBreakdownCost } = await import('../report.js');
+    const { catalog } = await import('@aiusage/shared');
+    const breakdown = {
+      provider: 'openai' as const,
+      product: 'codex' as const,
+      channel: 'cli' as const,
+      model: 'gpt-5.6-sol',
+      project: '/tmp/project',
+      eventCount: 2,
+      inputTokens: 500_000,
+      cachedInputTokens: 0,
+      cacheWriteTokens: 0,
+      outputTokens: 20_000,
+      reasoningOutputTokens: 0,
+      costUSD: 5.25,
+      pricingVersion: catalog.version,
+    };
+
+    expect(calculateBreakdownCost(breakdown, new Set(), catalog)).toBe(5.25);
+
+    const warnings = new Set<string>();
+    const futureCatalog = { ...catalog, version: 'future-catalog' };
+    expect(calculateBreakdownCost(breakdown, warnings, futureCatalog)).toBe(3.1);
+    expect([...warnings]).toEqual(['gpt-5.6-sol 的阶梯价格已按每事件平均输入量估算。']);
+  });
+
   it('prices local Codex GPT-5.5 usage', async () => {
     const { calculateBreakdownCost } = await import('../report.js');
     const warnings = new Set<string>();
@@ -113,7 +140,7 @@ describe('calculateBreakdownCost', () => {
       reasoningOutputTokens: 0,
     }, warnings);
 
-    expect(cost).toBe(20.5);
+    expect(cost).toBe(33.5);
     expect([...warnings]).toEqual([]);
   });
 
@@ -135,12 +162,12 @@ describe('calculateBreakdownCost', () => {
       reasoningOutputTokens: 0,
     }, warnings);
 
-    expect(cost).toBe(17.75);
+    expect(cost).toBe(28);
     // codex-auto-review 是 catalog 里的显式 alias → gpt-5.4，按 exact 处理，不应有 warning
     expect([...warnings]).toEqual([]);
   });
 
-  it('estimates aggregated GPT-5.6 usage from average per-event input', async () => {
+  it('estimates legacy aggregated GPT-5.6 usage from average per-event input', async () => {
     const { calculateBreakdownCost } = await import('../report.js');
     const warnings = new Set<string>();
 
@@ -156,6 +183,7 @@ describe('calculateBreakdownCost', () => {
       cacheWriteTokens: 0,
       outputTokens: 20_000,
       reasoningOutputTokens: 0,
+      costUSD: 0,
     }, warnings);
 
     expect(cost).toBe(2.6);

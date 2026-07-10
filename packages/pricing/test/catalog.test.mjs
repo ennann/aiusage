@@ -13,4 +13,8 @@ test('catalog.json exposes the public pricing catalog', async () => {
   assert.equal(catalog.providers.openai.codex.models['gpt-5.6-sol']?.input_per_million, 5);
   assert.equal(catalog.providers.openai.codex.models['gpt-5.6-terra']?.input_per_million, 2.5);
   assert.equal(catalog.providers.openai.codex.models['gpt-5.6-luna']?.input_per_million, 1);
+  assert.equal(catalog.providers.openai.codex.models['gpt-5.5']?.tiers?.[1]?.input_per_million, 10);
+  assert.equal(catalog.providers.openai.codex.models['gpt-5.5-pro']?.tiers?.[1]?.output_per_million, 270);
+  assert.equal(catalog.providers.openai.codex.models['gpt-5.4']?.tiers?.[1]?.output_per_million, 22.5);
+  assert.equal(catalog.providers.openai.codex.models['gpt-5.4-pro']?.tiers?.[1]?.input_per_million, 60);
 });

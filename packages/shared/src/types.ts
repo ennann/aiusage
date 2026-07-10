@@ -49,6 +49,7 @@ export interface IngestBreakdown {
   outputTokens: number;
   reasoningOutputTokens: number;
   costUSD?: number;
+  pricingVersion?: string;
 }
 
 export interface IngestActivityDay {

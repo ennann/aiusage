@@ -2,7 +2,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
 import type { IngestBreakdown } from '@aiusage/shared';
-import { calculateCost, type PricingCatalog } from '@aiusage/shared';
+import { calculateCost, PRICING_VERSION, type PricingCatalog } from '@aiusage/shared';
 import { scanDates } from './scan.js';
 import { parseTs, dateKey } from './scanners/utils.js';
 import type { PricingInfo } from './pricing.js';
@@ -578,7 +578,10 @@ export function calculateBreakdownCost(
   warnings: Set<string>,
   pricingCatalog?: PricingCatalog,
 ): number {
-  if (breakdown.costUSD != null && breakdown.costUSD > 0) {
+  const effectivePricingVersion = pricingCatalog?.version ?? PRICING_VERSION;
+  const sourceCostMatchesCatalog =
+    breakdown.pricingVersion == null || breakdown.pricingVersion === effectivePricingVersion;
+  if (breakdown.costUSD != null && breakdown.costUSD > 0 && sourceCostMatchesCatalog) {
     return breakdown.costUSD;
   }
 

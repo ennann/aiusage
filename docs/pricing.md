@@ -84,7 +84,7 @@ tiers: [
 ]
 ```
 
-CLI / Worker 对按日聚合的 breakdown 会用 `totalInputTokens / eventCount` 估算单请求 input 档位，并将 `costStatus` 标为 `estimated`，避免多个短请求因日汇总超过阈值而整体误入长上下文价格。
+Codex scanner 会先按单次请求命中阶梯并累计 `costUSD`，同时携带 `pricingVersion`，确保同一天混合长短请求时仍按各自档位精确计费。CLI / Worker 仅在版本与当前 catalog 一致时采用该成本；旧版、版本不匹配或不含逐请求成本的聚合 breakdown 会用 `totalInputTokens / eventCount` 估算档位，并将 `costStatus` 标为 `estimated`。
 
 > **限制**：Gemini 2.5 Flash 等模型还按 **output** 长度分档；GLM-4.7 同样有 input × output 双维度。当前实现只按 input 命中，output 分档暂用保守取低档（标了 `notes`）。
 
