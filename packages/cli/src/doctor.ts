@@ -164,6 +164,7 @@ export async function runDoctor(lang: Lang = 'zh'): Promise<Check[]> {
     { dir: join(home, '.factory', 'sessions'), label: 'Droid', exts: ['.jsonl', '.json'] },
     { dir: join(home, '.local', 'share', 'opencode'), label: 'OpenCode', exts: ['.json'] },
     { dir: join(home, '.pi', 'agent', 'sessions'), label: 'Pi', exts: ['.jsonl'] },
+    { dir: process.env.GROK_HOME?.trim() ?? join(home, '.grok'), label: 'Grok Build', exts: ['.json', '.jsonl'] },
   ];
 
   for (const tool of tools) {

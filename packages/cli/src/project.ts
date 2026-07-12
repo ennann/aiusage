@@ -53,6 +53,10 @@ export async function discoverProjects(
     // Antigravity: ~/.gemini/antigravity/knowledge/*/metadata.json
     // 仅读取知识项元数据标题，不读取对话内容
     discoverAntigravityProjects().then(names => names.forEach(n => add(n, 'antigravity'))),
+
+    // Grok Build: ~/.grok/sessions/{URL-encoded cwd}/{session-id}/
+    // Directory names contain the project cwd; no session contents are read.
+    discoverGrokBuildProjects().then(names => names.forEach(n => add(n, 'grok-build'))),
   ]);
 
   // ���建结果
@@ -333,6 +337,23 @@ async function discoverAntigravityProjects(): Promise<string[]> {
   }
 
   return [...projects];
+}
+
+async function discoverGrokBuildProjects(): Promise<string[]> {
+  const base = process.env.GROK_HOME?.trim() ?? join(homedir(), '.grok');
+  let entries;
+  try { entries = await readdir(join(base, 'sessions'), { withFileTypes: true }); } catch { return []; }
+  const names = new Set<string>();
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    try {
+      const name = basename(decodeURIComponent(entry.name));
+      if (name && name !== 'unknown') names.add(name);
+    } catch {
+      if (entry.name && entry.name !== 'unknown') names.add(entry.name);
+    }
+  }
+  return [...names];
 }
 
 function nameFromFileUri(raw?: string): string | undefined {

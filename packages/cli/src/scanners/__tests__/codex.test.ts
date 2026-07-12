@@ -149,7 +149,7 @@ describe('Codex tiered pricing', () => {
     expect(result.inputTokens).toBe(500_000);
     expect(result.outputTokens).toBe(20_000);
     expect(result.costUSD).toBeCloseTo(5.25, 4);
-    expect(result.pricingVersion).toMatch(/^2026-07-10/);
+    expect(result.pricingVersion).toMatch(/^2026-07-12/);
   });
 });
 

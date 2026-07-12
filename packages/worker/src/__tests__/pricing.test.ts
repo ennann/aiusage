@@ -24,6 +24,17 @@ describe('getPricingCatalog', () => {
 // ─── calculateCost: 基本计费 ───
 
 describe('calculateCost: 基本计费', () => {
+  it('Grok Build local usage remains estimated in the Worker', () => {
+    const result = calculateCost('xai', 'grok-build', 'grok-4.5', {
+      inputTokens: 1_000_000,
+      cachedInputTokens: 0,
+      cacheWriteTokens: 0,
+      outputTokens: 1_000_000,
+    });
+    expect(result.estimatedCostUsd).toBe(8);
+    expect(result.costStatus).toBe('estimated');
+  });
+
   it('优先采用 scanner 按请求累计的精确成本', () => {
     const result = calculateIngestBreakdownCost({
       provider: 'openai',
