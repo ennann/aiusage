@@ -144,7 +144,13 @@ export function calculateCost(
     tokens.outputTokens;
 
   if (totalTokens === 0) {
-    return { estimatedCostUsd: 0, costStatus: 'exact', pricingVersion: cat.version };
+    const resolved = resolveModelPricing(cat, provider, product, model);
+    return {
+      estimatedCostUsd: 0,
+      costStatus: resolved?.pricing.force_estimated ? 'estimated' : 'exact',
+      pricingVersion: cat.version,
+      resolvedModel: resolved?.resolvedModel,
+    };
   }
 
   const { baseModel, tier } = splitServiceTierSuffix(model);
@@ -155,7 +161,7 @@ export function calculateCost(
   }
 
   const { resolvedModel, pricing, normalized } = resolved;
-  let costStatus: CostStatus = normalized ? 'estimated' : 'exact';
+  let costStatus: CostStatus = normalized || pricing.force_estimated ? 'estimated' : 'exact';
 
   // 阶梯：按总 input（含 cached/cw）命中档位
   let unit: PricingTier;

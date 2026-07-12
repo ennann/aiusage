@@ -9,8 +9,9 @@ import { zhipu } from './data/zhipu.js';
 import { github } from './data/github.js';
 import { sourcegraph } from './data/sourcegraph.js';
 import { inflection, cursor, droid, opencode } from './data/placeholders.js';
+import { xai } from './data/xai.js';
 
-export const PRICING_VERSION = '2026-07-10-gpt-5.6-v1';
+export const PRICING_VERSION = '2026-07-12-grok-build-v1';
 
 /**
  * 模型别名（精确匹配优先于前缀回退）。
@@ -47,6 +48,7 @@ export const catalog: PricingCatalog = {
     cursor,
     droid,
     opencode,
+    xai,
   },
 };
 

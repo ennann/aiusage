@@ -24,6 +24,7 @@ describe('catalog 结构', () => {
       ['cursor', 'cursor'],
       ['droid', 'droid'],
       ['opencode', 'opencode'],
+      ['xai', 'grok-build'],
     ];
     const missing = required.filter(([p, pr]) => !catalog.providers[p]?.[pr]);
     expect(missing).toEqual([]);
@@ -62,6 +63,17 @@ describe('calculateCost — 关键模型', () => {
     const r = calculateCost('anthropic', 'claude-code', 'totally-unknown', tokens);
     expect(r.costStatus).toBe('unavailable');
     expect(r.estimatedCostUsd).toBe(0);
+  });
+
+  it('Grok Build uses public API prices as an explicit estimate', () => {
+    const r = calculateCost('xai', 'grok-build', 'grok-4.5', {
+      inputTokens: 1_000_000,
+      cachedInputTokens: 0,
+      cacheWriteTokens: 0,
+      outputTokens: 1_000_000,
+    });
+    expect(r.estimatedCostUsd).toBe(8);
+    expect(r.costStatus).toBe('estimated');
   });
 
   it('版本后缀别名（alias）解析为 exact', () => {
