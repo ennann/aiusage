@@ -1,15 +1,15 @@
 import type { Locale } from '../i18n';
-import { convertUsd } from '../hooks/use-cny-rate';
+import { convertUsd, type CurrencyMode } from '../hooks/use-cny-rate';
 
-export function formatUsd(v: number): string {
-  const { value: n, prefix } = convertUsd(Number(v || 0));
+export function formatUsd(v: number, currency: CurrencyMode = 'auto'): string {
+  const { value: n, prefix } = convertUsd(Number(v || 0), currency);
   if (n >= 100) return `${prefix}${n.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
   if (n >= 10) return `${prefix}${n.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}`;
   return `${prefix}${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-export function formatUsdFull(v: number): string {
-  const { value: n, prefix } = convertUsd(Number(v || 0));
+export function formatUsdFull(v: number, currency: CurrencyMode = 'auto'): string {
+  const { value: n, prefix } = convertUsd(Number(v || 0), currency);
   return `${prefix}${n.toFixed(2)}`;
 }
 
@@ -30,6 +30,8 @@ export function formatNumber(v: number): string {
   return new Intl.NumberFormat('en-US').format(Number(v || 0));
 }
 
+/** Tooltip 用：紧凑数字 + 括号完整数字。如 `8.62B (8,621,971,144)`。
+ *  数字 < 1000 时只显示原值，避免冗余如 `42 (42)`。 */
 export function formatTokens(v: number, locale: Locale = 'en'): string {
   const n = Number(v || 0);
   if (n < 1000) return formatNumber(n);

@@ -1,0 +1,1231 @@
+{
+  "version": "2026-07-10-gpt-5.6-v1",
+  "fx": {
+    "CNY": 7.2
+  },
+  "aliases": {
+    "claude-opus-4-7-20260201": "claude-opus-4-7",
+    "claude-sonnet-4-6-20250301": "claude-sonnet-4-6",
+    "claude-opus-4-6-20250301": "claude-opus-4-6",
+    "claude-haiku-4-5-20251001": "claude-haiku-4-5",
+    "claude-sonnet-4.6": "claude-sonnet-4-6",
+    "gpt-5.6": "gpt-5.6-sol",
+    "codex-auto-review": "gpt-5.4"
+  },
+  "providers": {
+    "anthropic": {
+      "claude-code": {
+        "models": {
+          "claude-opus-4-8": {
+            "currency": "USD",
+            "input_per_million": 5,
+            "output_per_million": 25,
+            "cache_write_5m_per_million": 6.25,
+            "cache_write_1h_per_million": 10,
+            "cached_input_per_million": 0.5
+          },
+          "claude-opus-4-7": {
+            "currency": "USD",
+            "input_per_million": 5,
+            "output_per_million": 25,
+            "cache_write_5m_per_million": 6.25,
+            "cache_write_1h_per_million": 10,
+            "cached_input_per_million": 0.5
+          },
+          "claude-opus-4-6": {
+            "currency": "USD",
+            "input_per_million": 5,
+            "output_per_million": 25,
+            "cache_write_5m_per_million": 6.25,
+            "cache_write_1h_per_million": 10,
+            "cached_input_per_million": 0.5
+          },
+          "claude-opus-4-5": {
+            "currency": "USD",
+            "input_per_million": 5,
+            "output_per_million": 25,
+            "cache_write_5m_per_million": 6.25,
+            "cache_write_1h_per_million": 10,
+            "cached_input_per_million": 0.5
+          },
+          "claude-opus-4-1": {
+            "currency": "USD",
+            "input_per_million": 15,
+            "output_per_million": 75,
+            "cache_write_5m_per_million": 18.75,
+            "cache_write_1h_per_million": 30,
+            "cached_input_per_million": 1.5
+          },
+          "claude-opus-4": {
+            "currency": "USD",
+            "notes": "deprecated",
+            "input_per_million": 15,
+            "output_per_million": 75,
+            "cache_write_5m_per_million": 18.75,
+            "cache_write_1h_per_million": 30,
+            "cached_input_per_million": 1.5
+          },
+          "claude-sonnet-4-6": {
+            "currency": "USD",
+            "input_per_million": 3,
+            "output_per_million": 15,
+            "cache_write_5m_per_million": 3.75,
+            "cache_write_1h_per_million": 6,
+            "cached_input_per_million": 0.3
+          },
+          "claude-sonnet-4-5": {
+            "currency": "USD",
+            "input_per_million": 3,
+            "output_per_million": 15,
+            "cache_write_5m_per_million": 3.75,
+            "cache_write_1h_per_million": 6,
+            "cached_input_per_million": 0.3
+          },
+          "claude-sonnet-4": {
+            "currency": "USD",
+            "notes": "deprecated",
+            "input_per_million": 3,
+            "output_per_million": 15,
+            "cache_write_5m_per_million": 3.75,
+            "cache_write_1h_per_million": 6,
+            "cached_input_per_million": 0.3
+          },
+          "claude-haiku-4-5": {
+            "currency": "USD",
+            "input_per_million": 1,
+            "output_per_million": 5,
+            "cache_write_5m_per_million": 1.25,
+            "cache_write_1h_per_million": 2,
+            "cached_input_per_million": 0.1
+          },
+          "claude-haiku-3-5": {
+            "currency": "USD",
+            "notes": "retired except on Bedrock/Vertex",
+            "input_per_million": 0.8,
+            "output_per_million": 4,
+            "cache_write_5m_per_million": 1,
+            "cache_write_1h_per_million": 1.6,
+            "cached_input_per_million": 0.08
+          }
+        }
+      }
+    },
+    "openai": {
+      "codex": {
+        "models": {
+          "gpt-5.6-sol": {
+            "currency": "USD",
+            "notes": "prompts over 272K input tokens bill the full request at long-context rates",
+            "input_per_million": 5,
+            "cached_input_per_million": 0.5,
+            "cache_write_per_million": 6.25,
+            "output_per_million": 30,
+            "tiers": [
+              {
+                "threshold": 272000,
+                "input_per_million": 5,
+                "cached_input_per_million": 0.5,
+                "cache_write_per_million": 6.25,
+                "output_per_million": 30
+              },
+              {
+                "input_per_million": 10,
+                "cached_input_per_million": 1,
+                "cache_write_per_million": 12.5,
+                "output_per_million": 45
+              }
+            ]
+          },
+          "gpt-5.6-terra": {
+            "currency": "USD",
+            "notes": "prompts over 272K input tokens bill the full request at long-context rates",
+            "input_per_million": 2.5,
+            "cached_input_per_million": 0.25,
+            "cache_write_per_million": 3.125,
+            "output_per_million": 15,
+            "tiers": [
+              {
+                "threshold": 272000,
+                "input_per_million": 2.5,
+                "cached_input_per_million": 0.25,
+                "cache_write_per_million": 3.125,
+                "output_per_million": 15
+              },
+              {
+                "input_per_million": 5,
+                "cached_input_per_million": 0.5,
+                "cache_write_per_million": 6.25,
+                "output_per_million": 22.5
+              }
+            ]
+          },
+          "gpt-5.6-luna": {
+            "currency": "USD",
+            "notes": "prompts over 272K input tokens bill the full request at long-context rates",
+            "input_per_million": 1,
+            "cached_input_per_million": 0.1,
+            "cache_write_per_million": 1.25,
+            "output_per_million": 6,
+            "tiers": [
+              {
+                "threshold": 272000,
+                "input_per_million": 1,
+                "cached_input_per_million": 0.1,
+                "cache_write_per_million": 1.25,
+                "output_per_million": 6
+              },
+              {
+                "input_per_million": 2,
+                "cached_input_per_million": 0.2,
+                "cache_write_per_million": 2.5,
+                "output_per_million": 9
+              }
+            ]
+          },
+          "gpt-5.5": {
+            "currency": "USD",
+            "notes": "prompts over 272K input tokens bill the full request at long-context rates",
+            "input_per_million": 5,
+            "cached_input_per_million": 0.5,
+            "output_per_million": 30,
+            "tiers": [
+              {
+                "threshold": 272000,
+                "input_per_million": 5,
+                "cached_input_per_million": 0.5,
+                "output_per_million": 30
+              },
+              {
+                "input_per_million": 10,
+                "cached_input_per_million": 1,
+                "output_per_million": 45
+              }
+            ]
+          },
+          "gpt-5.5-pro": {
+            "currency": "USD",
+            "notes": "prompts over 272K input tokens bill the full request at long-context rates",
+            "input_per_million": 30,
+            "cached_input_per_million": null,
+            "output_per_million": 180,
+            "tiers": [
+              {
+                "threshold": 272000,
+                "input_per_million": 30,
+                "cached_input_per_million": null,
+                "output_per_million": 180
+              },
+              {
+                "input_per_million": 60,
+                "cached_input_per_million": null,
+                "output_per_million": 270
+              }
+            ]
+          },
+          "gpt-5.4": {
+            "currency": "USD",
+            "notes": "prompts over 272K input tokens bill the full request at long-context rates",
+            "input_per_million": 2.5,
+            "cached_input_per_million": 0.25,
+            "output_per_million": 15,
+            "tiers": [
+              {
+                "threshold": 272000,
+                "input_per_million": 2.5,
+                "cached_input_per_million": 0.25,
+                "output_per_million": 15
+              },
+              {
+                "input_per_million": 5,
+                "cached_input_per_million": 0.5,
+                "output_per_million": 22.5
+              }
+            ]
+          },
+          "gpt-5.4-mini": {
+            "currency": "USD",
+            "input_per_million": 0.75,
+            "cached_input_per_million": 0.075,
+            "output_per_million": 4.5
+          },
+          "gpt-5.4-nano": {
+            "currency": "USD",
+            "input_per_million": 0.2,
+            "cached_input_per_million": 0.02,
+            "output_per_million": 1.25
+          },
+          "gpt-5.4-pro": {
+            "currency": "USD",
+            "notes": "prompts over 272K input tokens bill the full request at long-context rates",
+            "input_per_million": 30,
+            "cached_input_per_million": null,
+            "output_per_million": 180,
+            "tiers": [
+              {
+                "threshold": 272000,
+                "input_per_million": 30,
+                "cached_input_per_million": null,
+                "output_per_million": 180
+              },
+              {
+                "input_per_million": 60,
+                "cached_input_per_million": null,
+                "output_per_million": 270
+              }
+            ]
+          },
+          "gpt-5.3-codex": {
+            "currency": "USD",
+            "input_per_million": 1.75,
+            "cached_input_per_million": 0.175,
+            "output_per_million": 14
+          },
+          "gpt-5.2-codex": {
+            "currency": "USD",
+            "input_per_million": 1.75,
+            "cached_input_per_million": 0.175,
+            "output_per_million": 14
+          },
+          "gpt-5.2-pro": {
+            "currency": "USD",
+            "input_per_million": 21,
+            "cached_input_per_million": null,
+            "output_per_million": 168
+          },
+          "gpt-5.2": {
+            "currency": "USD",
+            "input_per_million": 1.75,
+            "cached_input_per_million": 0.175,
+            "output_per_million": 14
+          },
+          "gpt-5.1-codex-max": {
+            "currency": "USD",
+            "input_per_million": 1.25,
+            "cached_input_per_million": 0.125,
+            "output_per_million": 10
+          },
+          "gpt-5.1-codex-mini": {
+            "currency": "USD",
+            "input_per_million": 0.25,
+            "cached_input_per_million": 0.025,
+            "output_per_million": 2
+          },
+          "gpt-5.1-codex": {
+            "currency": "USD",
+            "input_per_million": 1.25,
+            "cached_input_per_million": 0.125,
+            "output_per_million": 10
+          },
+          "gpt-5.1": {
+            "currency": "USD",
+            "input_per_million": 1.25,
+            "cached_input_per_million": 0.125,
+            "output_per_million": 10
+          },
+          "gpt-5-pro": {
+            "currency": "USD",
+            "input_per_million": 15,
+            "cached_input_per_million": null,
+            "output_per_million": 120
+          },
+          "gpt-5-codex": {
+            "currency": "USD",
+            "input_per_million": 1.25,
+            "cached_input_per_million": 0.125,
+            "output_per_million": 10
+          },
+          "gpt-5-mini": {
+            "currency": "USD",
+            "input_per_million": 0.25,
+            "cached_input_per_million": 0.025,
+            "output_per_million": 2
+          },
+          "gpt-5-nano": {
+            "currency": "USD",
+            "input_per_million": 0.05,
+            "cached_input_per_million": 0.005,
+            "output_per_million": 0.4
+          },
+          "gpt-5": {
+            "currency": "USD",
+            "input_per_million": 1.25,
+            "cached_input_per_million": 0.125,
+            "output_per_million": 10
+          },
+          "gpt-4.1": {
+            "currency": "USD",
+            "input_per_million": 2,
+            "cached_input_per_million": 0.5,
+            "output_per_million": 8
+          },
+          "gpt-4.1-mini": {
+            "currency": "USD",
+            "input_per_million": 0.4,
+            "cached_input_per_million": 0.1,
+            "output_per_million": 1.6
+          },
+          "gpt-4.1-nano": {
+            "currency": "USD",
+            "input_per_million": 0.1,
+            "cached_input_per_million": 0.025,
+            "output_per_million": 0.4
+          },
+          "gpt-4o": {
+            "currency": "USD",
+            "input_per_million": 2.5,
+            "cached_input_per_million": 1.25,
+            "output_per_million": 10
+          },
+          "gpt-4o-mini": {
+            "currency": "USD",
+            "input_per_million": 0.15,
+            "cached_input_per_million": 0.075,
+            "output_per_million": 0.6
+          },
+          "gpt-4o-2024-05-13": {
+            "currency": "USD",
+            "input_per_million": 5,
+            "cached_input_per_million": null,
+            "output_per_million": 15
+          },
+          "o1-pro": {
+            "currency": "USD",
+            "input_per_million": 150,
+            "cached_input_per_million": null,
+            "output_per_million": 600
+          },
+          "o1": {
+            "currency": "USD",
+            "input_per_million": 15,
+            "cached_input_per_million": 7.5,
+            "output_per_million": 60
+          },
+          "o1-mini": {
+            "currency": "USD",
+            "input_per_million": 1.1,
+            "cached_input_per_million": 0.55,
+            "output_per_million": 4.4
+          },
+          "o3-pro": {
+            "currency": "USD",
+            "input_per_million": 20,
+            "cached_input_per_million": null,
+            "output_per_million": 80
+          },
+          "o3": {
+            "currency": "USD",
+            "input_per_million": 2,
+            "cached_input_per_million": 0.5,
+            "output_per_million": 8
+          },
+          "o3-mini": {
+            "currency": "USD",
+            "input_per_million": 1.1,
+            "cached_input_per_million": 0.55,
+            "output_per_million": 4.4
+          },
+          "o4-mini": {
+            "currency": "USD",
+            "input_per_million": 1.1,
+            "cached_input_per_million": 0.275,
+            "output_per_million": 4.4
+          },
+          "o3-deep-research": {
+            "currency": "USD",
+            "notes": "corrected from previous 10/40 entry on 2026-05-24",
+            "input_per_million": 5,
+            "cached_input_per_million": null,
+            "output_per_million": 20
+          },
+          "o4-mini-deep-research": {
+            "currency": "USD",
+            "notes": "corrected from previous 2/8 entry on 2026-05-24",
+            "input_per_million": 1,
+            "cached_input_per_million": null,
+            "output_per_million": 4
+          },
+          "computer-use-preview": {
+            "currency": "USD",
+            "notes": "corrected from previous 3/12 entry on 2026-05-24",
+            "input_per_million": 1.5,
+            "cached_input_per_million": null,
+            "output_per_million": 6
+          },
+          "gpt-4-turbo-2024-04-09": {
+            "currency": "USD",
+            "input_per_million": 10,
+            "cached_input_per_million": null,
+            "output_per_million": 30
+          },
+          "gpt-4-0125-preview": {
+            "currency": "USD",
+            "input_per_million": 10,
+            "cached_input_per_million": null,
+            "output_per_million": 30
+          },
+          "gpt-4-1106-preview": {
+            "currency": "USD",
+            "input_per_million": 10,
+            "cached_input_per_million": null,
+            "output_per_million": 30
+          },
+          "gpt-4-1106-vision-preview": {
+            "currency": "USD",
+            "input_per_million": 10,
+            "cached_input_per_million": null,
+            "output_per_million": 30
+          },
+          "gpt-4-0613": {
+            "currency": "USD",
+            "input_per_million": 30,
+            "cached_input_per_million": null,
+            "output_per_million": 60
+          },
+          "gpt-4-0314": {
+            "currency": "USD",
+            "input_per_million": 30,
+            "cached_input_per_million": null,
+            "output_per_million": 60
+          },
+          "gpt-4-32k": {
+            "currency": "USD",
+            "input_per_million": 60,
+            "cached_input_per_million": null,
+            "output_per_million": 120
+          },
+          "gpt-3.5-turbo": {
+            "currency": "USD",
+            "input_per_million": 0.5,
+            "cached_input_per_million": null,
+            "output_per_million": 1.5
+          },
+          "gpt-3.5-turbo-0125": {
+            "currency": "USD",
+            "input_per_million": 0.5,
+            "cached_input_per_million": null,
+            "output_per_million": 1.5
+          },
+          "gpt-3.5-turbo-1106": {
+            "currency": "USD",
+            "input_per_million": 1,
+            "cached_input_per_million": null,
+            "output_per_million": 2
+          },
+          "gpt-3.5-turbo-0613": {
+            "currency": "USD",
+            "input_per_million": 1.5,
+            "cached_input_per_million": null,
+            "output_per_million": 2
+          },
+          "gpt-3.5-0301": {
+            "currency": "USD",
+            "input_per_million": 1.5,
+            "cached_input_per_million": null,
+            "output_per_million": 2
+          },
+          "gpt-3.5-turbo-instruct": {
+            "currency": "USD",
+            "input_per_million": 1.5,
+            "cached_input_per_million": null,
+            "output_per_million": 2
+          },
+          "gpt-3.5-turbo-16k-0613": {
+            "currency": "USD",
+            "input_per_million": 3,
+            "cached_input_per_million": null,
+            "output_per_million": 4
+          },
+          "davinci-002": {
+            "currency": "USD",
+            "input_per_million": 2,
+            "cached_input_per_million": null,
+            "output_per_million": 2
+          },
+          "babbage-002": {
+            "currency": "USD",
+            "input_per_million": 0.4,
+            "cached_input_per_million": null,
+            "output_per_million": 0.4
+          },
+          "codex-mini-latest": {
+            "currency": "USD",
+            "input_per_million": 1.5,
+            "cached_input_per_million": 0.375,
+            "output_per_million": 6
+          },
+          "text-embedding-3-small": {
+            "currency": "USD",
+            "input_per_million": 0.02,
+            "cached_input_per_million": null,
+            "output_per_million": 0
+          },
+          "text-embedding-3-large": {
+            "currency": "USD",
+            "input_per_million": 0.13,
+            "cached_input_per_million": null,
+            "output_per_million": 0
+          },
+          "text-embedding-ada-002": {
+            "currency": "USD",
+            "input_per_million": 0.1,
+            "cached_input_per_million": null,
+            "output_per_million": 0
+          }
+        }
+      }
+    },
+    "google": {
+      "antigravity": {
+        "models": {}
+      },
+      "gemini-cli": {
+        "models": {
+          "gemini-3.5-flash": {
+            "currency": "USD",
+            "input_per_million": 1.5,
+            "output_per_million": 9,
+            "cached_input_per_million": 0.15
+          },
+          "gemini-3.1-pro-preview": {
+            "currency": "USD",
+            "notes": "tiered by prompt length, 200K threshold",
+            "tiers": [
+              {
+                "threshold": 200000,
+                "input_per_million": 2,
+                "cached_input_per_million": 0.2,
+                "output_per_million": 12
+              },
+              {
+                "input_per_million": 4,
+                "cached_input_per_million": 0.4,
+                "output_per_million": 18
+              }
+            ]
+          },
+          "gemini-3.1-flash-lite": {
+            "currency": "USD",
+            "notes": "text/image/video price; audio is $0.50/M",
+            "input_per_million": 0.25,
+            "cached_input_per_million": 0.025,
+            "output_per_million": 1.5
+          },
+          "gemini-3.1-flash-lite-preview": {
+            "currency": "USD",
+            "notes": "text/image/video price",
+            "input_per_million": 0.25,
+            "cached_input_per_million": 0.025,
+            "output_per_million": 1.5
+          },
+          "gemini-3-flash-preview": {
+            "currency": "USD",
+            "notes": "text/image/video price; audio is $1.00/M",
+            "input_per_million": 0.5,
+            "cached_input_per_million": 0.05,
+            "output_per_million": 3
+          },
+          "gemini-2.5-pro": {
+            "currency": "USD",
+            "notes": "tiered by prompt length, 200K threshold",
+            "tiers": [
+              {
+                "threshold": 200000,
+                "input_per_million": 1.25,
+                "cached_input_per_million": 0.125,
+                "output_per_million": 10
+              },
+              {
+                "input_per_million": 2.5,
+                "cached_input_per_million": 0.25,
+                "output_per_million": 15
+              }
+            ]
+          },
+          "gemini-2.5-flash": {
+            "currency": "USD",
+            "notes": "text/image/video price; audio is $1.00/M; corrected from 0.15/0.6 on 2026-05-24",
+            "input_per_million": 0.3,
+            "cached_input_per_million": 0.03,
+            "output_per_million": 2.5
+          },
+          "gemini-2.5-flash-lite": {
+            "currency": "USD",
+            "notes": "text/image/video price; audio is $0.30/M",
+            "input_per_million": 0.1,
+            "cached_input_per_million": 0.01,
+            "output_per_million": 0.4
+          },
+          "gemini-2.5-flash-lite-preview": {
+            "currency": "USD",
+            "input_per_million": 0.1,
+            "cached_input_per_million": 0.01,
+            "output_per_million": 0.4
+          },
+          "gemini-2.5-computer-use-preview": {
+            "currency": "USD",
+            "notes": "tiered by prompt length, 200K threshold",
+            "tiers": [
+              {
+                "threshold": 200000,
+                "input_per_million": 1.25,
+                "output_per_million": 10
+              },
+              {
+                "input_per_million": 2.5,
+                "output_per_million": 15
+              }
+            ]
+          },
+          "gemini-2.0-flash": {
+            "currency": "USD",
+            "notes": "text/image/video price; audio is $0.70/M",
+            "input_per_million": 0.1,
+            "cached_input_per_million": 0.025,
+            "output_per_million": 0.4
+          },
+          "gemini-2.0-flash-lite": {
+            "currency": "USD",
+            "input_per_million": 0.075,
+            "output_per_million": 0.3
+          },
+          "gemini-1.5-pro": {
+            "currency": "USD",
+            "notes": "legacy",
+            "input_per_million": 1.25,
+            "cached_input_per_million": 0.3125,
+            "output_per_million": 5
+          },
+          "gemini-1.5-flash": {
+            "currency": "USD",
+            "notes": "legacy",
+            "input_per_million": 0.075,
+            "cached_input_per_million": 0.01875,
+            "output_per_million": 0.3
+          },
+          "gemini-robotics-er-1.6-preview": {
+            "currency": "USD",
+            "notes": "text/image/video price; audio is $2.00/M",
+            "input_per_million": 1,
+            "output_per_million": 5
+          },
+          "gemini-embedding-2": {
+            "currency": "USD",
+            "notes": "text input only price; image $0.45/M, audio $6.50/M, video $12.00/M",
+            "input_per_million": 0.2,
+            "output_per_million": 0
+          },
+          "gemini-embedding": {
+            "currency": "USD",
+            "input_per_million": 0.15,
+            "output_per_million": 0
+          },
+          "gemini-3.1-flash-live-preview": {
+            "currency": "USD",
+            "notes": "Live API text price; audio/video/image priced separately",
+            "input_per_million": 0.75,
+            "output_per_million": 4.5
+          },
+          "gemini-2.5-flash-native-audio": {
+            "currency": "USD",
+            "notes": "Live API text price; audio is $3.00 input / $12.00 output",
+            "input_per_million": 0.5,
+            "output_per_million": 2
+          },
+          "gemini-3.1-flash-tts-preview": {
+            "currency": "USD",
+            "notes": "text in, audio out",
+            "input_per_million": 1,
+            "output_per_million": 20
+          },
+          "gemini-2.5-flash-preview-tts": {
+            "currency": "USD",
+            "notes": "text in, audio out",
+            "input_per_million": 0.5,
+            "output_per_million": 10
+          },
+          "gemini-2.5-pro-preview-tts": {
+            "currency": "USD",
+            "notes": "text in, audio out",
+            "input_per_million": 1,
+            "output_per_million": 20
+          },
+          "gemini-3.1-flash-image-preview": {
+            "currency": "USD",
+            "notes": "text/image in, image out priced per-image",
+            "input_per_million": 0.5,
+            "output_per_million": 3
+          },
+          "gemini-2.5-flash-image": {
+            "currency": "USD",
+            "notes": "image out priced per-image ($0.039)",
+            "input_per_million": 0.3,
+            "output_per_million": 0
+          },
+          "gemini-3-pro-image-preview": {
+            "currency": "USD",
+            "notes": "image out priced per-image; text-output $12/M",
+            "input_per_million": 2,
+            "output_per_million": 12
+          }
+        }
+      }
+    },
+    "moonshot": {
+      "kimi-code": {
+        "models": {
+          "kimi-k2.6": {
+            "currency": "CNY",
+            "input_per_million": 6.5,
+            "cached_input_per_million": 1.1,
+            "output_per_million": 27
+          },
+          "kimi-k2.5": {
+            "currency": "CNY",
+            "input_per_million": 4,
+            "cached_input_per_million": 0.7,
+            "output_per_million": 21
+          },
+          "kimi-k2-0905-preview": {
+            "currency": "CNY",
+            "notes": "will be retired 2026-05-25",
+            "input_per_million": 4,
+            "cached_input_per_million": 1,
+            "output_per_million": 16
+          },
+          "kimi-k2-0711-preview": {
+            "currency": "CNY",
+            "notes": "will be retired 2026-05-25",
+            "input_per_million": 4,
+            "cached_input_per_million": 1,
+            "output_per_million": 16
+          },
+          "kimi-k2-turbo-preview": {
+            "currency": "CNY",
+            "notes": "will be retired 2026-05-25",
+            "input_per_million": 8,
+            "cached_input_per_million": 1,
+            "output_per_million": 58
+          },
+          "kimi-k2-thinking": {
+            "currency": "CNY",
+            "input_per_million": 4,
+            "cached_input_per_million": 1,
+            "output_per_million": 16
+          },
+          "kimi-k2-thinking-turbo": {
+            "currency": "CNY",
+            "input_per_million": 8,
+            "cached_input_per_million": 1,
+            "output_per_million": 58
+          },
+          "moonshot-v1-8k": {
+            "currency": "CNY",
+            "input_per_million": 2,
+            "output_per_million": 10
+          },
+          "moonshot-v1-32k": {
+            "currency": "CNY",
+            "input_per_million": 5,
+            "output_per_million": 20
+          },
+          "moonshot-v1-128k": {
+            "currency": "CNY",
+            "input_per_million": 10,
+            "output_per_million": 30
+          },
+          "moonshot-v1-8k-vision-preview": {
+            "currency": "CNY",
+            "input_per_million": 2,
+            "output_per_million": 10
+          },
+          "moonshot-v1-32k-vision-preview": {
+            "currency": "CNY",
+            "input_per_million": 5,
+            "output_per_million": 20
+          },
+          "moonshot-v1-128k-vision-preview": {
+            "currency": "CNY",
+            "input_per_million": 10,
+            "output_per_million": 30
+          }
+        }
+      }
+    },
+    "alibaba": {
+      "qwen-code": {
+        "models": {
+          "qwen3-coder-plus": {
+            "currency": "CNY",
+            "notes": "tiered by input length",
+            "tiers": [
+              {
+                "threshold": 32000,
+                "input_per_million": 4,
+                "output_per_million": 16
+              },
+              {
+                "threshold": 128000,
+                "input_per_million": 6,
+                "output_per_million": 24
+              },
+              {
+                "threshold": 256000,
+                "input_per_million": 10,
+                "output_per_million": 40
+              },
+              {
+                "input_per_million": 20,
+                "output_per_million": 200
+              }
+            ]
+          },
+          "qwen3-coder-flash": {
+            "currency": "CNY",
+            "tiers": [
+              {
+                "threshold": 32000,
+                "input_per_million": 1,
+                "output_per_million": 4
+              },
+              {
+                "threshold": 128000,
+                "input_per_million": 1.5,
+                "output_per_million": 6
+              },
+              {
+                "threshold": 256000,
+                "input_per_million": 2,
+                "output_per_million": 8
+              },
+              {
+                "input_per_million": 3,
+                "output_per_million": 30
+              }
+            ]
+          },
+          "qwen-coder-plus": {
+            "currency": "CNY",
+            "input_per_million": 3.5,
+            "output_per_million": 7
+          },
+          "qwen3-max": {
+            "currency": "CNY",
+            "tiers": [
+              {
+                "threshold": 32000,
+                "input_per_million": 2.5,
+                "output_per_million": 10
+              },
+              {
+                "threshold": 128000,
+                "input_per_million": 5,
+                "output_per_million": 20
+              },
+              {
+                "threshold": 256000,
+                "input_per_million": 10,
+                "output_per_million": 100
+              }
+            ]
+          },
+          "qwen-max": {
+            "currency": "CNY",
+            "input_per_million": 2.4,
+            "output_per_million": 9.6
+          },
+          "qwen-plus": {
+            "currency": "CNY",
+            "notes": "cache hit ¥0.8/M",
+            "cached_input_per_million": 0.8,
+            "input_per_million": 2,
+            "output_per_million": 8
+          },
+          "qwen-turbo": {
+            "currency": "CNY",
+            "notes": "cache hit ¥0.3/M",
+            "cached_input_per_million": 0.3,
+            "input_per_million": 0.6,
+            "output_per_million": 3
+          },
+          "qwen3-32b": {
+            "currency": "CNY",
+            "input_per_million": 2,
+            "output_per_million": 8
+          },
+          "qwen3-235b-a22b-thinking-2507": {
+            "currency": "CNY",
+            "input_per_million": 2,
+            "output_per_million": 20
+          },
+          "qwen3-235b-a22b-instruct-2507": {
+            "currency": "CNY",
+            "input_per_million": 2,
+            "output_per_million": 8
+          }
+        }
+      }
+    },
+    "deepseek": {
+      "deepseek-chat": {
+        "models": {
+          "deepseek-v4-flash": {
+            "currency": "USD",
+            "input_per_million": 0.14,
+            "cached_input_per_million": 0.0028,
+            "output_per_million": 0.28
+          },
+          "deepseek-v4-pro": {
+            "currency": "USD",
+            "notes": "75% off promo until 2026-05-31",
+            "input_per_million": 0.435,
+            "cached_input_per_million": 0.003625,
+            "output_per_million": 0.87,
+            "effective_to": "2026-05-31"
+          },
+          "deepseek-chat": {
+            "currency": "USD",
+            "notes": "alias for v4-flash non-thinking",
+            "input_per_million": 0.14,
+            "cached_input_per_million": 0.0028,
+            "output_per_million": 0.28
+          },
+          "deepseek-reasoner": {
+            "currency": "USD",
+            "notes": "alias for v4-flash thinking",
+            "input_per_million": 0.14,
+            "cached_input_per_million": 0.0028,
+            "output_per_million": 0.28
+          }
+        }
+      }
+    },
+    "zhipu": {
+      "glm-chat": {
+        "models": {
+          "glm-5.1": {
+            "currency": "CNY",
+            "tiers": [
+              {
+                "threshold": 32000,
+                "input_per_million": 6,
+                "output_per_million": 24,
+                "cached_input_per_million": 1.3
+              },
+              {
+                "input_per_million": 8,
+                "output_per_million": 28,
+                "cached_input_per_million": 2
+              }
+            ]
+          },
+          "glm-5-turbo": {
+            "currency": "CNY",
+            "tiers": [
+              {
+                "threshold": 32000,
+                "input_per_million": 5,
+                "output_per_million": 22,
+                "cached_input_per_million": 1.2
+              },
+              {
+                "input_per_million": 7,
+                "output_per_million": 26,
+                "cached_input_per_million": 1.8
+              }
+            ]
+          },
+          "glm-5": {
+            "currency": "CNY",
+            "tiers": [
+              {
+                "threshold": 32000,
+                "input_per_million": 4,
+                "output_per_million": 18,
+                "cached_input_per_million": 1
+              },
+              {
+                "input_per_million": 6,
+                "output_per_million": 22,
+                "cached_input_per_million": 1.5
+              }
+            ]
+          },
+          "glm-4.7": {
+            "currency": "CNY",
+            "notes": "output<200 archetype; >200 doubles output rate",
+            "tiers": [
+              {
+                "threshold": 32000,
+                "input_per_million": 2,
+                "output_per_million": 8,
+                "cached_input_per_million": 0.4
+              },
+              {
+                "threshold": 200000,
+                "input_per_million": 4,
+                "output_per_million": 16,
+                "cached_input_per_million": 0.8
+              }
+            ]
+          },
+          "glm-4.5-air": {
+            "currency": "CNY",
+            "tiers": [
+              {
+                "threshold": 32000,
+                "input_per_million": 0.8,
+                "output_per_million": 2,
+                "cached_input_per_million": 0.16
+              },
+              {
+                "threshold": 128000,
+                "input_per_million": 1.2,
+                "output_per_million": 8,
+                "cached_input_per_million": 0.24
+              }
+            ]
+          },
+          "glm-4.7-flashx": {
+            "currency": "CNY",
+            "input_per_million": 0.5,
+            "cached_input_per_million": 0.1,
+            "output_per_million": 3
+          },
+          "glm-4.7-flash": {
+            "currency": "CNY",
+            "notes": "free tier",
+            "input_per_million": 0,
+            "cached_input_per_million": 0,
+            "output_per_million": 0
+          },
+          "glm-4-plus": {
+            "currency": "CNY",
+            "input_per_million": 5,
+            "output_per_million": 5
+          },
+          "glm-4-air": {
+            "currency": "CNY",
+            "input_per_million": 0.5,
+            "output_per_million": 0.5
+          },
+          "glm-4-airx": {
+            "currency": "CNY",
+            "input_per_million": 10,
+            "output_per_million": 10
+          },
+          "glm-4-flashx-250414": {
+            "currency": "CNY",
+            "input_per_million": 0.1,
+            "output_per_million": 0.1
+          },
+          "glm-4-long": {
+            "currency": "CNY",
+            "input_per_million": 1,
+            "output_per_million": 1
+          },
+          "glm-4.5": {
+            "currency": "CNY",
+            "notes": "legacy, 128K context",
+            "input_per_million": 4,
+            "output_per_million": 16
+          },
+          "glm-4.6": {
+            "currency": "CNY",
+            "notes": "legacy, 200K context",
+            "input_per_million": 4,
+            "output_per_million": 16
+          }
+        }
+      }
+    },
+    "github": {
+      "copilot-vscode": {
+        "models": {}
+      },
+      "copilot-cli": {
+        "models": {
+          "gpt-4o": {
+            "currency": "USD",
+            "input_per_million": 2.5,
+            "cached_input_per_million": 1.25,
+            "output_per_million": 10
+          },
+          "gpt-4o-mini": {
+            "currency": "USD",
+            "input_per_million": 0.15,
+            "cached_input_per_million": 0.075,
+            "output_per_million": 0.6
+          },
+          "claude-sonnet-4": {
+            "currency": "USD",
+            "input_per_million": 3,
+            "cached_input_per_million": 0.3,
+            "output_per_million": 15
+          },
+          "claude-sonnet-4-6": {
+            "currency": "USD",
+            "input_per_million": 3,
+            "cached_input_per_million": 0.3,
+            "output_per_million": 15
+          },
+          "o3-mini": {
+            "currency": "USD",
+            "input_per_million": 1.1,
+            "cached_input_per_million": 0.55,
+            "output_per_million": 4.4
+          },
+          "gemini-2.0-flash": {
+            "currency": "USD",
+            "input_per_million": 0.1,
+            "cached_input_per_million": 0.025,
+            "output_per_million": 0.4
+          }
+        }
+      }
+    },
+    "sourcegraph": {
+      "amp": {
+        "models": {
+          "claude-sonnet-4": {
+            "currency": "USD",
+            "input_per_million": 3,
+            "cached_input_per_million": 0.3,
+            "output_per_million": 15
+          },
+          "claude-sonnet-3.7": {
+            "currency": "USD",
+            "input_per_million": 3,
+            "cached_input_per_million": 0.3,
+            "output_per_million": 15
+          },
+          "gemini-2.5-pro": {
+            "currency": "USD",
+            "input_per_million": 1.25,
+            "cached_input_per_million": 0.125,
+            "output_per_million": 10
+          }
+        }
+      }
+    },
+    "inflection": {
+      "pi": {
+        "models": {}
+      }
+    },
+    "cursor": {
+      "cursor": {
+        "models": {}
+      }
+    },
+    "droid": {
+      "droid": {
+        "models": {}
+      }
+    },
+    "opencode": {
+      "opencode": {
+        "models": {}
+      }
+    }
+  }
+}

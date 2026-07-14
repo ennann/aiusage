@@ -14,7 +14,7 @@ import { useIsDark } from '../hooks/use-dark';
 export function TokenCompositionChart({
   data,
   locale,
-  totalLabel = 'Total',
+  totalLabel,
 }: {
   data: OverviewPayload['tokenComposition'];
   locale: Locale;
@@ -44,7 +44,7 @@ export function TokenCompositionChart({
                 labelFormatter={longDate}
                 formatter={(v) => formatTokens(Number(v), locale)}
                 showTotal
-                totalLabel={totalLabel}
+                totalLabel={totalLabel ?? 'Total'}
                 totalFormatter={(v) => formatTokens(v, locale)}
               />
             }

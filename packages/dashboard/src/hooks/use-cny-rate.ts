@@ -2,6 +2,7 @@ import { useEffect, useState, useSyncExternalStore } from 'react';
 
 const CACHE_KEY = 'aiusage_usd_cny_rate';
 const CACHE_TTL = 4 * 3600 * 1000; // 4h
+export type CurrencyMode = 'auto' | 'USD' | 'CNY';
 
 // ── global currency store ──
 
@@ -20,9 +21,10 @@ export function toggleCurrency() {
 export function getShowCny() { return _showCny; }
 export function getCnyRate() { return _rate; }
 
-/** Convert USD amount based on current toggle state */
-export function convertUsd(usd: number): { value: number; prefix: string } {
-  if (_showCny && _rate) return { value: usd * _rate, prefix: '¥' };
+/** Convert USD amount based on current toggle state or an explicit override. */
+export function convertUsd(usd: number, currency: CurrencyMode = 'auto'): { value: number; prefix: string } {
+  const showCny = currency === 'CNY' || (currency === 'auto' && _showCny);
+  if (showCny && _rate) return { value: usd * _rate, prefix: '¥' };
   return { value: usd, prefix: '$' };
 }
 

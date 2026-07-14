@@ -1,4 +1,4 @@
-import { jsonError, jsonOk } from '../utils/response.js';
+import { PUBLIC_READ_CACHE_HEADERS, jsonError, jsonOk } from '../utils/response.js';
 import { toPublicProjectName } from '../utils/privacy.js';
 import type { Env } from '../types.js';
 
@@ -277,7 +277,7 @@ export async function handleOverview(url: URL, env: Env): Promise<Response> {
         projects,
       },
     },
-  }, true);
+  }, true, PUBLIC_READ_CACHE_HEADERS);
 }
 
 export function parseFilters(url: URL): DashboardFilters | null {

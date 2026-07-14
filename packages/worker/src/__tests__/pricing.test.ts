@@ -2,7 +2,12 @@
 //   pnpm --filter @aiusage/worker add -D vitest
 
 import { describe, it, expect } from 'vitest';
-import { calculateCost, getPricingCatalog, getWorstCostStatus } from '../utils/pricing.js';
+import {
+  calculateCost,
+  calculateIngestBreakdownCost,
+  getPricingCatalog,
+  getWorstCostStatus,
+} from '../utils/pricing.js';
 
 // ─── getPricingCatalog ───
 
@@ -19,6 +24,68 @@ describe('getPricingCatalog', () => {
 // ─── calculateCost: 基本计费 ───
 
 describe('calculateCost: 基本计费', () => {
+  it('优先采用 scanner 按请求累计的精确成本', () => {
+    const result = calculateIngestBreakdownCost({
+      provider: 'openai',
+      product: 'codex',
+      channel: 'cli',
+      model: 'gpt-5.6-sol',
+      project: '/tmp/project',
+      eventCount: 2,
+      inputTokens: 500_000,
+      cachedInputTokens: 0,
+      cacheWriteTokens: 0,
+      outputTokens: 20_000,
+      reasoningOutputTokens: 0,
+      costUSD: 5.25,
+      pricingVersion: getPricingCatalog().version,
+    });
+
+    expect(result.estimatedCostUsd).toBe(5.25);
+    expect(result.costStatus).toBe('exact');
+  });
+
+  it('定价版本不一致时拒绝客户端预计算成本', () => {
+    const result = calculateIngestBreakdownCost({
+      provider: 'openai',
+      product: 'codex',
+      channel: 'cli',
+      model: 'gpt-5.6-sol',
+      project: '/tmp/project',
+      eventCount: 2,
+      inputTokens: 500_000,
+      cachedInputTokens: 0,
+      cacheWriteTokens: 0,
+      outputTokens: 20_000,
+      reasoningOutputTokens: 0,
+      costUSD: 5.25,
+      pricingVersion: 'stale-catalog',
+    });
+
+    expect(result.estimatedCostUsd).toBe(3.1);
+    expect(result.costStatus).toBe('estimated');
+  });
+
+  it('忽略旧 scanner 用作缺省值的零成本', () => {
+    const result = calculateIngestBreakdownCost({
+      provider: 'openai',
+      product: 'codex',
+      channel: 'cli',
+      model: 'gpt-5.6-sol',
+      project: '/tmp/project',
+      eventCount: 2,
+      inputTokens: 400_000,
+      cachedInputTokens: 0,
+      cacheWriteTokens: 0,
+      outputTokens: 20_000,
+      reasoningOutputTokens: 0,
+      costUSD: 0,
+    });
+
+    expect(result.estimatedCostUsd).toBe(2.6);
+    expect(result.costStatus).toBe('estimated');
+  });
+
   it('Claude haiku-4-5 基本 input/output 计费', () => {
     // haiku-4-5: input=$1/M, output=$5/M
     const result = calculateCost('anthropic', 'claude-code', 'claude-haiku-4-5', {
@@ -91,54 +158,67 @@ describe('calculateCost: 基本计费', () => {
   });
 
   it('Codex gpt-5.4 基本 input/output 计费', () => {
-    // gpt-5.4: input=$2.5/M, output=$15/M
+    // gpt-5.4 long context: input=$5/M, output=$22.5/M
     const result = calculateCost('openai', 'codex', 'gpt-5.4', {
       inputTokens: 2_000_000,
       cachedInputTokens: 0,
       cacheWriteTokens: 0,
       outputTokens: 500_000,
     });
-    // 2*2.5 + 0.5*15 = 5 + 7.5 = $12.5
-    expect(result.estimatedCostUsd).toBe(12.5);
+    // 2*5 + 0.5*22.5 = $21.25
+    expect(result.estimatedCostUsd).toBe(21.25);
     expect(result.costStatus).toBe('exact');
   });
 
   it('Codex gpt-5.5 基本 input/output 计费', () => {
-    // gpt-5.5: input=$5/M, cached input=$0.50/M, output=$30/M
+    // gpt-5.5 long context: input=$10/M, cached input=$1/M, output=$45/M
     const result = calculateCost('openai', 'codex', 'gpt-5.5', {
       inputTokens: 1_000_000,
       cachedInputTokens: 1_000_000,
       cacheWriteTokens: 0,
       outputTokens: 500_000,
     });
-    // 1*5 + 1*0.5 + 0.5*30 = $20.5
-    expect(result.estimatedCostUsd).toBe(20.5);
+    // 1*10 + 1*1 + 0.5*45 = $33.5
+    expect(result.estimatedCostUsd).toBe(33.5);
+    expect(result.costStatus).toBe('exact');
+  });
+
+  it('Codex auto-review 按 gpt-5.4 估算', () => {
+    const result = calculateCost('openai', 'codex', 'codex-auto-review', {
+      inputTokens: 1_000_000,
+      cachedInputTokens: 1_000_000,
+      cacheWriteTokens: 0,
+      outputTokens: 1_000_000,
+    });
+    // gpt-5.4 long context: 1*5 + 1*0.5 + 1*22.5 = $28
+    expect(result.estimatedCostUsd).toBe(28);
+    // codex-auto-review 是 catalog 里的显式 alias → gpt-5.4，按 exact 处理
     expect(result.costStatus).toBe('exact');
   });
 
   it('Codex gpt-5.6-sol 基本 input/output 计费', () => {
-    // gpt-5.6-sol: input=$5/M, cached input=$0.50/M, output=$30/M
+    // 单请求总 input 超过 272K，使用 long-context 价格：input=$10/M, cached=$1/M, output=$45/M
     const result = calculateCost('openai', 'codex', 'gpt-5.6-sol', {
       inputTokens: 1_000_000,
       cachedInputTokens: 1_000_000,
       cacheWriteTokens: 0,
       outputTokens: 500_000,
     });
-    // 1*5 + 1*0.5 + 0.5*30 = $20.5
-    expect(result.estimatedCostUsd).toBe(20.5);
+    // 1*10 + 1*1 + 0.5*45 = $33.5
+    expect(result.estimatedCostUsd).toBe(33.5);
     expect(result.costStatus).toBe('exact');
   });
 
   it('Codex gpt-5.6-luna 使用低档单价计费', () => {
-    // gpt-5.6-luna: input=$1/M, cached input=$0.10/M, output=$6/M
+    // 单请求总 input 超过 272K，使用 long-context 价格：input=$2/M, cached=$0.20/M, output=$9/M
     const result = calculateCost('openai', 'codex', 'gpt-5.6-luna', {
       inputTokens: 1_000_000,
       cachedInputTokens: 1_000_000,
       cacheWriteTokens: 0,
       outputTokens: 500_000,
     });
-    // 1*1 + 1*0.1 + 0.5*6 = $4.1
-    expect(result.estimatedCostUsd).toBe(4.1);
+    // 1*2 + 1*0.2 + 0.5*9 = $6.7
+    expect(result.estimatedCostUsd).toBe(6.7);
     expect(result.costStatus).toBe('exact');
   });
 });
@@ -210,8 +290,8 @@ describe('calculateCost: 模型别名解析', () => {
       outputTokens: 1_000_000,
     });
     expect(aliased.estimatedCostUsd).toBe(direct.estimatedCostUsd);
-    // 别名解析后 resolvedModel !== baseModel，status 为 estimated
-    expect(aliased.costStatus).toBe('estimated');
+    // 显式 alias 命中视为 exact（catalog 已声明两名等价）
+    expect(aliased.costStatus).toBe('exact');
   });
 
   it('claude-opus-4.6 解析为 claude-opus-4-6', () => {
@@ -252,8 +332,8 @@ describe('calculateCost: 模型别名解析', () => {
 // ─── calculateCost: 模型前缀匹配 ───
 
 describe('calculateCost: 模型前缀匹配', () => {
-  it('claude-sonnet-4-6-20260101 前缀匹配 claude-sonnet-4-6', () => {
-    const prefixed = calculateCost('anthropic', 'claude-code', 'claude-sonnet-4-6-20260101', {
+  it('语义化后缀（如 -bedrock）触发前缀回退 estimated', () => {
+    const prefixed = calculateCost('anthropic', 'claude-code', 'claude-sonnet-4-6-bedrock', {
       inputTokens: 1_000_000,
       cachedInputTokens: 0,
       cacheWriteTokens: 0,
@@ -266,15 +346,42 @@ describe('calculateCost: 模型前缀匹配', () => {
       outputTokens: 1_000_000,
     });
     expect(prefixed.estimatedCostUsd).toBe(direct.estimatedCostUsd);
-    // 前缀匹配时 resolvedModel !== baseModel，应返回 estimated
     expect(prefixed.costStatus).toBe('estimated');
+  });
+
+  it('纯日期后缀不再静默回退（视为独立新版本，未登记则 unavailable）', () => {
+    const r = calculateCost('anthropic', 'claude-code', 'claude-sonnet-4-6-20260101', {
+      inputTokens: 1_000_000,
+      cachedInputTokens: 0,
+      cacheWriteTokens: 0,
+      outputTokens: 1_000_000,
+    });
+    expect(r.costStatus).toBe('unavailable');
   });
 });
 
-// ─── calculateCost: fast 模式 ───
+// ─── calculateCost: fast 模式（白名单 Opus 4.6/4.7） ───
 
 describe('calculateCost: fast 模式', () => {
-  it('model 以 -fast 结尾时费用乘以 6', () => {
+  it('Opus 4.7-fast 应 ×6', () => {
+    const normal = calculateCost('anthropic', 'claude-code', 'claude-opus-4-7', {
+      inputTokens: 1_000_000,
+      cachedInputTokens: 0,
+      cacheWriteTokens: 0,
+      outputTokens: 1_000_000,
+    });
+    const fast = calculateCost('anthropic', 'claude-code', 'claude-opus-4-7-fast', {
+      inputTokens: 1_000_000,
+      cachedInputTokens: 0,
+      cacheWriteTokens: 0,
+      outputTokens: 1_000_000,
+    });
+    expect(fast.estimatedCostUsd).toBe(
+      Math.round(normal.estimatedCostUsd * 6 * 10000) / 10000,
+    );
+  });
+
+  it('非 Opus 4.6/4.7 的 -fast 后缀不应放大（白名单防护）', () => {
     const normal = calculateCost('anthropic', 'claude-code', 'claude-sonnet-4-6', {
       inputTokens: 1_000_000,
       cachedInputTokens: 0,
@@ -287,10 +394,7 @@ describe('calculateCost: fast 模式', () => {
       cacheWriteTokens: 0,
       outputTokens: 1_000_000,
     });
-    // fast = normal * 6
-    expect(fast.estimatedCostUsd).toBe(
-      Math.round(normal.estimatedCostUsd * 6 * 10000) / 10000,
-    );
+    expect(fast.estimatedCostUsd).toBe(normal.estimatedCostUsd);
   });
 });
 

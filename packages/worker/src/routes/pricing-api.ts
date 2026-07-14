@@ -7,6 +7,7 @@ export function handlePricingApi(): Response {
     headers: {
       'Content-Type': 'application/json',
       'Cache-Control': 'public, max-age=3600',
+      'Cloudflare-CDN-Cache-Control': 'public, max-age=3600, stale-while-revalidate=86400',
       ...corsHeaders(),
     },
   });

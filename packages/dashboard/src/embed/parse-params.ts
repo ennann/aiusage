@@ -1,4 +1,6 @@
-import type { EmbedParams, EmbedWidget, EmbedTheme } from './types';
+import type {
+  EmbedParams, EmbedWidget, EmbedTheme, EmbedLocale, EmbedCurrency,
+} from './types';
 
 const VALID_WIDGETS = new Set<EmbedWidget>([
   'stats-row1', 'stats-row2', 'cost-trend', 'token-trend',
@@ -22,8 +24,13 @@ export function parseEmbedParams(search: string): EmbedParams {
   const theme: EmbedTheme =
     rawTheme === 'light' || rawTheme === 'dark' ? rawTheme : 'auto';
 
-  const rawLocale = p.get('locale') ?? 'en';
-  const locale = rawLocale === 'zh' ? 'zh' : 'en';
+  const rawLocale = p.get('locale');
+  const locale: EmbedLocale =
+    rawLocale === 'auto' || rawLocale === 'en' || rawLocale === 'zh' ? rawLocale : 'en';
+
+  const rawCurrency = (p.get('currency') ?? 'auto').toUpperCase();
+  const currency: EmbedCurrency =
+    rawCurrency === 'USD' || rawCurrency === 'CNY' ? rawCurrency : 'auto';
 
   return {
     widget,
@@ -32,7 +39,14 @@ export function parseEmbedParams(search: string): EmbedParams {
     theme,
     transparent: p.get('transparent') === '1' || p.get('transparent') === 'true',
     locale,
+    currency,
     deviceId: p.get('deviceId') ?? '',
     product: p.get('product') ?? '',
   };
+}
+
+export function buildEmbedUrl(origin: string, params: URLSearchParams): string {
+  const url = new URL('/embed', origin);
+  url.search = params.toString();
+  return url.toString();
 }

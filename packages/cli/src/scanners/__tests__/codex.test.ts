@@ -124,6 +124,105 @@ describe('Fix 1: non-cached input cost formula', () => {
   });
 });
 
+describe('Codex tiered pricing', () => {
+  it('accumulates mixed short and long requests at their individual tiers', async () => {
+    const day = '2026-07-10';
+    const sessionDir = join(tmpDir, 'sessions', '2026', '07', '10');
+    const lines = [
+      ...tokenCountEvent(
+        `${day}T10:00:00.000Z`,
+        { input: 100_000, cached: 0, output: 10_000 },
+        { input: 100_000, cached: 0, output: 10_000 },
+        'gpt-5.6-sol',
+      ),
+      ...tokenCountEvent(
+        `${day}T10:05:00.000Z`,
+        { input: 400_000, cached: 0, output: 10_000 },
+        { input: 500_000, cached: 0, output: 20_000 },
+        'gpt-5.6-sol',
+      ),
+    ];
+    await writeSession(sessionDir, 'rollout-test.jsonl', lines);
+
+    const [result] = await scanCodex(day, tmpDir);
+    expect(result.eventCount).toBe(2);
+    expect(result.inputTokens).toBe(500_000);
+    expect(result.outputTokens).toBe(20_000);
+    expect(result.costUSD).toBeCloseTo(5.25, 4);
+    expect(result.pricingVersion).toMatch(/^2026-07-10/);
+  });
+});
+
+describe('Codex service tier', () => {
+  it('adds priority suffix for GPT-5.6 Codex usage', async () => {
+    const day = '2026-07-10';
+    await writeFile(join(tmpDir, 'config.toml'), 'service_tier = "priority"\n');
+    const sessionDir = join(tmpDir, 'sessions', '2026', '07', '10');
+    const events = tokenCountEvent(
+      `${day}T10:00:00.000Z`,
+      { input: 10000, cached: 8000, output: 500 },
+      { input: 10000, cached: 8000, output: 500 },
+      'gpt-5.6-sol',
+    );
+    await writeSession(sessionDir, 'rollout-test.jsonl', events);
+
+    const results = await scanCodex(day, tmpDir);
+    expect(results).toHaveLength(1);
+    expect(results[0].model).toBe('gpt-5.6-sol-priority');
+  });
+
+  it('does not add fast suffix to GPT-5.6 while Codex Fast is unsupported', async () => {
+    const day = '2026-07-10';
+    await writeFile(join(tmpDir, 'config.toml'), 'service_tier = "fast"\n');
+    const sessionDir = join(tmpDir, 'sessions', '2026', '07', '10');
+    const events = tokenCountEvent(
+      `${day}T10:00:00.000Z`,
+      { input: 10000, cached: 8000, output: 500 },
+      { input: 10000, cached: 8000, output: 500 },
+      'gpt-5.6-sol',
+    );
+    await writeSession(sessionDir, 'rollout-test.jsonl', events);
+
+    const results = await scanCodex(day, tmpDir);
+    expect(results).toHaveLength(1);
+    expect(results[0].model).toBe('gpt-5.6-sol');
+  });
+
+  it('adds priority suffix for supported GPT-5.5 Codex usage', async () => {
+    const day = '2026-06-22';
+    await writeFile(join(tmpDir, 'config.toml'), 'service_tier = "priority"\n');
+    const sessionDir = join(tmpDir, 'sessions', '2026', '06', '22');
+    const events = tokenCountEvent(
+      `${day}T10:00:00.000Z`,
+      { input: 10000, cached: 8000, output: 500 },
+      { input: 10000, cached: 8000, output: 500 },
+      'gpt-5.5',
+    );
+    await writeSession(sessionDir, 'rollout-test.jsonl', events);
+
+    const results = await scanCodex(day, tmpDir);
+    expect(results).toHaveLength(1);
+    expect(results[0].model).toBe('gpt-5.5-priority');
+  });
+
+  it('does not add service tier suffix to unsupported Codex models', async () => {
+    const day = '2026-06-22';
+    await writeFile(join(tmpDir, 'config.toml'), 'service_tier = "priority"\n');
+    const sessionDir = join(tmpDir, 'sessions', '2026', '06', '22');
+    const events = tokenCountEvent(
+      `${day}T10:00:00.000Z`,
+      { input: 10000, cached: 8000, output: 500 },
+      { input: 10000, cached: 8000, output: 500 },
+      'codex-auto-review',
+    );
+    await writeSession(sessionDir, 'rollout-test.jsonl', events);
+
+    const results = await scanCodex(day, tmpDir);
+    expect(results).toHaveLength(1);
+    expect(results[0].model).toBe('codex-auto-review');
+  });
+});
+
 // ─── Fix 2: deduplicate events with identical total_token_usage ───
 
 describe('Fix 2: deduplication of duplicate events', () => {
@@ -215,6 +314,51 @@ describe('Fix 2: deduplication of duplicate events', () => {
     expect(results[0].inputTokens).toBe(2000);     // (3000-2000) + (4000-3000)
     expect(results[0].cachedInputTokens).toBe(5000); // 2000 + 3000
     expect(results[0].outputTokens).toBe(250);       // 100 + 150
+  });
+
+  it('does not drop real turns across sessions that each start with a zero total', async () => {
+    const day = '2025-10-16';
+    const dir = join(tmpDir, 'sessions', '2025', '10', '16');
+    // 两个独立会话，开头都带一个全零 total（会话开头噪声）。
+    // 旧逻辑下第二个会话的全零会命中第一个的签名而被丢弃，进而连累后续 delta 计算；
+    // 修复后全零不参与去重，两个会话的真实 turn 都应保留。
+    const zeroEvent = (ts: string) => ({
+      type: 'event_msg',
+      timestamp: ts,
+      payload: {
+        type: 'token_count',
+        info: {
+          last_token_usage: { input_tokens: 0, cached_input_tokens: 0, output_tokens: 0 },
+          total_token_usage: { input_tokens: 0, cached_input_tokens: 0, output_tokens: 0 },
+        },
+      },
+    });
+    const realEvent = (ts: string, out: number) => ({
+      type: 'event_msg',
+      timestamp: ts,
+      payload: {
+        type: 'token_count',
+        info: {
+          last_token_usage: { input_tokens: 100, cached_input_tokens: 50, output_tokens: out },
+          total_token_usage: { input_tokens: 100, cached_input_tokens: 50, output_tokens: out },
+        },
+      },
+    });
+    const ctx = { type: 'turn_context', payload: { model: 'gpt-5-codex', cwd: '/p' } };
+    await writeSession(dir, 'session-a.jsonl', [
+      { ...ctx, timestamp: `${day}T10:00:00.000Z` },
+      zeroEvent(`${day}T10:00:00.500Z`),
+      realEvent(`${day}T10:00:05.000Z`, 80),
+    ]);
+    await writeSession(dir, 'session-b.jsonl', [
+      { ...ctx, timestamp: `${day}T11:00:00.000Z` },
+      zeroEvent(`${day}T11:00:00.500Z`),
+      realEvent(`${day}T11:00:05.000Z`, 120),
+    ]);
+
+    const results = await scanCodex(day, tmpDir);
+    expect(results[0].eventCount).toBe(2); // 两个会话各 1 笔真实 turn，全零不计
+    expect(results[0].outputTokens).toBe(200); // 80 + 120
   });
 });
 

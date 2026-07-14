@@ -4,6 +4,7 @@ import { handleIngest } from './routes/ingest.js';
 import { handleOverview } from './routes/overview.js';
 import { handleBreakdowns } from './routes/breakdowns.js';
 import { handlePricingApi } from './routes/pricing-api.js';
+import { handleTextTokens } from './routes/text-metrics.js';
 import { corsHeaders, jsonError } from './utils/response.js';
 import type { Env } from './types.js';
 
@@ -13,7 +14,10 @@ export default {
     const { pathname } = url;
 
     // CORS preflight
-    if (request.method === 'OPTIONS' && pathname.startsWith('/api/v1/public/')) {
+    if (
+      request.method === 'OPTIONS' &&
+      (pathname.startsWith('/api/v1/public/') || pathname.startsWith('/api/pricing/'))
+    ) {
       return new Response(null, { status: 204, headers: corsHeaders() });
     }
 
@@ -38,6 +42,11 @@ export default {
         return new Response(null, { status: 204 });
       }
 
+      if (pathname === '/pricing' || pathname === '/embed/docs') {
+        const indexUrl = new URL('/index.html', url);
+        return env.ASSETS.fetch(new Request(indexUrl.toString(), request));
+      }
+
       // ── 设备接口 ──
       if (pathname === '/api/v1/health' && request.method === 'GET') {
         return handleHealth(env);
@@ -56,7 +65,13 @@ export default {
       if (pathname === '/api/v1/public/breakdowns' && request.method === 'GET') {
         return handleBreakdowns(url, env);
       }
+      if (pathname === '/api/v1/public/text/tokens' && request.method === 'GET') {
+        return handleTextTokens(url, env);
+      }
       if (pathname === '/api/v1/public/pricing' && request.method === 'GET') {
+        return handlePricingApi();
+      }
+      if (pathname === '/api/pricing/catalog' && request.method === 'GET') {
         return handlePricingApi();
       }
 

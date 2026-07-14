@@ -59,6 +59,7 @@ interface ChartTooltipContentProps extends React.HTMLAttributes<HTMLDivElement> 
   indicator?: 'dot' | 'line';
   labelFormatter?: (label: string) => React.ReactNode;
   formatter?: (value: number | string, name: string) => React.ReactNode;
+  /** 在 series 列表底部追加一行汇总（payload 各项 value 求和后用 totalFormatter 渲染）。 */
   showTotal?: boolean;
   totalLabel?: string;
   totalFormatter?: (value: number) => React.ReactNode;

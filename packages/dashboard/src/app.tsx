@@ -428,6 +428,14 @@ export function App() {
     }));
   }, [overview, t, locale, isDark]);
   const unavailable = metricAvailability.tokenMetricsUnavailable;
+  const costDivisor = overview
+    ? (overview.totalSessions > 0
+      ? overview.totalSessions
+      : (overview.costBearingEvents ?? overview.totalEvents))
+    : 0;
+  const costPerSession = overview && costDivisor > 0
+    ? overview.totalCostUsd / costDivisor
+    : 0;
   const activityHeatmap = useMemo(() => buildActivityHeatmapData({
     heatmap: overview?.heatmap ?? [],
     dailyTrend: overview?.dailyTrend ?? [],
@@ -460,6 +468,16 @@ export function App() {
         </div>
 
       </header>
+
+      {isDemo && (
+        <div
+          role="status"
+          className="mb-4 flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[13px] text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200"
+        >
+          <span aria-hidden className="inline-block h-1.5 w-1.5 rounded-full bg-amber-500" />
+          {t.demoBanner}
+        </div>
+      )}
 
         {/* ── Range + Filters (desktop) ── */}
         <div className="mt-2 mb-6 hidden sm:flex sm:flex-wrap sm:items-center sm:gap-x-4 sm:gap-y-2">
@@ -610,7 +628,7 @@ export function App() {
               />
             </div>
             <div className="card">
-              <KpiCard label={t.costPerSession} value={unavailable ? t.unavailable : formatUsd(kpis?.costPerSession ?? 0)} />
+              <KpiCard label={t.costPerSession} value={unavailable ? t.unavailable : formatUsd(costPerSession)} />
             </div>
             <div className="card">
               <KpiCard label={t.avgDailyCost} value={unavailable ? t.unavailable : formatUsd(overview?.averageDailyCostUsd ?? 0)} />
@@ -629,7 +647,7 @@ export function App() {
           {/* ── Activity Heatmap ── */}
           <div className="card fade-up p-6" style={{ animationDelay: '120ms' }}>
             <SectionHeader title={locale === 'zh' ? '年度活跃热力图' : 'Activity Heatmap'} />
-            <ActivityHeatmap days={activityHeatmap.days} metricLabel={activityHeatmap.metricLabel} />
+            <ActivityHeatmap days={activityHeatmap.days} metricLabel={activityHeatmap.metricLabel} locale={locale} />
           </div>
 
           {overview?.interactionMetrics && (
@@ -657,16 +675,14 @@ export function App() {
             {unavailable ? (
               <EmptyState label={t.tokenUnavailable} />
             ) : (
-              <>
-                <ChartBoundary name="Token Trend">
-                  <TokenTrendChart
-                    data={overview?.tokenComposition ?? []}
-                    locale={locale}
-                    totalLabel={t.total}
-                    legendItems={tokenLegend}
-                  />
-                </ChartBoundary>
-              </>
+              <ChartBoundary name="Token Trend">
+                <TokenTrendChart
+                  data={overview?.tokenComposition ?? []}
+                  locale={locale}
+                  totalLabel={t.total}
+                  legendItems={tokenLegend}
+                />
+              </ChartBoundary>
             )}
           </div>
 

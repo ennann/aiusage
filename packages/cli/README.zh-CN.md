@@ -50,7 +50,7 @@ aiusage project alias --remove myapp    # 移除别名
 本地用量报告，无需服务端。
 
 ```bash
-aiusage report                          # 默认: 最近 7 天，英文，紧凑模式
+aiusage report                          # 默认: 最近 7 天 + 今天，英文，紧凑模式
 aiusage report --range 1m               # 最近 30 天
 aiusage report --range 3m               # 最近 90 天
 aiusage report --range all              # 全部历史
@@ -62,13 +62,29 @@ aiusage report --json                   # JSON 输出
 
 **紧凑模式**（默认）显示来源和每日汇总表，合并缓存列，保留 2 位小数成本。**详细模式**（`--detail`）展开所有列（CacheRead、CacheWrite、Reasoning），增加热门模型和定价说明，显示 4 位小数成本。
 
-### scan
+### 统一日期参数
 
-扫描单日数据并打印明细。
+`scan`、`report`、`sync` 使用同一套日期参数：
 
 ```bash
-aiusage scan --date 2026-03-31
-aiusage scan --date 2026-03-31 --json
+aiusage scan --today                    # 仅今天
+aiusage report --date 2026-03-31        # 指定日期
+aiusage sync --range 1m                 # 最近 30 天
+aiusage sync --lookback 14              # 最近 14 天 + 今天
+aiusage scan --from 2025-01-01 --to 2026-04-05
+```
+
+使用 `--range 1m`，不要写成 `range -1m`。`report` 额外支持 `--range all`；`scan` 和 `sync` 如需很长历史范围，请明确使用 `--from/--to`。
+
+### scan
+
+扫描本地用量数据并打印明细。
+
+```bash
+aiusage scan                            # 昨天
+aiusage scan --date 2026-03-31          # 指定日期
+aiusage scan --range 1m                 # 最近 30 天
+aiusage scan --date 2026-03-31 --json   # JSON 输出
 ```
 
 省略 `--date` 时默认扫描昨天。
@@ -81,6 +97,7 @@ aiusage scan --date 2026-03-31 --json
 aiusage sync                   # 最近 7 天 + 今天
 aiusage sync --today           # 仅今天
 aiusage sync --date 2026-03-31 # 指定日期
+aiusage sync --range 1m        # 最近 30 天
 aiusage sync --lookback 14     # 最近 14 天 + 今天
 aiusage sync --from 2025-01-01 --to 2026-04-05  # 指定日期范围
 ```

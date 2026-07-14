@@ -1,8 +1,8 @@
-import { readdir, open, stat } from 'node:fs/promises';
+import { readdir, open, readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { createInterface } from 'node:readline';
-import type { IngestBreakdown } from '@aiusage/shared';
+import { calculateCost, type IngestBreakdown } from '@aiusage/shared';
 import { normalizeModelName, runWithConcurrency, resolveProjectFields, type ProjectFields } from './utils.js';
 
 const FILE_CONCURRENCY = 16;
@@ -44,6 +44,8 @@ function resolveCodexModelMeta(rawModel: string): CodexModelMeta {
   return { provider: 'openai', product: 'codex', model: normalizeModelName(rawModel) };
 }
 
+type CodexServiceTier = 'fast' | 'priority' | null;
+
 interface CodexRecord {
   type?: string;
   timestamp?: string;
@@ -69,6 +71,7 @@ interface TokenUsage {
 interface CodexSessionFile {
   path: string;
   isArchived: boolean;
+  serviceTier: CodexServiceTier;
 }
 
 export async function scanCodex(
@@ -92,7 +95,9 @@ export async function scanCodexDates(
   const baseDirs = resolveCodexDirs(codexDir);
 
   const sessionFiles = (
-    await Promise.all(baseDirs.map((baseDir) => collectSessionFiles(baseDir)))
+    await Promise.all(baseDirs.map(async (baseDir) => (
+      collectSessionFiles(baseDir, await detectCodexServiceTier(baseDir))
+    )))
   ).flat();
   if (sessionFiles.length === 0) {
     return new Map([...targetDateSet].map((targetDate) => [targetDate, []]));
@@ -160,7 +165,7 @@ async function processCodexFile(
         // 过滤合成消息
         if (rawModel !== '<synthetic>') {
           const meta = resolveCodexModelMeta(rawModel);
-          currentModel = meta.model;
+          currentModel = applyCodexServiceTier(meta.model, file.serviceTier);
           currentProvider = meta.provider;
           currentProduct = meta.product;
         }
@@ -181,8 +186,18 @@ async function processCodexFile(
       const usageDate = toDateKey(ts);
       if (!targetDateSet.has(usageDate)) continue;
 
-      // 按 total_token_usage 签名跨文件全局去重
+      // 跨文件全局去重：total_token_usage 在会话内单调累加，相同的非零累计值
+      // 只可能来自 fork/resume 复制行或重复 emit，可安全去重。
       const total = info.total_token_usage;
+      const totalSum =
+        (total.input_tokens ?? 0) +
+        (total.cached_input_tokens ?? 0) +
+        (total.output_tokens ?? 0) +
+        (total.reasoning_output_tokens ?? 0) +
+        (total.total_tokens ?? 0);
+      // 全零累计是每个会话开头都有的噪声，跨会话签名相同会被误杀，
+      // 故全零既不参与去重也不计入用量（last 也必为 0，无影响）。
+      if (totalSum === 0) continue;
       const signature = `${total.input_tokens ?? 0}|${total.cached_input_tokens ?? 0}|${total.output_tokens ?? 0}|${total.reasoning_output_tokens ?? 0}|${total.total_tokens ?? 0}`;
       if (globalSeenSigs.has(signature)) continue;
       globalSeenSigs.add(signature);
@@ -199,6 +214,18 @@ async function processCodexFile(
       // In Codex JSONL, input_tokens includes cached_input_tokens.
       // Subtract to get the non-cached portion so cost formula works uniformly.
       const nonCachedInput = Math.max(0, (last.input_tokens ?? 0) - (last.cached_input_tokens ?? 0));
+      const cachedInput = last.cached_input_tokens ?? 0;
+      const output = last.output_tokens ?? 0;
+      const pricingProduct = currentProvider === 'anthropic' && currentProduct === 'codex'
+        ? 'claude-code'
+        : currentProduct;
+      const eventCost = calculateCost(currentProvider, pricingProduct, currentModel, {
+        inputTokens: nonCachedInput,
+        cachedInputTokens: cachedInput,
+        cacheWriteTokens: 0,
+        outputTokens: output,
+      });
+      const exactEventCost = eventCost.costStatus === 'exact' ? eventCost.estimatedCostUsd : undefined;
 
       const grouped = groupedByDate.get(usageDate);
       if (!grouped) continue;
@@ -208,11 +235,15 @@ async function processCodexFile(
       if (existing) {
         existing.eventCount += 1;
         existing.inputTokens += nonCachedInput;
-        existing.cachedInputTokens += last.cached_input_tokens ?? 0;
-        existing.outputTokens += last.output_tokens ?? 0;
+        existing.cachedInputTokens += cachedInput;
+        existing.outputTokens += output;
         existing.reasoningOutputTokens += last.reasoning_output_tokens ?? 0;
+        if (exactEventCost !== undefined) {
+          existing.costUSD = (existing.costUSD ?? 0) + exactEventCost;
+          existing.pricingVersion = eventCost.pricingVersion;
+        }
       } else {
-        grouped.set(key, {
+        const breakdown: IngestBreakdown = {
           provider: currentProvider,
           product: currentProduct,
           channel: 'cli',
@@ -222,11 +253,16 @@ async function processCodexFile(
           projectAlias: currentProjectFields.projectAlias,
           eventCount: 1,
           inputTokens: nonCachedInput,
-          cachedInputTokens: last.cached_input_tokens ?? 0,
+          cachedInputTokens: cachedInput,
           cacheWriteTokens: 0,
-          outputTokens: last.output_tokens ?? 0,
+          outputTokens: output,
           reasoningOutputTokens: last.reasoning_output_tokens ?? 0,
-        });
+        };
+        if (exactEventCost !== undefined) {
+          breakdown.costUSD = exactEventCost;
+          breakdown.pricingVersion = eventCost.pricingVersion;
+        }
+        grouped.set(key, breakdown);
       }
     }
   } finally {
@@ -234,7 +270,10 @@ async function processCodexFile(
   }
 }
 
-async function collectSessionFiles(baseDir: string): Promise<CodexSessionFile[]> {
+async function collectSessionFiles(
+  baseDir: string,
+  serviceTier: CodexServiceTier,
+): Promise<CodexSessionFile[]> {
   const paths: CodexSessionFile[] = [];
 
   // archived_sessions/*.jsonl
@@ -242,18 +281,57 @@ async function collectSessionFiles(baseDir: string): Promise<CodexSessionFile[]>
   try {
     const files = await readdir(archivedDir);
     for (const f of files) {
-      if (f.endsWith('.jsonl')) paths.push({ path: join(archivedDir, f), isArchived: true });
+      if (f.endsWith('.jsonl')) {
+        paths.push({ path: join(archivedDir, f), isArchived: true, serviceTier });
+      }
     }
   } catch { /* ignore */ }
 
   // sessions/**/*.jsonl (递归)
   const sessionsDir = join(baseDir, 'sessions');
-  await walkDir(sessionsDir, paths, false);
+  await walkDir(sessionsDir, paths, false, serviceTier);
 
   return paths;
 }
 
-async function walkDir(dir: string, result: CodexSessionFile[], isArchived: boolean): Promise<void> {
+async function detectCodexServiceTier(baseDir: string): Promise<CodexServiceTier> {
+  let config = '';
+  try {
+    config = await readFile(join(baseDir, 'config.toml'), 'utf-8');
+  } catch {
+    return null;
+  }
+
+  const serviceTier = config.match(/^\s*service_tier\s*=\s*["']([^"']+)["']/m)?.[1]?.trim().toLowerCase();
+  if (serviceTier === 'priority') return 'priority';
+  if (serviceTier === 'fast') return 'fast';
+
+  const fastMode = config.match(/^\s*fast_mode\s*=\s*(true|false)\s*$/m)?.[1];
+  return fastMode === 'true' ? 'fast' : null;
+}
+
+function applyCodexServiceTier(model: string, serviceTier: CodexServiceTier): string {
+  if (!serviceTier) return model;
+  if (model.endsWith('-fast') || model.endsWith('-priority')) return model;
+  const supportsFast = model === 'gpt-5.5' || model === 'gpt-5.4';
+  const supportsPriority =
+    model === 'gpt-5.6' ||
+    model === 'gpt-5.6-sol' ||
+    model === 'gpt-5.6-terra' ||
+    model === 'gpt-5.6-luna' ||
+    supportsFast;
+  if ((serviceTier === 'fast' && supportsFast) || (serviceTier === 'priority' && supportsPriority)) {
+    return `${model}-${serviceTier}`;
+  }
+  return model;
+}
+
+async function walkDir(
+  dir: string,
+  result: CodexSessionFile[],
+  isArchived: boolean,
+  serviceTier: CodexServiceTier,
+): Promise<void> {
   let entries;
   try {
     entries = await readdir(dir, { withFileTypes: true });
@@ -263,9 +341,9 @@ async function walkDir(dir: string, result: CodexSessionFile[], isArchived: bool
   for (const entry of entries) {
     const fullPath = join(dir, entry.name);
     if (entry.isDirectory()) {
-      await walkDir(fullPath, result, isArchived);
+      await walkDir(fullPath, result, isArchived, serviceTier);
     } else if (entry.name.endsWith('.jsonl')) {
-      result.push({ path: fullPath, isArchived });
+      result.push({ path: fullPath, isArchived, serviceTier });
     }
   }
 }

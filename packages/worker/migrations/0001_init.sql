@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS daily_usage_breakdown (
   model TEXT NOT NULL DEFAULT 'unknown',
   project TEXT NOT NULL DEFAULT 'unknown',
   event_count INTEGER NOT NULL DEFAULT 0,
+  session_count INTEGER NOT NULL DEFAULT 0,
   input_tokens INTEGER NOT NULL DEFAULT 0,
   cached_input_tokens INTEGER NOT NULL DEFAULT 0,
   cache_write_tokens INTEGER NOT NULL DEFAULT 0,

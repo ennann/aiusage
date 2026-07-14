@@ -49,6 +49,24 @@ export interface IngestBreakdown {
   outputTokens: number;
   reasoningOutputTokens: number;
   costUSD?: number;
+  pricingVersion?: string;
+}
+
+export interface IngestActivityDay {
+  items: IngestActivityItem[];
+}
+
+export interface IngestActivityItem {
+  provider: Provider;
+  product: Product;
+  source: string;
+  project: string;
+  projectDisplay?: string;
+  projectAlias?: string;
+  kind: string;
+  name: string;
+  count: number;
+  confidence: 'exact' | 'proxy';
 }
 
 export interface IngestActivityDay {

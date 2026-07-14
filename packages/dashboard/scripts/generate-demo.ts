@@ -12,6 +12,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { IngestBreakdown } from '../../shared/src/types.ts';
 import { readConfig } from '../../cli/src/config.ts';
+import { buildActivityReport } from '../../cli/src/activity.ts';
 import { calculateBreakdownCost } from '../../cli/src/report.ts';
 import { scanDates } from '../../cli/src/scan.ts';
 
@@ -113,6 +114,15 @@ interface AggregateEntry {
   eventCount: number;
 }
 
+function toInteractionItems(rows: Array<{ key: string; label: string; count: number; proxyCount: number }>) {
+  return rows.map(row => ({
+    value: row.key,
+    label: row.label,
+    eventCount: row.count,
+    ...(row.proxyCount > 0 ? { proxyCount: row.proxyCount } : {}),
+  }));
+}
+
 async function main() {
   const lookbackDays = getLookbackDays();
   const requestedDates = buildTrailingDates(lookbackDays);
@@ -143,6 +153,7 @@ async function main() {
     outputTokens: 0,
     reasoningOutputTokens: 0,
     estimatedCostUsd: 0,
+    sessionCount: 0,
   };
 
   const byModel = new Map<string, AggregateEntry>();
@@ -179,6 +190,7 @@ async function main() {
       totals.outputTokens += breakdown.outputTokens;
       totals.reasoningOutputTokens += breakdown.reasoningOutputTokens;
       totals.estimatedCostUsd += estimatedCostUsd;
+      totals.sessionCount += breakdown.sessionCount ?? 0;
 
       byModel.set(sourceKey, {
         estimatedCostUsd: (byModel.get(sourceKey)?.estimatedCostUsd ?? 0) + estimatedCostUsd,
@@ -274,6 +286,11 @@ async function main() {
     }))
     .sort((a, b) => b.estimatedCostUsd - a.estimatedCostUsd || b.eventCount - a.eventCount);
 
+  const activity = await buildActivityReport('all', {
+    dates: requestedDates,
+    projectAliases: config.projectAliases,
+  });
+
   const topProjectSet = new Set(
     [...projectTokens.entries()]
       .sort((a, b) => b[1] - a[1])
@@ -311,6 +328,7 @@ async function main() {
     totalDays: requestedDates.length,
     activeDays,
     totalEvents: totals.eventCount,
+    totalSessions: totals.sessionCount,
     totalCostUsd: roundUsd(totals.estimatedCostUsd),
     averageDailyCostUsd: activeDays > 0 ? roundUsd(totals.estimatedCostUsd / activeDays) : 0,
     dailyTrend,
@@ -326,6 +344,23 @@ async function main() {
       }),
     },
     heatmap,
+    interactionMetrics: {
+      exactCount: activity.totals.exactCount,
+      proxyCount: activity.totals.proxyCount,
+      userMessageCount: activity.totals.userMessageCount,
+      functionCallCount: activity.byKind.find(row => row.key === 'function_call')?.count ?? 0,
+      toolCallCount:
+        (activity.byKind.find(row => row.key === 'tool_call')?.count ?? 0) +
+        (activity.byKind.find(row => row.key === 'custom_tool_call')?.count ?? 0) +
+        (activity.byKind.find(row => row.key === 'mcp_tool_call')?.count ?? 0),
+      skillCallCount: activity.byKind.find(row => row.key === 'skill_call')?.count ?? 0,
+      skillProxyCount: activity.byKind.find(row => row.key === 'skill_proxy')?.count ?? 0,
+      subagentCount: activity.byKind.find(row => row.key === 'agent_call')?.count ?? 0,
+      topTools: toInteractionItems(activity.topTools),
+      topSkills: toInteractionItems(activity.topSkills),
+      topAgents: toInteractionItems(activity.topAgents),
+      kindShare: toInteractionItems(activity.byKind),
+    },
     filters: {
       selection: {
         range: 'all',

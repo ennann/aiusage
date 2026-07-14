@@ -1,0 +1,43 @@
+{
+  "name": "@aiusage/pricing",
+  "version": "1.0.0",
+  "description": "Public AIUsage model pricing catalog.",
+  "license": "MIT",
+  "private": false,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ennann/aiusage.git",
+    "directory": "packages/pricing"
+  },
+  "homepage": "https://github.com/ennann/aiusage",
+  "bugs": {
+    "url": "https://github.com/ennann/aiusage/issues"
+  },
+  "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "catalog.json",
+    "index.js",
+    "index.d.ts",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    },
+    "./catalog.json": "./catalog.json"
+  },
+  "scripts": {
+    "build": "node --import tsx/esm scripts/build.ts",
+    "lint": "tsc --noEmit",
+    "test": "node --test test/catalog.test.mjs"
+  },
+  "devDependencies": {
+    "@aiusage/shared": "workspace:*",
+    "@types/node": "^22",
+    "typescript": "^5"
+  }
+}

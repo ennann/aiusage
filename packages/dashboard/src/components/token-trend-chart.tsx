@@ -12,27 +12,30 @@ import { formatCompact, formatTokens, shortDate, longDate } from '../utils/forma
 import { EmptyState } from './chart-helpers';
 import { useIsDark } from '../hooks/use-dark';
 
-type TokenLegendItem = {
-  key: typeof TOKEN_SERIES[number]['key'];
+type TokenSeriesKey = typeof TOKEN_SERIES[number]['key'];
+
+interface TokenTrendLegendItem {
+  key: TokenSeriesKey;
   label: string;
   color: string;
-  value: string;
-};
+  value?: string;
+}
 
 export function TokenTrendChart({
   data,
   locale,
-  totalLabel = 'Total',
+  totalLabel,
   legendItems = [],
 }: {
   data: OverviewPayload['tokenComposition'];
   locale: Locale;
   totalLabel?: string;
-  legendItems?: TokenLegendItem[];
+  legendItems?: TokenTrendLegendItem[];
 }) {
   const isDark = useIsDark();
-  const [activeKey, setActiveKey] = useState<TokenLegendItem['key'] | null>(null);
+  const [activeKey, setActiveKey] = useState<TokenSeriesKey | null>(null);
   if (!data.length) return <EmptyState label="No data" />;
+
   return (
     <div>
       <ChartContainer config={getTokenConfig(isDark)} className="h-[280px] w-full">
@@ -55,7 +58,7 @@ export function TokenTrendChart({
                   labelFormatter={longDate}
                   formatter={(v) => formatTokens(Number(v), locale)}
                   showTotal
-                  totalLabel={totalLabel}
+                  totalLabel={totalLabel ?? 'Total'}
                   totalFormatter={(v) => formatTokens(v, locale)}
                 />
               }

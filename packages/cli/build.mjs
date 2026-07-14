@@ -1,4 +1,5 @@
 import { build } from 'esbuild';
+import { copyFile } from 'node:fs/promises';
 
 await build({
   entryPoints: ['src/cli.ts'],
@@ -12,3 +13,5 @@ await build({
   minifySyntax: true,
   treeShaking: true,
 });
+
+await copyFile('../pricing/catalog.json', 'pricing-catalog.json');

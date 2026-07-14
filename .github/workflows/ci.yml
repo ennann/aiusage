@@ -19,11 +19,14 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      - name: Lint (typecheck all packages)
+        run: pnpm -r lint
+
       - name: Build
         run: pnpm turbo build
 
-      - name: Test
-        run: cd packages/cli && npx vitest run
+      - name: Test (all packages)
+        run: pnpm -r test
 
   deploy:
     needs: build
@@ -39,11 +42,38 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      - name: Inject Cloudflare deployment config
+        run: |
+          if [ -z "$CLOUDFLARE_D1_DATABASE_ID" ]; then
+            echo "::error::Missing GitHub secret CLOUDFLARE_D1_DATABASE_ID"
+            exit 1
+          fi
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const path = 'packages/worker/wrangler.jsonc';
+          let config = fs.readFileSync(path, 'utf8');
+          if (process.env.CLOUDFLARE_WORKER_NAME) {
+            config = config.replace(/"name":\s*"[^"]+"/, `"name": "${process.env.CLOUDFLARE_WORKER_NAME}"`);
+          }
+          const databaseId = JSON.stringify(process.env.CLOUDFLARE_D1_DATABASE_ID);
+          if (/"database_id":\s*"[^"]+"/.test(config)) {
+            config = config.replace(/"database_id":\s*"[^"]+"/, `"database_id": ${databaseId}`);
+          } else {
+            config = config.replace(/("database_name":\s*"[^"]+")/, `$1,\n      "database_id": ${databaseId}`);
+          }
+          fs.writeFileSync(path, config);
+          NODE
+        env:
+          CLOUDFLARE_WORKER_NAME: ${{ secrets.CLOUDFLARE_WORKER_NAME }}
+          CLOUDFLARE_D1_DATABASE_ID: ${{ secrets.CLOUDFLARE_D1_DATABASE_ID }}
+
       - name: Build Dashboard & Deploy Worker
         run: |
           pnpm --filter @aiusage/dashboard build
           cp -r packages/dashboard/dist packages/worker/public
-          cd packages/worker && npx wrangler deploy
+          cd packages/worker
+          npx wrangler d1 migrations apply aiusage-db --remote
+          npx wrangler deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -52,29 +82,45 @@ jobs:
     needs: build
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v6
       - uses: pnpm/action-setup@v5
       - uses: actions/setup-node@v6
         with:
-          node-version: 22
-          cache: pnpm
+          node-version: 24
           registry-url: https://registry.npmjs.org
+          package-manager-cache: false
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Build CLI
-        run: pnpm turbo build --filter @aiusage/cli
+      - name: Build publishable packages
+        run: pnpm turbo build --filter @aiusage/pricing --filter @aiusage/cli
 
-      - name: Publish CLI (if version changed)
+      - name: Publish packages (if versions are new)
         run: |
-          LOCAL_VERSION=$(node -p "require('./packages/cli/package.json').version")
-          NPM_VERSION=$(npm view @aiusage/cli version 2>/dev/null || echo "0.0.0")
-          if [ "$LOCAL_VERSION" != "$NPM_VERSION" ]; then
-            echo "Publishing @aiusage/cli@${LOCAL_VERSION} (npm has ${NPM_VERSION})"
-            cd packages/cli && npm publish --access public
-          else
-            echo "CLI v${LOCAL_VERSION} already published, skipping"
-          fi
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          publish_if_new() {
+            local pkg_dir="$1"
+            local allow_first_publish="${2:-true}"
+            local pkg_name
+            local local_version
+            local npm_version
+            pkg_name=$(node -p "require('./${pkg_dir}/package.json').name")
+            local_version=$(node -p "require('./${pkg_dir}/package.json').version")
+            if npm view "${pkg_name}@${local_version}" version >/dev/null 2>&1; then
+              echo "${pkg_name} v${local_version} already published, skipping"
+            else
+              npm_version=$(npm view "${pkg_name}" version 2>/dev/null || echo "none")
+              if [ "${npm_version}" = "none" ] && [ "${allow_first_publish}" != "true" ]; then
+                echo "${pkg_name} has not been published before; skipping first publish until npm package permissions are created"
+                return 0
+              fi
+              echo "Publishing ${pkg_name}@${local_version} (npm latest is ${npm_version})"
+              (cd "${pkg_dir}" && npm publish --access public)
+            fi
+          }
+
+          publish_if_new packages/cli true
+          publish_if_new packages/pricing false
