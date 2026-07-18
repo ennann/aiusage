@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdir, writeFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { scanCodex } from '../codex.js';
+import { scanCodex, scanCodexDates } from '../codex.js';
 
 // Helper to write a JSONL session file
 async function writeSession(dir: string, filename: string, lines: object[]): Promise<void> {
@@ -655,5 +655,104 @@ describe('ninerouter routed models', () => {
     expect(results[0].provider).toBe('openai');
     expect(results[0].product).toBe('codex');
     expect(results[0].model).toBe('gpt-5-codex');
+  });
+});
+
+// ─── fork/resume 会话重放：不得把父会话历史计入 fork 当天 ───
+
+describe('Forked/resumed session replay attribution', () => {
+  // 构造一个 token_count 事件（携带完整 last/total）
+  const tokenEvent = (
+    ts: string,
+    last: { input: number; cached: number; output: number },
+    total: { input: number; cached: number; output: number },
+  ) => ({
+    type: 'event_msg',
+    timestamp: ts,
+    payload: {
+      type: 'token_count',
+      info: {
+        last_token_usage: {
+          input_tokens: last.input,
+          cached_input_tokens: last.cached,
+          output_tokens: last.output,
+          reasoning_output_tokens: 0,
+        },
+        total_token_usage: {
+          input_tokens: total.input,
+          cached_input_tokens: total.cached,
+          output_tokens: total.output,
+          reasoning_output_tokens: 0,
+        },
+      },
+    },
+  });
+
+  const ctx = (ts: string) => ({
+    type: 'turn_context',
+    timestamp: ts,
+    payload: { model: 'gpt-5-codex', cwd: '/proj' },
+  });
+
+  async function writeForkFixture() {
+    const parentDay = '2025-10-15';
+    const childDay = '2025-10-16';
+
+    // 父会话（前一天）：两笔真实 turn
+    await writeSession(join(tmpDir, 'sessions', '2025', '10', '15'), 'rollout-parent.jsonl', [
+      ctx(`${parentDay}T10:00:00.000Z`),
+      tokenEvent(`${parentDay}T10:00:01.000Z`, { input: 3000, cached: 2000, output: 100 }, { input: 3000, cached: 2000, output: 100 }),
+      tokenEvent(`${parentDay}T10:05:00.000Z`, { input: 4000, cached: 3000, output: 150 }, { input: 7000, cached: 5000, output: 250 }),
+    ]);
+
+    // fork 会话（当天）：以 fork 时刻的时间戳重放父会话的全部 token_count（签名完全相同），
+    // 随后才是当天真正新增的一笔 turn。
+    const forkTs = `${childDay}T09:00:00.000Z`;
+    await writeSession(join(tmpDir, 'sessions', '2025', '10', '16'), 'rollout-child.jsonl', [
+      { type: 'session_meta', timestamp: forkTs, payload: { forked_from_id: 'parent-id' } },
+      // —— 重放段：时间戳=fork 时刻，累计签名与父会话相同 ——
+      tokenEvent(forkTs, { input: 3000, cached: 2000, output: 100 }, { input: 3000, cached: 2000, output: 100 }),
+      tokenEvent(forkTs, { input: 4000, cached: 3000, output: 150 }, { input: 7000, cached: 5000, output: 250 }),
+      // —— 当天真正的新增 turn ——
+      ctx(`${childDay}T09:00:10.000Z`),
+      tokenEvent(`${childDay}T09:00:11.000Z`, { input: 5000, cached: 4000, output: 200 }, { input: 12000, cached: 9000, output: 450 }),
+    ]);
+
+    return { parentDay, childDay };
+  }
+
+  it('does not count replayed parent history on the fork day (single-day query)', async () => {
+    const { childDay } = await writeForkFixture();
+
+    // 只查询 fork 当天：应仅计入当天真正新增的一笔 turn，
+    // 重放的父会话历史（签名更早出现在前一天）不得计入。
+    const results = await scanCodex(childDay, tmpDir);
+    expect(results).toHaveLength(1);
+    expect(results[0].eventCount).toBe(1);
+    expect(results[0].inputTokens).toBe(1000);      // 5000 - 4000
+    expect(results[0].cachedInputTokens).toBe(4000);
+    expect(results[0].outputTokens).toBe(200);
+  });
+
+  it('attributes replayed usage to the parent day, and stays range-independent', async () => {
+    const { parentDay, childDay } = await writeForkFixture();
+
+    // 同时查询两天：父会话两笔归属前一天，fork 当天仅一笔新增。
+    const grouped = await scanCodexDates([parentDay, childDay], tmpDir);
+
+    const parent = grouped.get(parentDay) ?? [];
+    const child = grouped.get(childDay) ?? [];
+
+    const sum = (arr: typeof parent, k: 'eventCount' | 'inputTokens' | 'outputTokens') =>
+      arr.reduce((s, b) => s + (b as Record<string, number>)[k], 0);
+
+    expect(sum(parent, 'eventCount')).toBe(2);
+    expect(sum(parent, 'inputTokens')).toBe(2000);   // (3000-2000)+(4000-3000)
+    expect(sum(parent, 'outputTokens')).toBe(250);
+
+    // 关键：fork 当天的数值与是否同时查询前一天无关，始终只有新增的一笔。
+    expect(sum(child, 'eventCount')).toBe(1);
+    expect(sum(child, 'inputTokens')).toBe(1000);
+    expect(sum(child, 'outputTokens')).toBe(200);
   });
 });
