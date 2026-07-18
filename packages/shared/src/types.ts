@@ -1,7 +1,7 @@
 // ── 统计维度 ──
 
-export type Provider = 'anthropic' | 'openai' | 'google' | 'github' | 'alibaba' | 'moonshot' | 'sourcegraph' | 'inflection' | 'cursor' | (string & {});
-export type Product = 'claude-code' | 'codex' | 'copilot-cli' | 'copilot-vscode' | 'gemini-cli' | 'antigravity' | 'qwen-code' | 'kimi-code' | 'amp' | 'droid' | 'opencode' | 'pi' | 'cursor' | (string & {});
+export type Provider = 'anthropic' | 'openai' | 'google' | 'github' | 'alibaba' | 'moonshot' | 'sourcegraph' | 'inflection' | 'cursor' | 'kiro' | (string & {});
+export type Product = 'claude-code' | 'codex' | 'copilot-cli' | 'copilot-vscode' | 'gemini-cli' | 'antigravity' | 'qwen-code' | 'kimi-code' | 'amp' | 'droid' | 'opencode' | 'pi' | 'cursor' | 'kiro' | (string & {});
 export type Channel = 'cli' | 'ide' | 'web' | 'api';
 export type CostStatus = 'exact' | 'estimated' | 'unavailable';
 export type DeviceStatus = 'active' | 'disabled';
@@ -50,6 +50,23 @@ export interface IngestBreakdown {
   reasoningOutputTokens: number;
   costUSD?: number;
   pricingVersion?: string;
+}
+
+export interface IngestActivityDay {
+  items: IngestActivityItem[];
+}
+
+export interface IngestActivityItem {
+  provider: Provider;
+  product: Product;
+  source: string;
+  project: string;
+  projectDisplay?: string;
+  projectAlias?: string;
+  kind: string;
+  name: string;
+  count: number;
+  confidence: 'exact' | 'proxy';
 }
 
 export interface IngestActivityDay {

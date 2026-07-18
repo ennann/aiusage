@@ -1,6 +1,6 @@
 {
   "$schema": "../../node_modules/wrangler/config-schema.json",
-  "name": "aiusage",
+  "name": "aiusage-715eeba5",
   "main": "src/index.ts",
   "compatibility_date": "2026-04-01",
   "compatibility_flags": ["nodejs_compat"],
@@ -11,7 +11,7 @@
     "directory": "./public",
     "html_handling": "auto-trailing-slash",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*", "/favicon.ico"]
+    "run_worker_first": ["/api/*", "/pricing", "/embed/docs", "/favicon.ico"]
   },
   "d1_databases": [
     {
@@ -37,6 +37,6 @@
   "vars": {
     "MAX_DEVICES": "10",
     "PUBLIC_PROJECT_VISIBILITY": "masked",
-    "DEFAULT_TIMEZONE": "Asia/Shanghai"
+    "DEFAULT_TIMEZONE": "America/Toronto"
   }
 }

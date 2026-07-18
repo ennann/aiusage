@@ -355,7 +355,7 @@ async function runSync(flags: Record<string, string | boolean>, positionals: str
     : allTargets;
 
   // ── 日期解析 ──
-  const { dates: targetDates } = resolveDateParams(flags, config);
+  const { dates: targetDates, range } = resolveDateParams(flags, config);
   if (!targetDates) {
     throw new Error('sync --range all 需要明确日期范围，请改用 --from YYYY-MM-DD --to YYYY-MM-DD');
   }
@@ -365,18 +365,19 @@ async function runSync(flags: Record<string, string | boolean>, positionals: str
 
   const [results, activityReport] = await Promise.all([
     scanDates(targetDates, { projectAliases: config.projectAliases }),
-    buildActivityReport('all', { dates: targetDates, projectAliases: config.projectAliases }),
+    buildActivityReport(range, { projectAliases: config.projectAliases, dates: targetDates }),
   ]);
   const visibility = config.privacy?.projectVisibility;
   const resultsByDate = new Map(results.map(result => [result.usageDate, result]));
   const activityByDate = buildActivityPayloadByDate(activityReport.items, visibility);
+  const includeEmptyDays = flags['include-empty'] === true;
   const allDays: IngestDay[] = targetDates
     .map((usageDate) => {
       const breakdowns = applyPrivacy(resultsByDate.get(usageDate)?.breakdowns ?? [], visibility);
       const activity = activityByDate.get(usageDate);
       return { usageDate, breakdowns, activity };
     })
-    .filter(day => day.breakdowns.length > 0 || (day.activity?.items.length ?? 0) > 0);
+    .filter(day => includeEmptyDays || day.breakdowns.length > 0 || (day.activity?.items.length ?? 0) > 0);
 
   if (allDays.length === 0) {
     console.log('没有可上传的数据。');
@@ -471,7 +472,7 @@ async function runImport(flags: Record<string, string | boolean>, positionals: s
   // Detect mode: CSV files passed as positional args vs Admin API
   const csvFiles = positionals.filter(p => p.endsWith('.csv'));
 
-  let allDays: Array<{ usageDate: string; breakdowns: import('@aiusage/shared').IngestBreakdown[] }>;
+  let allDays: IngestDay[];
 
   if (csvFiles.length > 0) {
     // CSV mode: scan all provided files and determine date range from flags or auto-detect
@@ -799,7 +800,7 @@ function printHelp(zh = false) {
     ['scan [--date YYYY-MM-DD|--today|--range 7d|1m|3m] [--json]', '扫描用量明细'],
     ['report [--today] [--range 7d|1m|3m|all] [--detail] [--json]', '本地用量报告'],
     ['activity [--today] [--range 7d|1m|3m|all] [--detail] [--json]', '本地交互指标'],
-    ['sync [--today] [--range 7d|1m|3m]',                         '上传用量到服务端'],
+    ['sync [--today] [--range 7d|1m|3m] [--include-empty]',       '上传用量到服务端'],
     ['scan/report/sync --from YYYY-MM-DD [--to YYYY-MM-DD]',      '指定日期范围（--start/--end 同义）'],
     ['project [list|alias]',                                  '项目管理与别名设置'],
     ['pricing [status|update] [--url URL]',                   '查看/更新定价目录'],
@@ -813,7 +814,7 @@ function printHelp(zh = false) {
     ['scan [--date YYYY-MM-DD|--today|--range 7d|1m|3m] [--json]', 'Scan usage breakdown'],
     ['report [--today] [--range 7d|1m|3m|all] [--detail] [--json]', 'Local usage report'],
     ['activity [--today] [--range 7d|1m|3m|all] [--detail] [--json]', 'Local interaction metrics'],
-    ['sync [--today] [--range 7d|1m|3m]',                         'Upload usage to server'],
+    ['sync [--today] [--range 7d|1m|3m] [--include-empty]',       'Upload usage to server'],
     ['scan/report/sync --from YYYY-MM-DD [--to YYYY-MM-DD]',      'Date range (--start/--end aliases)'],
     ['project [list|alias]',                                 'Project management & aliases'],
     ['pricing [status|update] [--url URL]',                  'Pricing catalog management'],

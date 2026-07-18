@@ -9,7 +9,7 @@ import { corsHeaders, jsonError } from './utils/response.js';
 import type { Env } from './types.js';
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     const { pathname } = url;
 
@@ -55,7 +55,7 @@ export default {
         return handleEnroll(request, env);
       }
       if (pathname === '/api/v1/ingest/daily' && request.method === 'POST') {
-        return handleIngest(request, env);
+        return handleIngest(request, env, ctx);
       }
 
       // ── 公开接口 ──

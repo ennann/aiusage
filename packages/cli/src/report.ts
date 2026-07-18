@@ -1,4 +1,4 @@
-import { readdir, readFile } from 'node:fs/promises';
+import { readdir, readFile, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
 import type { IngestBreakdown } from '@aiusage/shared';
@@ -181,6 +181,7 @@ async function discoverAllDates(): Promise<string[]> {
     discoverGenericJsonlDates(join(home, '.factory', 'sessions'), dates),
     discoverGenericJsonDates(join(home, '.local', 'share', 'opencode'), dates),
     discoverGenericJsonlDates(join(home, '.pi', 'agent', 'sessions'), dates),
+    discoverKiroDates(dates),
   ]);
   return [...dates].sort();
 }
@@ -336,6 +337,81 @@ async function discoverCopilotVscodeDates(dates: Set<string>): Promise<void> {
   }
 }
 
+async function discoverKiroDates(dates: Set<string>): Promise<void> {
+  const files: string[] = [];
+  await discoverFilesInKiroDirs(files);
+
+  for (const filePath of files) {
+    const content = await safeReadUtf8(filePath);
+    if (!content) continue;
+
+    let data: {
+      metadata?: { startTime?: string | number; endTime?: string | number };
+      created_at?: string | number;
+      updated_at?: string | number;
+    };
+    try {
+      data = JSON.parse(content);
+    } catch {
+      continue;
+    }
+
+    const ts = parseTs(
+      data.metadata?.startTime ?? data.metadata?.endTime ?? data.created_at ?? data.updated_at,
+    );
+    if (ts) {
+      dates.add(dateKey(ts));
+      continue;
+    }
+
+    const fallbackTs = await readFileMtime(filePath);
+    if (fallbackTs) dates.add(dateKey(fallbackTs));
+  }
+}
+
+async function discoverFilesInKiroDirs(files: string[]): Promise<void> {
+  const dirs = resolveKiroDirs();
+  for (const dir of dirs) {
+    await walkForFiles(dir, '.chat', files);
+    await walkForFiles(dir, '.json', files);
+  }
+}
+
+function resolveKiroDirs(): string[] {
+  const envDir = process.env.KIRO_CHAT_DIR?.trim();
+  if (envDir) return [envDir];
+
+  return [
+    join(
+      homedir(),
+      'Library',
+      'Application Support',
+      'Kiro',
+      'User',
+      'globalStorage',
+      'kiro.kiroagent',
+    ),
+    join(
+      homedir(),
+      'Library',
+      'Application Support',
+      'Code',
+      'User',
+      'globalStorage',
+      'kiro.kiroagent',
+    ),
+    join(homedir(), '.kiro', 'sessions', 'cli'),
+  ];
+}
+
+async function readFileMtime(filePath: string): Promise<Date | null> {
+  try {
+    return (await stat(filePath)).mtime;
+  } catch {
+    return null;
+  }
+}
+
 async function discoverAntigravityDates(dates: Set<string>): Promise<void> {
   const home = homedir();
   const brainFiles: string[] = [];
@@ -416,8 +492,11 @@ async function discoverClaudeDates(dates: Set<string>): Promise<void> {
 }
 
 async function discoverCodexDates(dates: Set<string>): Promise<void> {
-  const baseDir = join(homedir(), '.codex');
-  const files = await collectCodexSessionFiles(baseDir);
+  const home = homedir();
+  const baseDirs = ['.codex', '.codex-kiro'].map((name) => join(home, name));
+  const files = (
+    await Promise.all(baseDirs.map((baseDir) => collectCodexSessionFiles(baseDir)))
+  ).flat();
 
   for (const filePath of files) {
     const content = await safeReadUtf8(filePath);
@@ -543,6 +622,17 @@ function mergeTotals(target: Totals, source: Totals): Totals {
   return target;
 }
 
+const LOCAL_CLAUDE_PRICING: Record<string, {
+  input: number;
+  cacheWrite5m: number;
+  cacheWrite1h: number;
+  cacheRead: number;
+  output: number;
+}> = {
+  'claude-fable-5': { input: 10, cacheWrite5m: 12.5, cacheWrite1h: 20, cacheRead: 1, output: 50 },
+  'claude-sonnet-5': { input: 2, cacheWrite5m: 2.5, cacheWrite1h: 4, cacheRead: 0.2, output: 10 },
+};
+
 function toBreakdownTotals(
   breakdown: IngestBreakdown,
   warnings: Set<string>,
@@ -585,7 +675,7 @@ export function calculateBreakdownCost(
     return breakdown.costUSD;
   }
 
-  const result = calculateCost(
+  let result = calculateCost(
     breakdown.provider,
     breakdown.product,
     breakdown.model,
@@ -603,6 +693,36 @@ export function calculateBreakdownCost(
     },
   );
 
+  // Kiro and ninerouter-backed Codex sessions route Claude models under namespaces
+  // that may not exist in the selected catalog. Reuse the shared Claude Code rates.
+  const usesClaudeCatalogFallback =
+    (breakdown.provider === 'kiro' && breakdown.product === 'kiro')
+    || (breakdown.provider === 'anthropic' && breakdown.product === 'codex');
+  if (result.costStatus === 'unavailable' && usesClaudeCatalogFallback) {
+    result = calculateCost(
+      'anthropic',
+      'claude-code',
+      breakdown.model,
+      {
+        inputTokens: breakdown.inputTokens,
+        cachedInputTokens: breakdown.cachedInputTokens,
+        cacheWriteTokens: breakdown.cacheWriteTokens,
+        cacheWrite5mTokens: breakdown.cacheWrite5mTokens,
+        cacheWrite1hTokens: breakdown.cacheWrite1hTokens,
+        outputTokens: breakdown.outputTokens,
+      },
+      {
+        ...(pricingCatalog ? { catalog: pricingCatalog } : {}),
+        requestCount: breakdown.eventCount,
+      },
+    );
+  }
+
+  if (result.costStatus === 'unavailable') {
+    const localClaudeCost = calculateLocalClaudeCost(breakdown);
+    if (localClaudeCost !== null) return localClaudeCost;
+  }
+
   if (result.costStatus === 'unavailable') {
     warnings.add(`${breakdown.provider}/${breakdown.product}/${breakdown.model} 暂无定价配置，已跳过成本估算。`);
   } else if (result.costStatus === 'estimated' && result.resolvedModel && result.resolvedModel !== breakdown.model) {
@@ -612,4 +732,24 @@ export function calculateBreakdownCost(
   }
 
   return result.estimatedCostUsd;
+}
+
+function calculateLocalClaudeCost(breakdown: IngestBreakdown): number | null {
+  const isClaudeSource =
+    (breakdown.provider === 'anthropic' && (breakdown.product === 'claude-code' || breakdown.product === 'codex'))
+    || (breakdown.provider === 'kiro' && breakdown.product === 'kiro');
+  if (!isClaudeSource) return null;
+
+  const isFast = breakdown.model.endsWith('-fast');
+  const baseModel = isFast ? breakdown.model.replace(/-fast$/, '') : breakdown.model;
+  const pricing = LOCAL_CLAUDE_PRICING[baseModel];
+  if (!pricing) return null;
+
+  const baseCost =
+    (breakdown.inputTokens / 1_000_000) * pricing.input
+    + (((breakdown.cacheWrite5mTokens ?? breakdown.cacheWriteTokens) || 0) / 1_000_000) * pricing.cacheWrite5m
+    + ((breakdown.cacheWrite1hTokens ?? 0) / 1_000_000) * pricing.cacheWrite1h
+    + (breakdown.cachedInputTokens / 1_000_000) * pricing.cacheRead
+    + (breakdown.outputTokens / 1_000_000) * pricing.output;
+  return isFast ? baseCost * 6 : baseCost;
 }

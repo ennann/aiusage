@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { assertJoeDeployGuard } from './guard-joe-deploy.mjs';
 import { copyDashboardAssets } from './prepare-dashboard-assets.mjs';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
@@ -32,3 +33,4 @@ async function ensureDashboardDist() {
 await ensureDashboardDist();
 run('pnpm', ['exec', 'tsc', '--noEmit'], workerDir);
 await copyDashboardAssets({ dashboardDistDir, workerPublicDir });
+await assertJoeDeployGuard({ repoRoot, dashboardDistDir, workerPublicDir });

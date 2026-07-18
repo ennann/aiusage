@@ -23,7 +23,7 @@ import { DonutSection } from './components/donut-section';
 import { ActivityHeatmap } from './components/activity-heatmap';
 import { buildActivityHeatmapData } from './utils/activity-heatmap-data';
 import { HeaderLogo, FooterLogo, useFaviconFromLogo } from './components/site-logo';
-import { SITE_TITLE } from './site-config';
+import { SITE_TITLE, SITE_URL } from './site-config';
 import type { InteractionMetricItem, InteractionMetricsPayload } from '@aiusage/shared';
 
 // ────────────────────────────────────────
@@ -330,7 +330,11 @@ function InteractionMetricsSection({
         title={t.interactionMetrics}
         stat={`${formatCompact(metrics.exactCount, locale)} ${t.exactEvents}`}
       />
-      <div className="mt-5 grid gap-4 sm:grid-cols-4">
+      <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <InteractionMetricTile
+          label={t.userMessages}
+          value={formatCompact(metrics.userMessageCount ?? 0, locale)}
+        />
         <InteractionMetricTile label={t.functionCalls} value={formatCompact(metrics.functionCallCount, locale)} />
         <InteractionMetricTile label={t.toolCalls} value={formatCompact(metrics.toolCallCount, locale)} />
         <InteractionMetricTile
@@ -424,6 +428,14 @@ export function App() {
     }));
   }, [overview, t, locale, isDark]);
   const unavailable = metricAvailability.tokenMetricsUnavailable;
+  const costDivisor = overview
+    ? (overview.totalSessions > 0
+      ? overview.totalSessions
+      : (overview.costBearingEvents ?? overview.totalEvents))
+    : 0;
+  const costPerSession = overview && costDivisor > 0
+    ? overview.totalCostUsd / costDivisor
+    : 0;
   const activityHeatmap = useMemo(() => buildActivityHeatmapData({
     heatmap: overview?.heatmap ?? [],
     dailyTrend: overview?.dailyTrend ?? [],
@@ -437,8 +449,10 @@ export function App() {
       <header className="fade-up relative z-20 py-6 sm:py-8">
         <div className="flex flex-wrap items-center justify-between gap-y-2">
           <h1 className="flex items-center gap-2 text-[18px] sm:text-[22px] font-semibold tracking-tight text-slate-900 dark:text-slate-300">
-            <HeaderLogo />
-            {SITE_TITLE}
+            <a href={SITE_URL} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 transition-opacity hover:opacity-70">
+              <HeaderLogo />
+              {SITE_TITLE}
+            </a>
           </h1>
           <div className="flex items-center gap-1.5 sm:gap-2 ml-auto">
             <ThemeToggle value={theme} onChange={setTheme} locale={locale} />
@@ -614,12 +628,7 @@ export function App() {
               />
             </div>
             <div className="card">
-              <KpiCard
-                label={t.userMessages}
-                value={typeof overview?.interactionMetrics?.userMessageCount === 'number'
-                  ? formatNumber(overview.interactionMetrics.userMessageCount)
-                  : t.unavailable}
-              />
+              <KpiCard label={t.costPerSession} value={unavailable ? t.unavailable : formatUsd(costPerSession)} />
             </div>
             <div className="card">
               <KpiCard label={t.avgDailyCost} value={unavailable ? t.unavailable : formatUsd(overview?.averageDailyCostUsd ?? 0)} />
@@ -695,7 +704,7 @@ export function App() {
           {/* ── Flow & Share ── */}
           <div className="fade-up grid gap-4 lg:grid-cols-5" style={{ animationDelay: '330ms' }}>
             <div className="card p-6 lg:col-span-3">
-              <SectionHeader title={t.tokenFlow} />
+              <SectionHeader title={t.costFlow} />
               {unavailable ? (
                 <EmptyState label={t.tokenUnavailable} />
               ) : (
@@ -753,10 +762,10 @@ export function App() {
       <footer className="fade-up mt-16 border-t border-slate-100 dark:border-white/[0.08] pb-10 pt-8">
         <div className="flex flex-col items-center gap-4">
           <div className="flex items-center gap-3 text-[12px] text-slate-400 dark:text-slate-500">
-            <span className="flex items-center gap-1.5 font-medium text-slate-500 dark:text-slate-400">
+            <a href={SITE_URL} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 font-medium text-slate-500 transition-opacity hover:opacity-70 dark:text-slate-400">
               <FooterLogo />
               {SITE_TITLE}
-            </span>
+            </a>
             {health?.version && (
               <span className="rounded-full bg-slate-100 dark:bg-[#1a1a1a] px-2 py-0.5 text-[10px] font-medium text-slate-400 dark:text-slate-500">
                 v{health.version}
@@ -765,6 +774,13 @@ export function App() {
           </div>
           <div className="flex flex-wrap justify-center gap-x-4 gap-y-2 text-[11px] text-slate-300 dark:text-slate-600">
             <div className="flex items-center gap-4">
+              <a
+                href="/pricing"
+                className="text-slate-400 transition-colors hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300"
+              >
+                {t.pricing}
+              </a>
+              <span className="h-3 w-px bg-slate-200 dark:bg-[#222222]" />
               <a
                 href="/embed/docs"
                 className="text-slate-400 transition-colors hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300"

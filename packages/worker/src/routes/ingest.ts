@@ -4,7 +4,7 @@ import { verifyDeviceToken } from '../utils/token.js';
 import { calculateIngestBreakdownCost, getWorstCostStatus } from '../utils/pricing.js';
 import type { Env } from '../types.js';
 
-export async function handleIngest(request: Request, env: Env): Promise<Response> {
+export async function handleIngest(request: Request, env: Env, ctx?: ExecutionContext): Promise<Response> {
   // 校验 DEVICE_TOKEN
   const auth = request.headers.get('Authorization')?.replace('Bearer ', '');
   if (!auth) return jsonError(401, 'INVALID_TOKEN', 'Missing authorization');
@@ -39,6 +39,8 @@ export async function handleIngest(request: Request, env: Env): Promise<Response
   for (const day of body.days) {
     const costStatuses: CostStatus[] = [];
     const breakdownsWithCost = [];
+    const projectCosts = new Map<string, number>();
+    const modelCosts = new Map<string, number>();
     let dayTotalCost = 0;
     let dayTotalEvents = 0;
     let dayTotalInput = 0;
@@ -61,13 +63,35 @@ export async function handleIngest(request: Request, env: Env): Promise<Response
       dayTotalCacheWrite += b.cacheWriteTokens;
       dayTotalOutput += b.outputTokens;
       dayTotalReasoning += b.reasoningOutputTokens;
-      breakdownsWithCost.push({ breakdown: b, cost, cacheWrite5mTokens, cacheWrite1hTokens });
+
+      const rawProject = b.project || 'unknown';
+      const isFullPath = rawProject.startsWith('/') || /^[A-Z]:\\/i.test(rawProject);
+      const projectDisplay = b.projectDisplay ?? (isFullPath ? rawProject.split('/').filter(Boolean).pop() || 'unknown' : rawProject);
+      const projectAlias = b.projectAlias ?? null;
+      const model = b.model || 'unknown';
+      const projectKey = projectAlias ?? projectDisplay;
+
+      projectCosts.set(projectKey, (projectCosts.get(projectKey) ?? 0) + cost.estimatedCostUsd);
+      modelCosts.set(model, (modelCosts.get(model) ?? 0) + cost.estimatedCostUsd);
+      breakdownsWithCost.push({
+        breakdown: b,
+        cost,
+        cacheWrite5mTokens,
+        cacheWrite1hTokens,
+        rawProject,
+        projectDisplay,
+        projectAlias,
+        model,
+      });
     }
 
     const dayCostStatus = getWorstCostStatus(costStatuses);
+    const topProject = topCostEntry(projectCosts);
+    const topModel = topCostEntry(modelCosts);
 
-    // 先写入父记录，避免 breakdown 外键约束失败
-    await env.DB.prepare(`
+    const statements = [
+      // 先写入父记录，避免 breakdown 外键约束失败
+      env.DB.prepare(`
       INSERT INTO daily_usage
         (device_id, usage_date, event_count, input_tokens, cached_input_tokens,
          cache_write_tokens, output_tokens, reasoning_output_tokens,
@@ -92,24 +116,25 @@ export async function handleIngest(request: Request, env: Env): Promise<Response
         top_model_cost_usd = excluded.top_model_cost_usd,
         updated_at = excluded.updated_at
     `)
-      .bind(
+        .bind(
         tokenPayload.deviceId, day.usageDate,
         dayTotalEvents, dayTotalInput, dayTotalCachedInput, dayTotalCacheWrite,
         dayTotalOutput, dayTotalReasoning,
         Math.round(dayTotalCost * 10000) / 10000, dayCostStatus, 'current',
-        'pending', 0,
-        'pending', 0,
+        topProject.key, topProject.cost,
+        topModel.key, topModel.cost,
         now, now,
-      )
-      .run();
+        ),
 
-    for (const { breakdown: b, cost, cacheWrite5mTokens, cacheWrite1hTokens } of breakdownsWithCost) {
-      const rawProject = b.project || 'unknown';
-      const isFullPath = rawProject.startsWith('/') || /^[A-Z]:\\/i.test(rawProject);
-      const projectDisplay = b.projectDisplay ?? (isFullPath ? rawProject.split('/').filter(Boolean).pop() || 'unknown' : rawProject);
-      const projectAlias = b.projectAlias ?? null;
+      env.DB.prepare(`
+      DELETE FROM daily_usage_breakdown
+      WHERE device_id = ? AND usage_date = ?
+    `)
+        .bind(tokenPayload.deviceId, day.usageDate),
+    ];
 
-      await env.DB.prepare(`
+    for (const { breakdown: b, cost, cacheWrite5mTokens, cacheWrite1hTokens, rawProject, projectDisplay, projectAlias, model } of breakdownsWithCost) {
+      statements.push(env.DB.prepare(`
         INSERT INTO daily_usage_breakdown
           (device_id, usage_date, provider, product, channel, model, project,
            project_display, project_alias,
@@ -136,7 +161,7 @@ export async function handleIngest(request: Request, env: Env): Promise<Response
       `)
         .bind(
           tokenPayload.deviceId, day.usageDate,
-          b.provider, b.product, b.channel, b.model || 'unknown', rawProject,
+          b.provider, b.product, b.channel, model, rawProject,
           projectDisplay, projectAlias,
           b.eventCount, b.sessionCount ?? 0, b.inputTokens, b.cachedInputTokens, b.cacheWriteTokens,
           b.outputTokens, b.reasoningOutputTokens,
@@ -146,43 +171,11 @@ export async function handleIngest(request: Request, env: Env): Promise<Response
             cache_write_1h_tokens: cacheWrite1hTokens,
           }),
           now, now,
-        )
-        .run();
+        ));
     }
 
+    await env.DB.batch(statements);
     await replaceActivityMetrics(env, tokenPayload.deviceId, day.usageDate, day.activity?.items ?? [], now);
-
-    // 计算 top project / model 并回填 daily_usage
-    const topProject = await env.DB.prepare(`
-      SELECT COALESCE(project_alias, project_display) as project, SUM(estimated_cost_usd) as total_cost
-      FROM daily_usage_breakdown
-      WHERE device_id = ? AND usage_date = ?
-      GROUP BY COALESCE(project_alias, project_display) ORDER BY total_cost DESC LIMIT 1
-    `).bind(tokenPayload.deviceId, day.usageDate)
-      .first<{ project: string; total_cost: number }>();
-
-    const topModel = await env.DB.prepare(`
-      SELECT model, SUM(estimated_cost_usd) as total_cost
-      FROM daily_usage_breakdown
-      WHERE device_id = ? AND usage_date = ?
-      GROUP BY model ORDER BY total_cost DESC LIMIT 1
-    `).bind(tokenPayload.deviceId, day.usageDate)
-      .first<{ model: string; total_cost: number }>();
-
-    await env.DB.prepare(`
-      UPDATE daily_usage
-      SET top_project_by_cost = ?, top_project_cost_usd = ?,
-          top_model_by_cost = ?, top_model_cost_usd = ?,
-          updated_at = ?
-      WHERE device_id = ? AND usage_date = ?
-    `)
-      .bind(
-        topProject?.project ?? 'unknown', topProject?.total_cost ?? 0,
-        topModel?.model ?? 'unknown', topModel?.total_cost ?? 0,
-        now,
-        tokenPayload.deviceId, day.usageDate,
-      )
-      .run();
 
     costSummary[day.usageDate] = {
       estimatedCostUsd: Math.round(dayTotalCost * 10000) / 10000,
@@ -190,14 +183,38 @@ export async function handleIngest(request: Request, env: Env): Promise<Response
     };
   }
 
-  // 更新 last_seen_at + 别名（sync 时自动同步本地别名）
-  await env.DB.prepare(
+  // 更新 last_seen_at + 别名（sync 时自动同步本地别名）。这不是用量写入的关键路径，
+  // 所以作为后台 best-effort 任务，避免 D1 暂时抖动让已写成功的上传返回 500。
+  const deviceTouch = env.DB.prepare(
     'UPDATE devices SET last_seen_at = ?, app_version = ?, public_label = COALESCE(?, public_label) WHERE device_id = ?',
   )
     .bind(now, body.device.appVersion, body.device.deviceAlias ?? null, tokenPayload.deviceId)
-    .run();
+    .run()
+    .catch(err => {
+      console.warn('Failed to update device last_seen_at after ingest', err);
+    });
+
+  if (ctx) {
+    ctx.waitUntil(deviceTouch);
+  } else {
+    await deviceTouch;
+  }
 
   return jsonOk({ daysProcessed: body.days.length, costSummary });
+}
+
+function topCostEntry(costs: Map<string, number>): { key: string; cost: number } {
+  let topKey = 'unknown';
+  let topCost = 0;
+
+  for (const [key, cost] of costs.entries()) {
+    if (cost > topCost) {
+      topKey = key;
+      topCost = cost;
+    }
+  }
+
+  return { key: topKey, cost: Math.round(topCost * 10000) / 10000 };
 }
 
 async function replaceActivityMetrics(

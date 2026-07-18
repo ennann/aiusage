@@ -180,4 +180,57 @@ describe('buildActivityReport', () => {
     expect(report.topSkills[0].label).toBe('security-review (anthropic/claude-code)');
     expect(report.topAgents[0].label).toBe('审计 CLI 指标 (anthropic/claude-code)');
   });
+
+  it('groups activity items by date for ingest payloads', async () => {
+    const { groupActivityItemsByDate } = await import('../activity.js');
+
+    const grouped = groupActivityItemsByDate([
+      {
+        usageDate: '2026-06-24',
+        provider: 'openai',
+        product: 'codex',
+        source: 'openai/codex',
+        project: '/Users/test/AIUsage',
+        projectDisplay: 'AIUsage',
+        projectAlias: 'Joe AIUsage',
+        kind: 'function_call',
+        name: 'exec_command',
+        count: 2,
+        confidence: 'exact',
+      },
+      {
+        usageDate: '2026-06-25',
+        provider: 'anthropic',
+        product: 'claude-code',
+        source: 'anthropic/claude-code',
+        project: '/Users/test/AIUsage',
+        projectDisplay: 'AIUsage',
+        kind: 'skill_call',
+        name: 'frontend-patterns',
+        count: 1,
+        confidence: 'exact',
+      },
+    ]);
+
+    expect(grouped.get('2026-06-24')).toEqual([
+      {
+        provider: 'openai',
+        product: 'codex',
+        source: 'openai/codex',
+        project: '/Users/test/AIUsage',
+        projectDisplay: 'AIUsage',
+        projectAlias: 'Joe AIUsage',
+        kind: 'function_call',
+        name: 'exec_command',
+        count: 2,
+        confidence: 'exact',
+      },
+    ]);
+    expect(grouped.get('2026-06-25')?.[0]).toMatchObject({
+      provider: 'anthropic',
+      product: 'claude-code',
+      kind: 'skill_call',
+      name: 'frontend-patterns',
+    });
+  });
 });

@@ -113,6 +113,50 @@ describe('calculateCost: 基本计费', () => {
     expect(result.costStatus).toBe('exact');
   });
 
+  it('Claude fable-5 公开价目表计费', () => {
+    // fable-5: input=$10/M, cached=$1/M, 5m write=$12.50/M, 1h write=$20/M, output=$50/M
+    const result = calculateCost('anthropic', 'claude-code', 'claude-fable-5', {
+      inputTokens: 1_000_000,
+      cachedInputTokens: 1_000_000,
+      cacheWriteTokens: 1_500_000,
+      cacheWrite5mTokens: 1_000_000,
+      cacheWrite1hTokens: 500_000,
+      outputTokens: 200_000,
+    });
+    // 10 + 1 + 12.5 + 10 + 10 = $43.5
+    expect(result.estimatedCostUsd).toBe(43.5);
+    expect(result.costStatus).toBe('exact');
+  });
+
+  it('Claude fable-5 uses the live repair-row rate', () => {
+    const result = calculateCost('anthropic', 'claude-code', 'claude-fable-5', {
+      inputTokens: 69_082,
+      cachedInputTokens: 17_777_634,
+      cacheWriteTokens: 808_558,
+      cacheWrite5mTokens: 0,
+      cacheWrite1hTokens: 808_558,
+      outputTokens: 117_211,
+    });
+
+    expect(result.estimatedCostUsd).toBe(40.5002);
+    expect(result.costStatus).toBe('exact');
+  });
+
+  it('Claude sonnet-5 uses current introductory pricing', () => {
+    // sonnet-5: input=$2/M, cached=$0.20/M, 5m write=$2.50/M, 1h write=$4/M, output=$10/M
+    const result = calculateCost('anthropic', 'claude-code', 'claude-sonnet-5', {
+      inputTokens: 1_000_000,
+      cachedInputTokens: 1_000_000,
+      cacheWriteTokens: 1_500_000,
+      cacheWrite5mTokens: 1_000_000,
+      cacheWrite1hTokens: 500_000,
+      outputTokens: 200_000,
+    });
+    // 2 + 0.2 + 2.5 + 2 + 2 = $8.7
+    expect(result.estimatedCostUsd).toBe(8.7);
+    expect(result.costStatus).toBe('exact');
+  });
+
   it('Codex gpt-5.4 基本 input/output 计费', () => {
     // gpt-5.4 long context: input=$5/M, output=$22.5/M
     const result = calculateCost('openai', 'codex', 'gpt-5.4', {
@@ -149,6 +193,32 @@ describe('calculateCost: 基本计费', () => {
     // gpt-5.4 long context: 1*5 + 1*0.5 + 1*22.5 = $28
     expect(result.estimatedCostUsd).toBe(28);
     // codex-auto-review 是 catalog 里的显式 alias → gpt-5.4，按 exact 处理
+    expect(result.costStatus).toBe('exact');
+  });
+
+  it('Codex gpt-5.6-sol 基本 input/output 计费', () => {
+    // 单请求总 input 超过 272K，使用 long-context 价格：input=$10/M, cached=$1/M, output=$45/M
+    const result = calculateCost('openai', 'codex', 'gpt-5.6-sol', {
+      inputTokens: 1_000_000,
+      cachedInputTokens: 1_000_000,
+      cacheWriteTokens: 0,
+      outputTokens: 500_000,
+    });
+    // 1*10 + 1*1 + 0.5*45 = $33.5
+    expect(result.estimatedCostUsd).toBe(33.5);
+    expect(result.costStatus).toBe('exact');
+  });
+
+  it('Codex gpt-5.6-luna 使用低档单价计费', () => {
+    // 单请求总 input 超过 272K，使用 long-context 价格：input=$2/M, cached=$0.20/M, output=$9/M
+    const result = calculateCost('openai', 'codex', 'gpt-5.6-luna', {
+      inputTokens: 1_000_000,
+      cachedInputTokens: 1_000_000,
+      cacheWriteTokens: 0,
+      outputTokens: 500_000,
+    });
+    // 1*2 + 1*0.2 + 0.5*9 = $6.7
+    expect(result.estimatedCostUsd).toBe(6.7);
     expect(result.costStatus).toBe('exact');
   });
 });
@@ -222,6 +292,40 @@ describe('calculateCost: 模型别名解析', () => {
     expect(aliased.estimatedCostUsd).toBe(direct.estimatedCostUsd);
     // 显式 alias 命中视为 exact（catalog 已声明两名等价）
     expect(aliased.costStatus).toBe('exact');
+  });
+
+  it('claude-opus-4.6 解析为 claude-opus-4-6', () => {
+    const dotted = calculateCost('anthropic', 'claude-code', 'claude-opus-4.6', {
+      inputTokens: 500_000,
+      cachedInputTokens: 0,
+      cacheWriteTokens: 0,
+      outputTokens: 200_000,
+    });
+    const dashed = calculateCost('anthropic', 'claude-code', 'claude-opus-4-6', {
+      inputTokens: 500_000,
+      cachedInputTokens: 0,
+      cacheWriteTokens: 0,
+      outputTokens: 200_000,
+    });
+    expect(dotted.estimatedCostUsd).toBe(dashed.estimatedCostUsd);
+    expect(dotted.costStatus).toBe('estimated');
+  });
+
+  it('CLAUDE_SONNET_4_20250514_V1_0 解析为 claude-sonnet-4', () => {
+    const legacy = calculateCost('anthropic', 'claude-code', 'CLAUDE_SONNET_4_20250514_V1_0', {
+      inputTokens: 500_000,
+      cachedInputTokens: 0,
+      cacheWriteTokens: 0,
+      outputTokens: 200_000,
+    });
+    const direct = calculateCost('anthropic', 'claude-code', 'claude-sonnet-4', {
+      inputTokens: 500_000,
+      cachedInputTokens: 0,
+      cacheWriteTokens: 0,
+      outputTokens: 200_000,
+    });
+    expect(legacy.estimatedCostUsd).toBe(direct.estimatedCostUsd);
+    expect(legacy.costStatus).toBe('estimated');
   });
 });
 
@@ -352,5 +456,28 @@ describe('getWorstCostStatus', () => {
 
   it('空数组 → exact', () => {
     expect(getWorstCostStatus([])).toBe('exact');
+  });
+});
+
+describe('ninerouter routed Anthropic models under codex product', () => {
+  it('claude-opus-4-8 prices via claude-code fallback table', () => {
+    const r = calculateCost('anthropic', 'codex', 'claude-opus-4-8', {
+      inputTokens: 1_000_000,
+      cachedInputTokens: 0,
+      cacheWriteTokens: 0,
+      outputTokens: 1_000_000,
+    });
+    expect(r.estimatedCostUsd).toBe(30); // 5 input + 25 output
+    expect(r.costStatus).toBe('exact');
+  });
+
+  it('claude-opus-4.8 (dotted) normalizes to claude-opus-4-8', () => {
+    const r = calculateCost('anthropic', 'codex', 'claude-opus-4.8', {
+      inputTokens: 1_000_000,
+      cachedInputTokens: 0,
+      cacheWriteTokens: 0,
+      outputTokens: 0,
+    });
+    expect(r.estimatedCostUsd).toBe(5);
   });
 });

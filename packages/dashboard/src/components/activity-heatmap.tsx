@@ -20,8 +20,8 @@ const LEGEND_W = 22 + GAP + 5 * STEP - GAP + GAP + 26;
 
 // ── 颜色配置 ──
 
-const LIGHT_LEVELS = ['#ebedf0', '#9be9a8', '#40c463', '#30a14e', '#216e39'];
-const DARK_LEVELS  = ['#161b22', '#0e4429', '#006d32', '#26a641', '#39d353'];
+const LIGHT_LEVELS = ['#ebedf0', '#fdba74', '#f97316', '#c2410c', '#7c2d12'];
+const DARK_LEVELS  = ['#161b22', '#431407', '#c2410c', '#f97316', '#fed7aa'];
 const LIGHT_CELL_STROKE = 'rgba(27, 31, 36, 0.06)';
 const DARK_CELL_STROKE = 'rgba(240, 246, 252, 0.04)';
 

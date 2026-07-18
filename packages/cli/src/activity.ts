@@ -4,6 +4,7 @@ import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
 import { dateKey, parseTs, resolveProjectFields, runWithConcurrency, type ProjectFields } from './scanners/utils.js';
 import type { ReportRange } from './report.js';
+import type { IngestActivityItem } from '@aiusage/shared';
 
 const FILE_CONCURRENCY = 16;
 const MAX_LINE_BYTES = 64 * 1024 * 1024; // 64 MB
@@ -221,6 +222,29 @@ export async function buildActivityReport(
       'sync 会上传按日聚合后的 activity 指标，不上传原始消息内容。',
     ],
   };
+}
+
+export function groupActivityItemsByDate(items: ActivityItem[]): Map<string, IngestActivityItem[]> {
+  const grouped = new Map<string, IngestActivityItem[]>();
+
+  for (const item of items) {
+    const list = grouped.get(item.usageDate) ?? [];
+    list.push({
+      provider: item.provider,
+      product: item.product,
+      source: item.source,
+      project: item.project,
+      projectDisplay: item.projectDisplay,
+      projectAlias: item.projectAlias,
+      kind: item.kind,
+      name: item.name,
+      count: item.count,
+      confidence: item.confidence,
+    });
+    grouped.set(item.usageDate, list);
+  }
+
+  return grouped;
 }
 
 export function renderActivityReport(report: ActivityReport, opts: { emoji: boolean; detail: boolean }): string {

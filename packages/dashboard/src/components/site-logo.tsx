@@ -94,9 +94,11 @@ export function HeaderLogo() {
   return <SimpleLogo size={28} />;
 }
 
-/** Footer logo (14px default mark). */
+/** Footer logo (14px round). */
 export function FooterLogo() {
-  return <span className="h-3.5 w-3.5">{DEFAULT_ICON}</span>;
+  const hasLogo = useHasLogo();
+  if (hasLogo === null || !hasLogo) return <span className="h-3.5 w-3.5">{DEFAULT_ICON}</span>;
+  return <SimpleLogo size={14} />;
 }
 
 // ── Simple circular logo (single image) ──

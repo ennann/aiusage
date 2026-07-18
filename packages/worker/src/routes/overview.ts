@@ -167,16 +167,16 @@ export async function handleOverview(url: URL, env: Env): Promise<Response> {
       SELECT
         b.model,
         ${PROJECT_DISPLAY_SQL} AS project,
-        COALESCE(SUM(${TOTAL_TOKENS_SQL}), 0) AS total_tokens
+        COALESCE(SUM(b.estimated_cost_usd), 0) AS total_cost
       FROM daily_usage_breakdown b
       ${where.whereClause}
       GROUP BY b.model, ${PROJECT_DISPLAY_SQL}
-      HAVING COALESCE(SUM(${TOTAL_TOKENS_SQL}), 0) > 0
-      ORDER BY total_tokens DESC, b.model ASC, project ASC
+      HAVING COALESCE(SUM(b.estimated_cost_usd), 0) > 0
+      ORDER BY total_cost DESC, b.model ASC, project ASC
     `).bind(...where.params).all<{
       model: string;
       project: string;
-      total_tokens: number;
+      total_cost: number;
     }>(),
     env.DB.prepare(`
       SELECT
@@ -405,40 +405,40 @@ async function loadInteractionMetrics(filters: DashboardFilters, env: Env) {
   let rows;
   try {
     rows = await Promise.all([
-    env.DB.prepare(`
-      SELECT
-        COALESCE(SUM(CASE WHEN a.kind != 'user_message' AND a.confidence = 'exact' THEN a.event_count ELSE 0 END), 0) AS exact_count,
-        COALESCE(SUM(CASE WHEN a.kind != 'user_message' AND a.confidence = 'proxy' THEN a.event_count ELSE 0 END), 0) AS proxy_count,
-        COALESCE(SUM(CASE WHEN a.kind = 'user_message' THEN a.event_count ELSE 0 END), 0) AS user_message_count,
-        COALESCE(SUM(CASE WHEN a.kind = 'function_call' THEN a.event_count ELSE 0 END), 0) AS function_call_count,
-        COALESCE(SUM(CASE WHEN a.kind IN ('tool_call', 'custom_tool_call', 'mcp_tool_call') THEN a.event_count ELSE 0 END), 0) AS tool_call_count,
-        COALESCE(SUM(CASE WHEN a.kind = 'skill_call' THEN a.event_count ELSE 0 END), 0) AS skill_call_count,
-        COALESCE(SUM(CASE WHEN a.kind = 'skill_proxy' THEN a.event_count ELSE 0 END), 0) AS skill_proxy_count,
-        COALESCE(SUM(CASE WHEN a.kind = 'agent_call' THEN a.event_count ELSE 0 END), 0) AS subagent_count
-      FROM daily_activity_breakdown a
-      ${where.whereClause}
-    `).bind(...where.params).first<{
-      exact_count: number;
-      proxy_count: number;
-      user_message_count: number;
-      function_call_count: number;
-      tool_call_count: number;
-      skill_call_count: number;
-      skill_proxy_count: number;
-      subagent_count: number;
-    }>(),
-    loadActivityTopList(where, env, `
-      a.kind IN ('function_call', 'custom_tool_call', 'tool_call', 'web_search', 'tool_search', 'image_generation', 'mcp_tool_call')
-    `, `a.source || '|' || a.name`, `a.name || ' (' || a.source || ')'`),
-    loadActivityTopList(where, env, `
-      a.kind IN ('skill_call', 'skill_proxy')
-    `, `a.source || '|' || a.name || '|' || a.confidence`, `a.name || ' (' || CASE WHEN a.confidence = 'proxy' THEN 'proxy' ELSE a.source END || ')'`),
-    loadActivityTopList(where, env, `
-      a.kind = 'agent_call'
-    `, `a.source || '|' || a.name`, `a.name || ' (' || a.source || ')'`),
-    loadActivityTopList(where, env, `
-      a.kind IS NOT NULL
-    `, `a.kind`, `a.kind`),
+      env.DB.prepare(`
+        SELECT
+          COALESCE(SUM(CASE WHEN a.kind != 'user_message' AND a.confidence = 'exact' THEN a.event_count ELSE 0 END), 0) AS exact_count,
+          COALESCE(SUM(CASE WHEN a.kind != 'user_message' AND a.confidence = 'proxy' THEN a.event_count ELSE 0 END), 0) AS proxy_count,
+          COALESCE(SUM(CASE WHEN a.kind = 'user_message' THEN a.event_count ELSE 0 END), 0) AS user_message_count,
+          COALESCE(SUM(CASE WHEN a.kind = 'function_call' THEN a.event_count ELSE 0 END), 0) AS function_call_count,
+          COALESCE(SUM(CASE WHEN a.kind IN ('tool_call', 'custom_tool_call', 'mcp_tool_call') THEN a.event_count ELSE 0 END), 0) AS tool_call_count,
+          COALESCE(SUM(CASE WHEN a.kind = 'skill_call' THEN a.event_count ELSE 0 END), 0) AS skill_call_count,
+          COALESCE(SUM(CASE WHEN a.kind = 'skill_proxy' THEN a.event_count ELSE 0 END), 0) AS skill_proxy_count,
+          COALESCE(SUM(CASE WHEN a.kind = 'agent_call' THEN a.event_count ELSE 0 END), 0) AS subagent_count
+        FROM daily_activity_breakdown a
+        ${where.whereClause}
+      `).bind(...where.params).first<{
+        exact_count: number;
+        proxy_count: number;
+        user_message_count: number;
+        function_call_count: number;
+        tool_call_count: number;
+        skill_call_count: number;
+        skill_proxy_count: number;
+        subagent_count: number;
+      }>(),
+      loadActivityTopList(where, env, `
+        a.kind IN ('function_call', 'custom_tool_call', 'tool_call', 'web_search', 'tool_search', 'image_generation', 'mcp_tool_call')
+      `, `a.source || '|' || a.name`, `a.name || ' (' || a.source || ')'`),
+      loadActivityTopList(where, env, `
+        a.kind IN ('skill_call', 'skill_proxy')
+      `, `a.source || '|' || a.name || '|' || a.confidence`, `a.name || ' (' || CASE WHEN a.confidence = 'proxy' THEN 'proxy' ELSE a.source END || ')'`),
+      loadActivityTopList(where, env, `
+        a.kind = 'agent_call'
+      `, `a.source || '|' || a.name`, `a.name || ' (' || a.source || ')'`),
+      loadActivityTopList(where, env, `
+        a.kind IS NOT NULL
+      `, `a.kind`, `a.kind`),
     ]);
   } catch (error) {
     if (String(error).includes('daily_activity_breakdown')) return emptyInteractionMetrics();
@@ -447,14 +447,10 @@ async function loadInteractionMetrics(filters: DashboardFilters, env: Env) {
 
   const [summary, topTools, topSkills, topAgents, kindShare] = rows;
 
-  const exactCount = Number(summary?.exact_count ?? 0);
-  const proxyCount = Number(summary?.proxy_count ?? 0);
-  const userMessageCount = Number(summary?.user_message_count ?? 0);
-
   return {
-    exactCount,
-    proxyCount,
-    userMessageCount,
+    exactCount: Number(summary?.exact_count ?? 0),
+    proxyCount: Number(summary?.proxy_count ?? 0),
+    userMessageCount: Number(summary?.user_message_count ?? 0),
     functionCallCount: Number(summary?.function_call_count ?? 0),
     toolCallCount: Number(summary?.tool_call_count ?? 0),
     skillCallCount: Number(summary?.skill_call_count ?? 0),
@@ -467,7 +463,7 @@ async function loadInteractionMetrics(filters: DashboardFilters, env: Env) {
   };
 }
 
-function emptyInteractionMetrics() {
+export function emptyInteractionMetrics() {
   return {
     exactCount: 0,
     proxyCount: 0,
@@ -520,7 +516,7 @@ async function loadActivityTopList(
   }));
 }
 
-function buildActivityWhere(filters: DashboardFilters): WhereParts {
+export function buildActivityWhere(filters: DashboardFilters): WhereParts {
   const clauses: string[] = [];
   const params: (string | number)[] = [];
 
@@ -560,7 +556,7 @@ function buildActivityWhere(filters: DashboardFilters): WhereParts {
 async function buildSankey(rows: Array<{
   model: string;
   project: string;
-  total_tokens: number;
+  total_cost: number;
 }>, env: Env): Promise<{
   nodes: Array<{ id: string; label: string; layer: number; totalTokens: number }>;
   links: Array<{ source: string; target: string; value: number }>;
@@ -570,8 +566,9 @@ async function buildSankey(rows: Array<{
   const flowLinks = new Map<string, number>();
 
   for (const row of rows) {
-    const value = Number(row.total_tokens ?? 0);
-    if (!value) continue;
+    // Flow 以「费用 (USD)」为权重，让 Kiro 等仅有费用、无 token 的工具也能出现在流向图中。
+    const value = roundUsd(row.total_cost ?? 0);
+    if (value <= 0) continue;
 
     modelTotals.set(row.model, (modelTotals.get(row.model) ?? 0) + value);
     projectTotals.set(row.project, (projectTotals.get(row.project) ?? 0) + value);

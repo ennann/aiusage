@@ -91,8 +91,11 @@ async function discoverClaudeProjects(): Promise<string[]> {
 
 /** 从 Codex session 文件中提取所有不同的项目名 */
 async function discoverCodexProjects(): Promise<string[]> {
-  const sessionsDir = join(homedir(), '.codex', 'sessions');
-  const files = await walkJsonlFiles(sessionsDir);
+  const home = homedir();
+  const sessionsDirs = ['.codex', '.codex-kiro'].map((name) => join(home, name, 'sessions'));
+  const files = (
+    await Promise.all(sessionsDirs.map((dir) => walkJsonlFiles(dir)))
+  ).flat();
   const projects = new Set<string>();
 
   for (const filePath of files) {
