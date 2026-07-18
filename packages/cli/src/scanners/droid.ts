@@ -6,6 +6,8 @@ import {
   parseTs,
   dateKey,
   walkFiles,
+  fileModifiedTs,
+  inferProviderFromModel,
   initDateMap,
   accumulate,
   finalize,
@@ -16,24 +18,21 @@ import {
  * Droid scanner.
  *
  * 数据目录: ~/.factory/sessions/
- * 文件格式: *.jsonl + 同目录 {sessionId}.settings.json
- *
- * JSONL 仅取首行时间戳确定日期；
- * Token 用量从 settings.json → tokenUsage 提取。
+ * 文件格式: {sessionId}.settings.json（JSONL transcript 仅用于缺失模型时兜底）
+ * 直接扫描 settings，避免 transcript 缺失或损坏时丢掉已落盘的 token 汇总。
  */
 
 interface DroidSettings {
   model?: string;
+  providerLock?: string;
+  providerLockTimestamp?: string | number;
   tokenUsage?: {
     inputTokens?: number;
     outputTokens?: number;
+    cacheCreationTokens?: number;
     cacheReadTokens?: number;
     thinkingTokens?: number;
   };
-}
-
-interface DroidLine {
-  timestamp?: string | number;
 }
 
 function extractProjectFromSlug(dirPath: string): string {
@@ -50,41 +49,12 @@ export async function scanDroidDates(
   const dates = new Set(targetDates);
   const dir = baseDir ?? join(homedir(), '.factory', 'sessions');
 
-  const files = await walkFiles(dir, '.jsonl');
+  const files = await walkFiles(dir, '.settings.json');
   if (files.length === 0) return emptyResult(dates);
 
   const grouped = initDateMap(dates);
 
-  for (const jsonlPath of files) {
-    // 读 JSONL 首行取日期
-    let content: string;
-    try {
-      content = await readFile(jsonlPath, 'utf-8');
-    } catch {
-      continue;
-    }
-
-    const firstLine = content.split('\n').find((l) => l.trim());
-    if (!firstLine) continue;
-
-    let firstObj: DroidLine;
-    try {
-      firstObj = JSON.parse(firstLine);
-    } catch {
-      continue;
-    }
-
-    const ts = parseTs(firstObj.timestamp);
-    if (!ts) continue;
-    const dk = dateKey(ts);
-    const dayMap = grouped.get(dk);
-    if (!dayMap) continue;
-
-    // 构造同目录 settings.json 路径
-    const sessionDir = dirname(jsonlPath);
-    const jsonlName = basename(jsonlPath, '.jsonl');
-    const settingsPath = join(sessionDir, `${jsonlName}.settings.json`);
-
+  for (const settingsPath of files) {
     let settingsRaw: string;
     try {
       settingsRaw = await readFile(settingsPath, 'utf-8');
@@ -102,15 +72,25 @@ export async function scanDroidDates(
     const usage = settings.tokenUsage;
     if (!usage) continue;
 
-    const rawInput = usage.inputTokens ?? 0;
-    const cacheRead = usage.cacheReadTokens ?? 0;
-    const rawOutput = usage.outputTokens ?? 0;
-    const thinking = usage.thinkingTokens ?? 0;
+    const input = Math.max(usage.inputTokens ?? 0, 0);
+    const cacheRead = Math.max(usage.cacheReadTokens ?? 0, 0);
+    const cacheWrite = Math.max(usage.cacheCreationTokens ?? 0, 0);
+    const output = Math.max(usage.outputTokens ?? 0, 0);
+    const thinking = Math.max(usage.thinkingTokens ?? 0, 0);
+    if (input + cacheRead + cacheWrite + output + thinking === 0) continue;
 
-    const input = Math.max(rawInput - cacheRead, 0);
-    const output = Math.max(rawOutput - thinking, 0);
+    const sessionDir = dirname(settingsPath);
+    const transcriptPath = settingsPath.replace(/\.settings\.json$/, '.jsonl');
+    const transcriptModel = settings.model ? undefined : await extractModelFromTranscript(transcriptPath);
+    const model = normalizeDroidModel(settings.model ?? transcriptModel ?? `${settings.providerLock ?? 'droid'}-unknown`);
+    const provider = settings.providerLock?.trim().toLowerCase()
+      || inferProviderFromModel(model, 'droid');
+    const ts = parseTs(settings.providerLockTimestamp) ?? await fileModifiedTs(settingsPath);
+    if (!ts) continue;
+    const dk = dateKey(ts);
+    const dayMap = grouped.get(dk);
+    if (!dayMap) continue;
 
-    const model = settings.model ?? 'unknown';
     const rawProject = extractProjectFromSlug(sessionDir);
     const alias = projectAliases?.[rawProject];
     const project = alias ?? rawProject;
@@ -119,7 +99,7 @@ export async function scanDroidDates(
       dayMap,
       `${model}|${project}`,
       {
-        provider: 'droid',
+        provider,
         product: 'droid',
         channel: 'cli',
         model,
@@ -132,9 +112,31 @@ export async function scanDroidDates(
         outputTokens: 0,
         reasoningOutputTokens: 0,
       },
-      { input, cached: cacheRead, cacheWrite: 0, output, reasoning: thinking },
+      { input, cached: cacheRead, cacheWrite, output, reasoning: thinking },
     );
   }
 
   return finalize(grouped);
+}
+
+export function normalizeDroidModel(model: string): string {
+  return model
+    .replace(/^custom:/i, '')
+    .replace(/\[[^\]]*\]/g, '')
+    .replace(/\./g, '-')
+    .replace(/[\s_]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/-+$/, '')
+    .toLowerCase();
+}
+
+async function extractModelFromTranscript(filePath: string): Promise<string | undefined> {
+  let content: string;
+  try {
+    content = await readFile(filePath, 'utf-8');
+  } catch {
+    return undefined;
+  }
+  const match = content.match(/Model:\s*([^\\\["\n]+)/i);
+  return match?.[1]?.trim() || undefined;
 }

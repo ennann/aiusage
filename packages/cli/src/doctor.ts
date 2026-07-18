@@ -92,7 +92,7 @@ async function countFiles(dir: string, exts: string[], cap = 1000): Promise<numb
 
 // 每个工具的数据目录、检测的文件扩展名
 interface ToolDef {
-  dir: string;
+  dirs: string[];
   label: string;
   exts: string[];
 }
@@ -152,30 +152,45 @@ export async function runDoctor(lang: Lang = 'zh'): Promise<Check[]> {
   const g3 = s.groupTools;
   const home = homedir();
   const tools: ToolDef[] = [
-    { dir: join(home, '.claude', 'projects'), label: 'Claude Code', exts: ['.jsonl'] },
-    { dir: join(home, '.codex'), label: 'Codex CLI', exts: ['.jsonl'] },
-    { dir: join(home, 'Library', 'Application Support', 'Cursor', 'User', 'globalStorage'), label: 'Cursor', exts: ['.vscdb'] },
-    { dir: join(home, '.copilot', 'session-state'), label: 'Copilot CLI', exts: ['.jsonl'] },
-    { dir: join(home, 'Library', 'Application Support', 'Code', 'logs'), label: 'Copilot VS Code', exts: ['.log'] },
-    { dir: join(home, '.gemini', 'tmp'), label: 'Gemini CLI', exts: ['.json'] },
-    { dir: join(home, '.gemini', 'antigravity'), label: 'Antigravity', exts: ['.json'] },
-    { dir: join(home, '.qwen', 'tmp'), label: 'Qwen Code', exts: ['.jsonl'] },
-    { dir: join(resolveKimiCodeHome(home), 'sessions'), label: 'Kimi Code', exts: ['.jsonl'] },
-    { dir: join(home, '.kimi', 'sessions'), label: 'Kimi CLI (legacy)', exts: ['.jsonl'] },
-    { dir: join(home, '.local', 'share', 'amp', 'threads'), label: 'Amp', exts: ['.json'] },
-    { dir: join(home, '.factory', 'sessions'), label: 'Droid', exts: ['.jsonl', '.json'] },
-    { dir: join(home, '.local', 'share', 'opencode'), label: 'OpenCode', exts: ['.json'] },
-    { dir: join(home, '.pi', 'agent', 'sessions'), label: 'Pi', exts: ['.jsonl'] },
+    { dirs: [join(home, '.config', 'claude', 'projects'), join(home, '.claude', 'projects')], label: 'Claude Code', exts: ['.jsonl'] },
+    { dirs: [join(home, '.codex')], label: 'Codex CLI', exts: ['.jsonl'] },
+    { dirs: [join(home, 'Library', 'Application Support', 'Cursor', 'User', 'globalStorage')], label: 'Cursor', exts: ['.vscdb'] },
+    { dirs: [join(home, '.copilot', 'session-state'), join(home, '.copilot', 'otel')], label: 'Copilot CLI', exts: ['.jsonl'] },
+    {
+      dirs: [
+        join(home, 'Library', 'Application Support', 'Code', 'logs'),
+        join(home, 'Library', 'Application Support', 'Code', 'User', 'workspaceStorage'),
+      ],
+      label: 'Copilot VS Code',
+      exts: ['.log', '.json', '.jsonl'],
+    },
+    { dirs: [join(home, '.gemini', 'tmp')], label: 'Gemini CLI', exts: ['.json', '.jsonl'] },
+    { dirs: [join(home, '.gemini', 'antigravity')], label: 'Antigravity', exts: ['.json'] },
+    { dirs: [join(home, '.qwen', 'projects'), join(home, '.qwen', 'tmp')], label: 'Qwen Code', exts: ['.jsonl'] },
+    { dirs: [join(resolveKimiCodeHome(home), 'sessions')], label: 'Kimi Code', exts: ['.jsonl'] },
+    { dirs: [join(home, '.kimi', 'sessions')], label: 'Kimi CLI (legacy)', exts: ['.jsonl'] },
+    { dirs: [join(home, '.local', 'share', 'amp', 'threads')], label: 'Amp', exts: ['.json'] },
+    { dirs: [join(home, '.factory', 'sessions')], label: 'Droid', exts: ['.settings.json'] },
+    { dirs: [join(home, '.local', 'share', 'opencode')], label: 'OpenCode', exts: ['.db', '.json'] },
+    { dirs: [join(home, '.pi', 'agent', 'sessions'), join(home, '.omp', 'agent', 'sessions')], label: 'Pi / OMP', exts: ['.jsonl'] },
   ];
 
   for (const tool of tools) {
-    try {
-      await stat(tool.dir);
-    } catch {
+    let installed = false;
+    let n = 0;
+    for (const dir of tool.dirs) {
+      try {
+        await stat(dir);
+        installed = true;
+        n += await countFiles(dir, tool.exts);
+      } catch {
+        // 检查同一工具的其他兼容目录。
+      }
+    }
+    if (!installed) {
       checks.push({ group: g3, name: tool.label, status: 'warn', message: s.notInstalled });
       continue;
     }
-    const n = await countFiles(tool.dir, tool.exts);
     if (n > 0) {
       checks.push({ group: g3, name: tool.label, status: 'ok', message: s.hasData(n) });
     } else {

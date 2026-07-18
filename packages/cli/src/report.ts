@@ -1,11 +1,12 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { basename, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import type { IngestBreakdown } from '@aiusage/shared';
 import { calculateCost, PRICING_VERSION, type PricingCatalog } from '@aiusage/shared';
 import { scanDates } from './scan.js';
-import { parseTs, dateKey } from './scanners/utils.js';
+import { parseTs, dateKey, fileModifiedTs } from './scanners/utils.js';
 import { resolveKimiCodeHome } from './scanners/kimi.js';
+import { discoverOpenCodeUsageDates } from './scanners/opencode.js';
 import type { PricingInfo } from './pricing.js';
 
 export type ReportRange = '7d' | '1m' | '3m' | 'all' | 'today';
@@ -176,14 +177,19 @@ async function discoverAllDates(): Promise<string[]> {
     discoverCopilotVscodeDates(dates),
     discoverAntigravityDates(dates),
     discoverGenericJsonlDates(join(home, '.copilot', 'session-state'), dates),
+    discoverGenericJsonlDates(join(home, '.copilot', 'otel'), dates),
     discoverGenericJsonlDates(join(home, '.qwen', 'tmp'), dates),
+    discoverGenericJsonlDates(join(home, '.qwen', 'projects'), dates),
     discoverGenericJsonlDates(join(home, '.kimi', 'sessions'), dates),
     discoverGenericJsonlDates(join(resolveKimiCodeHome(home), 'sessions'), dates),
     discoverGenericJsonDates(join(home, '.local', 'share', 'amp', 'threads'), dates),
-    discoverGenericJsonlDates(join(home, '.factory', 'sessions'), dates),
-    discoverGenericJsonDates(join(home, '.local', 'share', 'opencode'), dates),
+    discoverGenericJsonDates(join(home, '.factory', 'sessions'), dates),
+    discoverOpenCodeUsageDates().then(found => found.forEach(date => dates.add(date))),
     discoverGenericJsonlDates(join(home, '.pi', 'agent', 'sessions'), dates),
+    discoverGenericJsonlDates(join(home, '.omp', 'agent', 'sessions'), dates),
   ]);
+  const explicitCopilotOtel = process.env.COPILOT_OTEL_FILE_EXPORTER_PATH?.trim();
+  if (explicitCopilotOtel) await discoverJsonlFileDates(explicitCopilotOtel, dates);
   return [...dates].sort();
 }
 
@@ -194,14 +200,28 @@ async function discoverGenericJsonlDates(baseDir: string, dates: Set<string>): P
   for (const filePath of files) {
     const content = await safeReadUtf8(filePath);
     if (!content) continue;
+    let foundDate = false;
     for (const line of content.split('\n')) {
       if (!line.trim()) continue;
-      let record: { timestamp?: string | number; time?: string | number; created_at?: string | number };
+      let record: Record<string, any>;
       try { record = JSON.parse(line); } catch { continue; }
-      const ts = parseTs(record.timestamp ?? record.time ?? record.created_at);
-      if (ts) dates.add(dateKey(ts));
+      foundDate = collectRecordDates(record, dates) || foundDate;
     }
+    if (!foundDate) await addFileModifiedDate(filePath, dates);
   }
+}
+
+async function discoverJsonlFileDates(filePath: string, dates: Set<string>): Promise<void> {
+  const content = await safeReadUtf8(filePath);
+  if (!content) return;
+  let foundDate = false;
+  for (const line of content.split('\n')) {
+    if (!line.trim()) continue;
+    try {
+      foundDate = collectRecordDates(JSON.parse(line) as Record<string, any>, dates) || foundDate;
+    } catch { /* skip */ }
+  }
+  if (!foundDate) await addFileModifiedDate(filePath, dates);
 }
 
 /** 通用：递归扫描 .json 文件，从顶层或 messages 提取 timestamp */
@@ -213,18 +233,62 @@ async function discoverGenericJsonDates(baseDir: string, dates: Set<string>): Pr
     if (!content) continue;
     let data: any;
     try { data = JSON.parse(content); } catch { continue; }
-    // 顶层 timestamp
-    const topTs = parseTs(data.timestamp ?? data.createTime);
-    if (topTs) dates.add(dateKey(topTs));
-    // messages 数组
-    const msgs = data.messages ?? data.history ?? [];
-    if (Array.isArray(msgs)) {
-      for (const msg of msgs) {
-        const ts = parseTs(msg.timestamp ?? msg.createTime);
-        if (ts) dates.add(dateKey(ts));
-      }
+    const foundDate = Array.isArray(data)
+      ? data.reduce((found, row) => collectRecordDates(row, dates) || found, false)
+      : collectRecordDates(data, dates);
+    if (!foundDate) await addFileModifiedDate(filePath, dates);
+  }
+}
+
+function collectRecordDates(record: Record<string, any> | undefined, dates: Set<string>): boolean {
+  if (!record || typeof record !== 'object') return false;
+  let found = false;
+  const candidates = [
+    record.timestamp, record.time, record.created_at, record.createTime, record.startTime,
+    record.lastUpdated, record.created, record.providerLockTimestamp, record.endTime,
+    record.hrTime, record._hrTime, record.observedTimestamp, record.timeUnixNano,
+    record.time?.created,
+  ];
+  for (const value of candidates) {
+    const ts = parseStructuredTs(value);
+    if (ts) {
+      dates.add(dateKey(ts));
+      found = true;
     }
   }
+  const nestedRows = [
+    ...(Array.isArray(record.messages) ? record.messages : []),
+    ...(Array.isArray(record.history) ? record.history : []),
+    ...(Array.isArray(record.data?.messages) ? record.data.messages : []),
+    ...(Array.isArray(record.data?.history) ? record.data.history : []),
+    ...(Array.isArray(record.$set?.messages) ? record.$set.messages : []),
+    ...(Array.isArray(record.usageLedger?.events) ? record.usageLedger.events : []),
+  ];
+  for (const row of nestedRows) found = collectRecordDates(row, dates) || found;
+  return found;
+}
+
+function parseStructuredTs(value: unknown): Date | null {
+  if (Array.isArray(value) && value.length > 0) {
+    const seconds = Number(value[0]);
+    const nanos = Number(value[1] ?? 0);
+    if (Number.isFinite(seconds) && Number.isFinite(nanos)) {
+      return parseTs(seconds * 1_000 + nanos / 1_000_000);
+    }
+  }
+  if (typeof value === 'number' || (typeof value === 'string' && /^\d+(?:\.\d+)?$/.test(value))) {
+    const raw = Number(value);
+    if (!Number.isFinite(raw) || raw <= 0) return null;
+    const abs = Math.abs(raw);
+    const millis = abs >= 1e17 ? raw / 1e6 : abs >= 1e14 ? raw / 1e3 : raw;
+    return parseTs(millis);
+  }
+  return parseTs(value as string | number | undefined);
+}
+
+async function addFileModifiedDate(filePath: string, dates: Set<string>): Promise<void> {
+  const timestamp = await fileModifiedTs(filePath);
+  if (timestamp) dates.add(dateKey(timestamp));
 }
 
 async function walkForFiles(dir: string, ext: string, result: string[]): Promise<void> {
@@ -242,64 +306,10 @@ async function walkForFiles(dir: string, ext: string, result: string[]): Promise
 
 async function discoverGeminiDates(dates: Set<string>): Promise<void> {
   const baseDir = join(homedir(), '.gemini', 'tmp');
-  const files: string[] = [];
-  await walkForGeminiJsonl(baseDir, files);
-
-  for (const filePath of files) {
-    const content = await safeReadUtf8(filePath);
-    if (!content) continue;
-
-    let session:
-      | { timestamp?: string | number; createTime?: string | number; startTime?: string | number; messages?: { timestamp?: string | number; createTime?: string | number }[]; history?: { timestamp?: string | number; createTime?: string | number }[]; data?: { createTime?: string | number; messages?: { timestamp?: string | number; createTime?: string | number }[]; history?: { timestamp?: string | number; createTime?: string | number }[] } }
-      | Array<{ timestamp?: string | number }>;
-    try {
-      session = JSON.parse(content);
-    } catch {
-      continue;
-    }
-
-    if (Array.isArray(session)) {
-      for (const row of session) {
-        const ts = parseTs(row.timestamp);
-        if (ts) dates.add(dateKey(ts));
-      }
-      continue;
-    }
-
-    const topLevelTs = parseTs(session.timestamp ?? session.createTime ?? session.startTime ?? session.data?.createTime);
-    if (topLevelTs) dates.add(dateKey(topLevelTs));
-
-    const messages = [
-      ...(session.messages ?? []),
-      ...(session.history ?? []),
-      ...(session.data?.messages ?? []),
-      ...(session.data?.history ?? []),
-    ];
-    for (const msg of messages) {
-      const ts = parseTs(msg.timestamp ?? msg.createTime);
-      if (ts) {
-        dates.add(dateKey(ts));
-      }
-    }
-  }
-}
-
-async function walkForGeminiJsonl(dir: string, result: string[]): Promise<void> {
-  let entries;
-  try {
-    entries = await readdir(dir, { withFileTypes: true });
-  } catch {
-    return;
-  }
-
-  for (const entry of entries) {
-    const fullPath = join(dir, entry.name);
-    if (entry.isDirectory()) {
-      await walkForGeminiJsonl(fullPath, result);
-    } else if (entry.name.endsWith('.json')) {
-      result.push(fullPath);
-    }
-  }
+  await Promise.all([
+    discoverGenericJsonDates(baseDir, dates),
+    discoverGenericJsonlDates(baseDir, dates),
+  ]);
 }
 
 async function discoverCopilotVscodeDates(dates: Set<string>): Promise<void> {
@@ -320,7 +330,7 @@ async function discoverCopilotVscodeDates(dates: Set<string>): Promise<void> {
   const sessionFiles: string[] = [];
   await walkForFiles(join(home, 'Library', 'Application Support', 'Code', 'User', 'workspaceStorage'), '.json', sessionFiles);
   for (const filePath of sessionFiles) {
-    if (!filePath.includes('/chatSessions/')) continue;
+    if (!isChatSessionFile(filePath)) continue;
     const content = await safeReadUtf8(filePath);
     if (!content) continue;
     let session: { requests?: Array<{ timestamp?: string | number; response?: unknown[]; result?: { errorDetails?: { responseIsIncomplete?: boolean } } }> };
@@ -336,6 +346,56 @@ async function discoverCopilotVscodeDates(dates: Set<string>): Promise<void> {
       if (ts) dates.add(dateKey(ts));
     }
   }
+
+  const crdtFiles: string[] = [];
+  await walkForFiles(
+    join(home, 'Library', 'Application Support', 'Code', 'User', 'workspaceStorage'),
+    '.jsonl',
+    crdtFiles,
+  );
+  for (const filePath of crdtFiles) {
+    if (!isChatSessionFile(filePath)) continue;
+    const content = await safeReadUtf8(filePath);
+    if (!content) continue;
+    for (const line of content.split('\n')) {
+      if (!line.trim()) continue;
+      let record: { kind?: number; k?: unknown[]; v?: unknown };
+      try {
+        record = JSON.parse(line) as { kind?: number; k?: unknown[]; v?: unknown };
+      } catch {
+        continue;
+      }
+      const root = record.v && typeof record.v === 'object' && !Array.isArray(record.v)
+        ? record.v as { requests?: unknown[] }
+        : undefined;
+      const requests = record.kind === 0 && Array.isArray(root?.requests)
+        ? root.requests
+        : record.kind === 2 && record.k?.[0] === 'requests' && Array.isArray(record.v)
+          ? record.v
+          : [];
+      for (const value of requests) {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) continue;
+        const request = value as {
+          timestamp?: string | number;
+          modelId?: string;
+          promptTokens?: number;
+          completionTokens?: number;
+          result?: { metadata?: { promptTokens?: number; outputTokens?: number; resolvedModel?: string } };
+        };
+        const metadata = request.result?.metadata;
+        const isCopilot = Boolean(metadata?.resolvedModel) || request.modelId?.startsWith('copilot/');
+        const hasTokens = (request.promptTokens ?? metadata?.promptTokens ?? 0) > 0
+          || (request.completionTokens ?? metadata?.outputTokens ?? 0) > 0;
+        if (!isCopilot || !hasTokens) continue;
+        const ts = parseTs(request.timestamp);
+        if (ts) dates.add(dateKey(ts));
+      }
+    }
+  }
+}
+
+function isChatSessionFile(filePath: string): boolean {
+  return basename(dirname(filePath)) === 'chatSessions';
 }
 
 async function discoverAntigravityDates(dates: Set<string>): Promise<void> {

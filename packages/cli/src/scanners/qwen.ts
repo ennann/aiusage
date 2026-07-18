@@ -7,6 +7,7 @@ import {
   dateKey,
   resolveProjectFields,
   walkFiles,
+  fileModifiedTs,
   initDateMap,
   accumulate,
   finalize,
@@ -16,15 +17,16 @@ import {
 /**
  * Qwen Code scanner (Gemini CLI fork).
  *
- * 日志目录: ~/.qwen/tmp/{projectId}/chats/*.jsonl
- * 行格式: { type, timestamp, uuid, model, cwd, usageMetadata }
- * 仅解析 type === 'assistant'，按 uuid 去重
+ * 当前目录: ~/.qwen/projects/{projectId}/chats/*.jsonl
+ * 兼容旧目录: ~/.qwen/tmp/{projectId}/chats/*.jsonl
+ * 仅解析 assistant usage；优先按 uuid 去重，无 uuid 时使用会话内稳定序号。
  */
 
 interface QwenRecord {
   type?: string;
   timestamp?: string | number;
   uuid?: string;
+  sessionId?: string;
   model?: string;
   cwd?: string;
   usageMetadata?: {
@@ -41,19 +43,23 @@ export async function scanQwenDates(
   projectAliases?: Record<string, string>,
 ): Promise<Map<string, IngestBreakdown[]>> {
   const dates = new Set(targetDates);
-  const dir = baseDir ?? join(homedir(), '.qwen', 'tmp');
-
-  const files = await walkFiles(dir, '.jsonl');
+  const dirs = baseDir
+    ? [baseDir]
+    : [join(homedir(), '.qwen', 'projects'), join(homedir(), '.qwen', 'tmp')];
+  const files = [...new Set((await Promise.all(dirs.map(dir => walkFiles(dir, '.jsonl')))).flat())];
   if (files.length === 0) return emptyResult(dates);
 
   const grouped = initDateMap(dates);
   const seen = new Set<string>();
 
   for (const filePath of files) {
-    // 从路径提取 projectId: .qwen/tmp/{projectId}/chats/xxx.jsonl
+    // 从 projects/{projectId}/chats 或 tmp/{projectId}/chats 提取 projectId。
     const chatsDir = dirname(filePath);
     const projectDir = dirname(chatsDir);
     const projectId = basename(projectDir);
+    const pathSessionId = basename(filePath, '.jsonl');
+    const fallbackTs = await fileModifiedTs(filePath);
+    let assistantIndex = 0;
 
     let content: string;
     try {
@@ -73,30 +79,32 @@ export async function scanQwenDates(
 
       if (obj.type !== 'assistant') continue;
 
-      const ts = parseTs(obj.timestamp);
+      const u = obj.usageMetadata;
+      if (!u) continue;
+
+      const messageKey = obj.uuid ?? `${obj.sessionId ?? pathSessionId}:${assistantIndex}`;
+      assistantIndex += 1;
+      if (seen.has(messageKey)) continue;
+      seen.add(messageKey);
+
+      const ts = parseTs(obj.timestamp) ?? fallbackTs;
       if (!ts) continue;
       const dk = dateKey(ts);
       const dayMap = grouped.get(dk);
       if (!dayMap) continue;
-
-      // uuid 去重
-      if (obj.uuid) {
-        if (seen.has(obj.uuid)) continue;
-        seen.add(obj.uuid);
-      }
-
-      const u = obj.usageMetadata;
-      if (!u) continue;
 
       const model = obj.model ?? 'unknown';
       const fields = obj.cwd
         ? resolveProjectFields(obj.cwd, projectAliases)
         : resolveProjectFields(projectId, projectAliases);
 
-      const cached = u.cachedContentTokenCount ?? 0;
-      const input = Math.max((u.promptTokenCount ?? 0) - cached, 0);
-      const thoughts = u.thoughtsTokenCount ?? 0;
-      const output = Math.max((u.candidatesTokenCount ?? 0) - thoughts, 0);
+      const cached = Math.max(u.cachedContentTokenCount ?? 0, 0);
+      const prompt = Math.max(u.promptTokenCount ?? 0, 0);
+      const input = Math.max(prompt - Math.min(cached, prompt), 0);
+      const thoughts = Math.max(u.thoughtsTokenCount ?? 0, 0);
+      // candidatesTokenCount 与 thoughtsTokenCount 是并列字段，不互相包含。
+      const output = Math.max(u.candidatesTokenCount ?? 0, 0);
+      if (input + cached + output + thoughts === 0) continue;
 
       accumulate(
         dayMap,
