@@ -5,6 +5,7 @@ import type { IngestBreakdown } from '@aiusage/shared';
 import { calculateCost, PRICING_VERSION, type PricingCatalog } from '@aiusage/shared';
 import { scanDates } from './scan.js';
 import { parseTs, dateKey } from './scanners/utils.js';
+import { resolveKimiCodeHome } from './scanners/kimi.js';
 import type { PricingInfo } from './pricing.js';
 
 export type ReportRange = '7d' | '1m' | '3m' | 'all' | 'today';
@@ -177,6 +178,7 @@ async function discoverAllDates(): Promise<string[]> {
     discoverGenericJsonlDates(join(home, '.copilot', 'session-state'), dates),
     discoverGenericJsonlDates(join(home, '.qwen', 'tmp'), dates),
     discoverGenericJsonlDates(join(home, '.kimi', 'sessions'), dates),
+    discoverGenericJsonlDates(join(resolveKimiCodeHome(home), 'sessions'), dates),
     discoverGenericJsonDates(join(home, '.local', 'share', 'amp', 'threads'), dates),
     discoverGenericJsonlDates(join(home, '.factory', 'sessions'), dates),
     discoverGenericJsonDates(join(home, '.local', 'share', 'opencode'), dates),
@@ -194,9 +196,9 @@ async function discoverGenericJsonlDates(baseDir: string, dates: Set<string>): P
     if (!content) continue;
     for (const line of content.split('\n')) {
       if (!line.trim()) continue;
-      let record: { timestamp?: string | number };
+      let record: { timestamp?: string | number; time?: string | number; created_at?: string | number };
       try { record = JSON.parse(line); } catch { continue; }
-      const ts = parseTs(record.timestamp as string | undefined);
+      const ts = parseTs(record.timestamp ?? record.time ?? record.created_at);
       if (ts) dates.add(dateKey(ts));
     }
   }

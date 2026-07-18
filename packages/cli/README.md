@@ -3,11 +3,18 @@
 `@aiusage/cli` is the AIUsage command-line tool for:
 
 - discovering and managing projects across AI tools
-- scanning local Claude Code, Codex, Cursor, Copilot CLI, Copilot for VS Code, Gemini CLI, and Antigravity usage
+- scanning local Claude Code, Codex, Cursor, Copilot CLI, Copilot for VS Code, Gemini CLI, Antigravity, Amp, Kimi Code, Qwen Code, Droid, OpenCode, and Pi usage
 - importing historical usage from Anthropic Admin API
 - printing local usage summaries for the last 7 days, 30 days, 90 days, or all history
 - scheduling automatic sync to an AIUsage Worker
 - diagnosing configuration and connectivity issues
+
+Kimi scanning supports both legacy Kimi CLI data in `~/.kimi/sessions/` and
+new Kimi Code data in `$KIMI_CODE_HOME/sessions/` (default:
+`~/.kimi-code/sessions/`). It reads only token counters and session metadata
+from `wire.jsonl`; conversation content is not uploaded. The new wire-format
+parser references the MIT-licensed [tokscale](https://github.com/junhoyeo/tokscale)
+implementation.
 
 ## Install
 
@@ -41,7 +48,7 @@ aiusage project alias                   # list all configured aliases
 aiusage project alias --remove myapp    # remove alias
 ```
 
-Scans data directories for Claude Code, Codex, Cursor, Copilot CLI, Copilot for VS Code, Gemini CLI, and Antigravity, listing discovered projects with their aliases and sources.
+Scans data directories for all supported tools, including Kimi Code session metadata, listing discovered projects with their aliases and sources.
 
 Project aliases are applied locally before upload. If two devices set the same alias for their respective project directories, the server merges them into one project.
 

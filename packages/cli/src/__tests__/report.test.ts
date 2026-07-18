@@ -92,6 +92,51 @@ describe('buildLocalReport', () => {
       '2025-12-10',
     ]);
   });
+
+  it('discovers and reports Kimi Code usage from time-based usage.record lines', async () => {
+    const sessionDir = join(
+      homeDir,
+      '.kimi-code',
+      'sessions',
+      'wd_aiusage_123456789abc',
+      'session-1',
+    );
+    const agentDir = join(sessionDir, 'agents', 'main');
+    await mkdir(agentDir, { recursive: true });
+    await writeFile(
+      join(sessionDir, 'state.json'),
+      JSON.stringify({ workDir: '/Users/test/Projects/AI/aiusage' }),
+    );
+    await writeFile(
+      join(agentDir, 'wire.jsonl'),
+      JSON.stringify({
+        type: 'usage.record',
+        model: 'kimi-code/k3',
+        usage: {
+          inputOther: 1_000_000,
+          output: 100_000,
+          inputCacheRead: 2_000_000,
+          inputCacheCreation: 0,
+        },
+        usageScope: 'turn',
+        time: Date.parse('2026-07-17T12:00:00Z'),
+      }),
+    );
+
+    const { buildLocalReport } = await import('../report.js');
+    const report = await buildLocalReport('all');
+
+    expect(report.daily.map(day => day.usageDate)).toEqual(['2026-07-17']);
+    expect(report.bySource).toContainEqual(
+      expect.objectContaining({
+        source: 'moonshot/kimi-code',
+        eventCount: 1,
+        inputTokens: 1_000_000,
+        cachedInputTokens: 2_000_000,
+        outputTokens: 100_000,
+      }),
+    );
+  });
 });
 
 describe('calculateBreakdownCost', () => {

@@ -10,7 +10,7 @@ import { github } from './data/github.js';
 import { sourcegraph } from './data/sourcegraph.js';
 import { inflection, cursor, droid, opencode } from './data/placeholders.js';
 
-export const PRICING_VERSION = '2026-07-10-gpt-5.6-v1';
+export const PRICING_VERSION = '2026-07-18-kimi-k3-v1';
 
 /**
  * 模型别名（精确匹配优先于前缀回退）。
@@ -24,6 +24,8 @@ const aliases: Record<string, string> = {
   'claude-sonnet-4.6': 'claude-sonnet-4-6',
   'gpt-5.6': 'gpt-5.6-sol',
   'codex-auto-review': 'gpt-5.4',
+  'k3': 'kimi-k3',
+  'kimi-code/k3': 'kimi-k3',
 };
 
 export const catalog: PricingCatalog = {

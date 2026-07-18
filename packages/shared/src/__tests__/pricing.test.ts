@@ -52,6 +52,7 @@ describe('calculateCost — 关键模型', () => {
     ['openai', 'codex', 'o3-deep-research', 25], // 5 + 20，修正后
     ['openai', 'codex', 'computer-use-preview', 7.5], // 1.5 + 6，修正后
     ['google', 'gemini-cli', 'gemini-2.5-flash', 2.8], // 0.30 + 2.50，修正后
+    ['moonshot', 'kimi-code', 'k3', 120 / 7.2], // alias → kimi-k3，¥20 + ¥100
   ])('%s/%s/%s 应等于 $%s', (provider, product, model, expected) => {
     const r = calculateCost(provider, product, model, tokens);
     expect(r.costStatus).toBe('exact');
@@ -211,6 +212,19 @@ describe('多币种折算', () => {
     });
     // input ¥6.5 + output ¥27 = ¥33.5 → $4.6528
     expect(r.estimatedCostUsd).toBeCloseTo(33.5 / 7.2, 3);
+    expect(r.costStatus).toBe('exact');
+  });
+
+  it('Kimi Code 的 k3 别名应命中 Kimi K3，并区分缓存命中价格', () => {
+    const r = calculateCost('moonshot', 'kimi-code', 'k3', {
+      inputTokens: 1_000_000,
+      cachedInputTokens: 2_000_000,
+      cacheWriteTokens: 500_000,
+      outputTokens: 100_000,
+    });
+    // input ¥20 + cached ¥4 + cache miss/write ¥10 + output ¥10 = ¥44 → $6.1111
+    expect(r.resolvedModel).toBe('kimi-k3');
+    expect(r.estimatedCostUsd).toBeCloseTo(44 / 7.2, 4);
     expect(r.costStatus).toBe('exact');
   });
 

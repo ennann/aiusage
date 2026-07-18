@@ -229,7 +229,8 @@ The controller automatically detects and scans all installed tools:
 | Copilot CLI | GitHub | `~/.copilot/session-state/` |
 | Gemini CLI | Google | `~/.gemini/tmp/` |
 | Amp | Sourcegraph | `~/.local/share/amp/threads/` |
-| Kimi Code | Moonshot | `~/.kimi/sessions/` |
+| Kimi Code | Moonshot | `$KIMI_CODE_HOME/sessions/`（默认 `~/.kimi-code/sessions/`） |
+| Kimi CLI（旧版） | Moonshot | `~/.kimi/sessions/` |
 | Qwen Code | Alibaba | `~/.qwen/tmp/` |
 | Droid | — | `~/.factory/sessions/` |
 | OpenCode | — | `~/.local/share/opencode/` |
