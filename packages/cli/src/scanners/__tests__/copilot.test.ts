@@ -282,3 +282,68 @@ describe('multi-session aggregation', () => {
     expect(items.map((i) => i.model).sort()).toEqual(['claude-sonnet-4', 'gpt-4o']);
   });
 });
+
+describe('OpenTelemetry usage', () => {
+  it('解析 chat span 的缓存写入与推理 token，并从 input 中仅扣除 cache read', async () => {
+    const day = '2026-07-18';
+    await writeSession(tmpDir, 'copilot-otel.jsonl', [{
+      type: 'span', traceId: 'trace-1', spanId: 'chat-1', name: 'chat claude-sonnet-4-6',
+      startTime: [1784361600, 0],
+      attributes: {
+        'gen_ai.operation.name': 'chat',
+        'gen_ai.request.model': 'claude-sonnet-4-6',
+        'gen_ai.conversation.id': 'conv-1',
+        'gen_ai.usage.input_tokens': 1000,
+        'gen_ai.usage.output_tokens': 50,
+        'gen_ai.usage.cache_read_input_tokens': 200,
+        'gen_ai.usage.cache_creation_input_tokens': 75,
+        'gen_ai.usage.reasoning_tokens': 12,
+      },
+    }]);
+
+    const rows = (await scanCopilotDates([day], tmpDir)).get(day)!;
+    expect(rows).toEqual([
+      expect.objectContaining({
+        provider: 'anthropic', model: 'claude-sonnet-4-6', eventCount: 1, inputTokens: 800,
+        cachedInputTokens: 200, cacheWriteTokens: 75, outputTokens: 50,
+        reasoningOutputTokens: 12,
+      }),
+    ]);
+  });
+
+  it('识别纳秒时间戳，并按 response ID 抑制跨 trace 汇总', async () => {
+    const day = '2026-07-18';
+    const timeUnixNano = (BigInt(Date.parse('2026-07-18T10:00:00Z')) * 1_000_000n).toString();
+    const attrs = {
+      'gen_ai.response.id': 'response-1',
+      'gen_ai.request.model': 'gpt-5.6',
+      'gen_ai.usage.input_tokens': 10,
+      'gen_ai.usage.output_tokens': 2,
+    };
+    await writeSession(tmpDir, 'copilot-nanos.jsonl', [
+      { type: 'log', traceId: 'trace-detail', timeUnixNano, attributes: { ...attrs, 'event.name': 'gen_ai.client.inference.operation.details' } },
+      { type: 'span', traceId: 'trace-summary', spanId: 'summary', name: 'invoke_agent', timeUnixNano, attributes: { ...attrs, 'gen_ai.operation.name': 'invoke_agent' } },
+    ]);
+
+    const rows = (await scanCopilotDates([day], tmpDir)).get(day)!;
+    expect(rows[0]).toEqual(expect.objectContaining({
+      provider: 'openai', eventCount: 1, inputTokens: 10, outputTokens: 2,
+    }));
+  });
+
+  it('同一 trace 有 chat span 时抑制 aggregate invoke_agent，避免双计', async () => {
+    const day = '2026-07-18';
+    const attrs = {
+      'gen_ai.request.model': 'gpt-5.6',
+      'gen_ai.usage.input_tokens': 10,
+      'gen_ai.usage.output_tokens': 2,
+    };
+    await writeSession(tmpDir, 'copilot-dedup.jsonl', [
+      { type: 'span', traceId: 'trace-2', spanId: 'summary', name: 'invoke_agent', startTime: [1784361600, 0], attributes: { ...attrs, 'gen_ai.operation.name': 'invoke_agent' } },
+      { type: 'span', traceId: 'trace-2', spanId: 'chat', name: 'chat gpt-5.6', startTime: [1784361601, 0], attributes: { ...attrs, 'gen_ai.operation.name': 'chat' } },
+    ]);
+
+    const rows = (await scanCopilotDates([day], tmpDir)).get(day)!;
+    expect(rows[0]).toEqual(expect.objectContaining({ eventCount: 1, inputTokens: 10, outputTokens: 2 }));
+  });
+});

@@ -1,9 +1,10 @@
-import { readdir, open, readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { createReadStream } from 'node:fs';
+import { readdir, readFile } from 'node:fs/promises';
+import { basename, join } from 'node:path';
 import { homedir } from 'node:os';
 import { createInterface } from 'node:readline';
 import { calculateCost, type IngestBreakdown } from '@aiusage/shared';
-import { normalizeModelName, runWithConcurrency, resolveProjectFields, type ProjectFields } from './utils.js';
+import { fileModifiedTs, normalizeModelName, runWithConcurrency, resolveProjectFields, type ProjectFields } from './utils.js';
 
 const FILE_CONCURRENCY = 16;
 const MAX_LINE_BYTES = 64 * 1024 * 1024; // 64 MB
@@ -12,23 +13,72 @@ type CodexServiceTier = 'fast' | 'priority' | null;
 interface CodexRecord {
   type?: string;
   timestamp?: string;
-  payload?: {
-    type?: string;
+  payload?: CodexPayload;
+}
+
+interface CodexPayload {
+  type?: string;
+  model?: string;
+  model_name?: string;
+  model_info?: { slug?: string };
+  cwd?: string;
+  id?: string;
+  forked_from_id?: string;
+  source?: unknown;
+  thread_source?: string;
+  turn_id?: string;
+  started_at?: number;
+  info?: {
     model?: string;
-    cwd?: string;
-    info?: {
-      last_token_usage?: TokenUsage;
-      total_token_usage?: TokenUsage;
-    };
+    model_name?: string;
+    last_token_usage?: TokenUsage;
+    total_token_usage?: TokenUsage;
   };
 }
 
 interface TokenUsage {
   input_tokens?: number;
   cached_input_tokens?: number;
+  cache_read_input_tokens?: number;
   output_tokens?: number;
   reasoning_output_tokens?: number;
   total_tokens?: number;
+}
+
+interface CodexTotals {
+  input: number;
+  cached: number;
+  output: number;
+  reasoning: number;
+}
+
+interface CodexFileState {
+  currentModel: string;
+  projectFields: ProjectFields;
+  hasSessionWorkspace: boolean;
+  previousTotals?: CodexTotals;
+  sessionIdFromMeta?: string;
+  sessionForkedFromId?: string;
+  forkedChildSessionId?: string;
+  forkedChildReplaySessionId?: string;
+  waitingForChildTurn: boolean;
+  inheritedBaseline?: CodexTotals;
+  inheritedReportedTotal?: number;
+  taskStartedTurnIds: Set<string>;
+  childIsUserFork: boolean;
+}
+
+interface CodexUsageEvent {
+  usageDate: string;
+  signature: string;
+  model: string;
+  projectFields: ProjectFields;
+  inputTokens: number;
+  cachedInputTokens: number;
+  outputTokens: number;
+  reasoningOutputTokens: number;
+  costUSD?: number;
+  pricingVersion?: string;
 }
 
 export async function scanCodex(
@@ -57,13 +107,23 @@ export async function scanCodexDates(
     return new Map([...targetDateSet].map((targetDate) => [targetDate, []]));
   }
 
-  // 跨文件全局签名去重
-  const globalSeenSigs = new Set<string>();
-
-  // 并发流式处理文件
-  await runWithConcurrency(sessionFiles, FILE_CONCURRENCY, async (filePath) => {
-    await processCodexFile(filePath, targetDateSet, projectAliases, groupedByDate, globalSeenSigs, serviceTier);
+  // 文件并发解析、按稳定路径顺序合并：既保留扫描速度，也让 fork 重放的
+  // first-wins 归属不受异步完成顺序影响。
+  const eventsByFile: CodexUsageEvent[][] = Array.from({ length: sessionFiles.length }, () => []);
+  await runWithConcurrency(sessionFiles, FILE_CONCURRENCY, async (filePath, index) => {
+    eventsByFile[index] = await processCodexFile(filePath, projectAliases, serviceTier);
   });
+
+  // 跨文件去重，但 key 必须带 session/fork scope；纯 token 数值全局去重会误杀独立会话。
+  const globalSeenSigs = new Set<string>();
+  for (const events of eventsByFile) {
+    for (const event of events) {
+      if (globalSeenSigs.has(event.signature)) continue;
+      globalSeenSigs.add(event.signature);
+      if (!targetDateSet.has(event.usageDate)) continue;
+      mergeCodexEvent(groupedByDate, event);
+    }
+  }
 
   return new Map(
     [...groupedByDate.entries()].map(([usageDate, grouped]) => [usageDate, [...grouped.values()]]),
@@ -73,28 +133,27 @@ export async function scanCodexDates(
 /** 流式逐行读取单个 Codex JSONL 文件 */
 async function processCodexFile(
   filePath: string,
-  targetDateSet: Set<string>,
   projectAliases: Record<string, string> | undefined,
-  groupedByDate: Map<string, Map<string, IngestBreakdown>>,
-  globalSeenSigs: Set<string>,
   serviceTier: CodexServiceTier,
-): Promise<void> {
-  let fh;
-  try {
-    fh = await open(filePath, 'r');
-  } catch {
-    return;
-  }
-
+): Promise<CodexUsageEvent[]> {
+  const events: CodexUsageEvent[] = [];
+  const input = createReadStream(filePath, { encoding: 'utf-8' });
   try {
     const rl = createInterface({
-      input: fh.createReadStream({ encoding: 'utf-8' }),
+      input,
       crlfDelay: Infinity,
     });
 
-    let currentModel = 'unknown';
-    let currentProjectFields: ProjectFields = { project: 'unknown', projectDisplay: 'unknown' };
-    let previousTotal: TokenUsage = {};
+    const fileSessionId = basename(filePath, '.jsonl');
+    const fallbackTs = await fileModifiedTs(filePath);
+    const state: CodexFileState = {
+      currentModel: 'unknown',
+      projectFields: { project: 'unknown', projectDisplay: 'unknown' },
+      hasSessionWorkspace: false,
+      waitingForChildTurn: false,
+      taskStartedTurnIds: new Set(),
+      childIsUserFork: false,
+    };
 
     for await (const line of rl) {
       if (!line) continue;
@@ -109,127 +168,359 @@ async function processCodexFile(
         continue;
       }
 
-      if (record.type === 'turn_context') {
-        const rawModel = record.payload?.model ?? currentModel;
-        // 过滤合成消息
-        if (rawModel !== '<synthetic>') {
-          currentModel = applyCodexServiceTier(normalizeModelName(rawModel), serviceTier);
+      const payload = record.payload;
+      if (!payload) continue;
+      const payloadModel = extractCodexModel(payload);
+      const isTokenCount = record.type === 'event_msg' && payload.type === 'token_count';
+
+      // 子会话文件会先复制父会话历史。保持 child 的 workspace/session 状态，
+      // 直到能确定自己的 turn_context，再开始计数。
+      if (state.waitingForChildTurn) {
+        if (record.type === 'turn_context' && childTurnStartsOwnSession(state, payload.turn_id)) {
+          state.waitingForChildTurn = false;
+          state.forkedChildReplaySessionId = undefined;
+          state.taskStartedTurnIds.clear();
+          state.childIsUserFork = false;
+          state.sessionIdFromMeta = state.forkedChildSessionId ?? state.sessionIdFromMeta;
+        } else {
+          if (record.type === 'event_msg' && payload.type === 'task_started'
+            && childTaskStartsOwnSession(state, payload.turn_id, payload.started_at)) {
+            if (payload.turn_id) state.taskStartedTurnIds.add(payload.turn_id);
+          }
+          if (record.type === 'session_meta' && payload.id
+            && payload.id !== state.forkedChildSessionId) {
+            state.forkedChildReplaySessionId = payload.id;
+          }
+          if (isTokenCount) rememberInheritedBaseline(state, payload.info);
+          continue;
         }
-        if (record.payload?.cwd) {
-          currentProjectFields = resolveProjectFields(record.payload.cwd, projectAliases);
+      }
+
+      if (record.type === 'session_meta') {
+        const sessionId = payload.id?.trim();
+        if (sessionId) state.sessionIdFromMeta = sessionId;
+        const forkParent = payload.forked_from_id?.trim() ?? forkParentFromSource(payload.source);
+        if (forkParent) {
+          const repeatedActiveChild = !state.waitingForChildTurn
+            && Boolean(sessionId)
+            && state.forkedChildSessionId === sessionId;
+          state.sessionForkedFromId = forkParent;
+          state.forkedChildSessionId = sessionId;
+          if (!repeatedActiveChild) {
+            state.waitingForChildTurn = true;
+            state.forkedChildReplaySessionId = undefined;
+            state.inheritedBaseline = undefined;
+            state.inheritedReportedTotal = undefined;
+            state.taskStartedTurnIds.clear();
+            state.childIsUserFork = payload.thread_source === 'user';
+          }
+        }
+        if (payload.cwd) {
+          state.projectFields = resolveProjectFields(payload.cwd, projectAliases);
+          state.hasSessionWorkspace = true;
         }
         continue;
       }
 
-      if (record.type !== 'event_msg') continue;
-      if (record.payload?.type !== 'token_count') continue;
+      if (record.type === 'turn_context') {
+        if (payloadModel && payloadModel !== '<synthetic>') {
+          state.currentModel = applyCodexServiceTier(normalizeModelName(payloadModel), serviceTier);
+        }
+        if (payload.cwd && !state.hasSessionWorkspace) {
+          state.projectFields = resolveProjectFields(payload.cwd, projectAliases);
+        }
+        continue;
+      }
 
-      const info = record.payload?.info;
-      if (!info?.total_token_usage) continue;
+      if (!isTokenCount) continue;
+      const info = payload.info;
+      if (!info?.total_token_usage && !info?.last_token_usage) continue;
 
-      const ts = parseTimestamp(record.timestamp);
+      if (payloadModel && payloadModel !== '<synthetic>') {
+        state.currentModel = applyCodexServiceTier(normalizeModelName(payloadModel), serviceTier);
+      }
+      const ts = parseTimestamp(record.timestamp) ?? fallbackTs;
       if (!ts) continue;
       const usageDate = toDateKey(ts);
-      if (!targetDateSet.has(usageDate)) continue;
 
-      // 跨文件全局去重：total_token_usage 在会话内单调累加，相同的非零累计值
-      // 只可能来自 fork/resume 复制行或重复 emit，可安全去重。
-      const total = info.total_token_usage;
-      const totalSum =
-        (total.input_tokens ?? 0) +
-        (total.cached_input_tokens ?? 0) +
-        (total.output_tokens ?? 0) +
-        (total.reasoning_output_tokens ?? 0) +
-        (total.total_tokens ?? 0);
-      // 全零累计是每个会话开头都有的噪声，跨会话签名相同会被误杀，
-      // 故全零既不参与去重也不计入用量（last 也必为 0，无影响）。
-      if (totalSum === 0) continue;
-      const signature = `${total.input_tokens ?? 0}|${total.cached_input_tokens ?? 0}|${total.output_tokens ?? 0}|${total.reasoning_output_tokens ?? 0}|${total.total_tokens ?? 0}`;
-      if (globalSeenSigs.has(signature)) continue;
-      globalSeenSigs.add(signature);
+      const total = info.total_token_usage ? totalsFromUsage(info.total_token_usage) : undefined;
+      const last = info.last_token_usage ? totalsFromUsage(info.last_token_usage) : undefined;
+      if (shouldSkipInheritedSnapshot(state, info.total_token_usage, total)) continue;
+      state.inheritedBaseline = undefined;
+      state.inheritedReportedTotal = undefined;
 
-      // Use last_token_usage when available; otherwise compute delta from total_token_usage
-      const last: TokenUsage = info.last_token_usage ?? {
-        input_tokens: Math.max(0, (total.input_tokens ?? 0) - (previousTotal.input_tokens ?? 0)),
-        cached_input_tokens: Math.max(0, (total.cached_input_tokens ?? 0) - (previousTotal.cached_input_tokens ?? 0)),
-        output_tokens: Math.max(0, (total.output_tokens ?? 0) - (previousTotal.output_tokens ?? 0)),
-        reasoning_output_tokens: Math.max(0, (total.reasoning_output_tokens ?? 0) - (previousTotal.reasoning_output_tokens ?? 0)),
-      };
-      previousTotal = total;
+      const parsed = resolveCodexIncrement(total, last, state.previousTotals);
+      if (!parsed) continue;
+      if (!parsed.tokens) {
+        state.previousTotals = parsed.nextTotals;
+        continue;
+      }
+      const { tokens, nextTotals } = parsed;
+      const cachedInput = Math.min(tokens.cached, tokens.input);
+      const nonCachedInput = Math.max(tokens.input - cachedInput, 0);
+      const output = tokens.output;
+      const reasoning = tokens.reasoning;
+      if (nonCachedInput + cachedInput + output + reasoning === 0) continue;
+      state.previousTotals = nextTotals;
 
-      // In Codex JSONL, input_tokens includes cached_input_tokens.
-      // Subtract to get the non-cached portion so cost formula works uniformly.
-      const nonCachedInput = Math.max(0, (last.input_tokens ?? 0) - (last.cached_input_tokens ?? 0));
-      const cachedInput = last.cached_input_tokens ?? 0;
-      const output = last.output_tokens ?? 0;
-      const eventCost = calculateCost('openai', 'codex', currentModel, {
+      const dedupScope = state.sessionForkedFromId
+        ?? state.sessionIdFromMeta
+        ?? fileSessionId;
+      const signature = total
+        ? `codex|${dedupScope}|${state.currentModel}|${total.input}|${total.cached}|${total.output}|${total.reasoning}`
+        : `codex|${dedupScope}|${state.currentModel}|${ts.getTime()}|${tokens.input}|${tokens.cached}|${tokens.output}|${tokens.reasoning}`;
+
+      const eventCost = calculateCost('openai', 'codex', state.currentModel, {
         inputTokens: nonCachedInput,
         cachedInputTokens: cachedInput,
         cacheWriteTokens: 0,
         outputTokens: output,
       });
       const exactEventCost = eventCost.costStatus === 'exact' ? eventCost.estimatedCostUsd : undefined;
-
-      const grouped = groupedByDate.get(usageDate);
-      if (!grouped) continue;
-      const key = `${currentModel}|${currentProjectFields.project}`;
-
-      const existing = grouped.get(key);
-      if (existing) {
-        existing.eventCount += 1;
-        existing.inputTokens += nonCachedInput;
-        existing.cachedInputTokens += cachedInput;
-        existing.outputTokens += output;
-        existing.reasoningOutputTokens += last.reasoning_output_tokens ?? 0;
-        if (exactEventCost !== undefined) {
-          existing.costUSD = (existing.costUSD ?? 0) + exactEventCost;
-          existing.pricingVersion = eventCost.pricingVersion;
-        }
-      } else {
-        const breakdown: IngestBreakdown = {
-          provider: 'openai',
-          product: 'codex',
-          channel: 'cli',
-          model: currentModel,
-          project: currentProjectFields.project,
-          projectDisplay: currentProjectFields.projectDisplay,
-          projectAlias: currentProjectFields.projectAlias,
-          eventCount: 1,
-          inputTokens: nonCachedInput,
-          cachedInputTokens: cachedInput,
-          cacheWriteTokens: 0,
-          outputTokens: output,
-          reasoningOutputTokens: last.reasoning_output_tokens ?? 0,
-        };
-        if (exactEventCost !== undefined) {
-          breakdown.costUSD = exactEventCost;
-          breakdown.pricingVersion = eventCost.pricingVersion;
-        }
-        grouped.set(key, breakdown);
-      }
+      events.push({
+        usageDate,
+        signature,
+        model: state.currentModel,
+        projectFields: { ...state.projectFields },
+        inputTokens: nonCachedInput,
+        cachedInputTokens: cachedInput,
+        outputTokens: output,
+        reasoningOutputTokens: reasoning,
+        costUSD: exactEventCost,
+        pricingVersion: exactEventCost !== undefined ? eventCost.pricingVersion : undefined,
+      });
     }
+  } catch {
+    // 文件在扫描期间被移动、归档或损坏时跳过该文件。
   } finally {
-    await fh.close();
+    input.destroy();
   }
+  return events;
+}
+
+function mergeCodexEvent(
+  groupedByDate: Map<string, Map<string, IngestBreakdown>>,
+  event: CodexUsageEvent,
+): void {
+  const grouped = groupedByDate.get(event.usageDate);
+  if (!grouped) return;
+  const key = `${event.model}|${event.projectFields.project}`;
+  const existing = grouped.get(key);
+  if (existing) {
+    existing.eventCount += 1;
+    existing.inputTokens += event.inputTokens;
+    existing.cachedInputTokens += event.cachedInputTokens;
+    existing.outputTokens += event.outputTokens;
+    existing.reasoningOutputTokens += event.reasoningOutputTokens;
+    if (event.costUSD !== undefined) {
+      existing.costUSD = (existing.costUSD ?? 0) + event.costUSD;
+      existing.pricingVersion = event.pricingVersion;
+    }
+    return;
+  }
+
+  const breakdown: IngestBreakdown = {
+    provider: 'openai',
+    product: 'codex',
+    channel: 'cli',
+    model: event.model,
+    project: event.projectFields.project,
+    projectDisplay: event.projectFields.projectDisplay,
+    projectAlias: event.projectFields.projectAlias,
+    eventCount: 1,
+    inputTokens: event.inputTokens,
+    cachedInputTokens: event.cachedInputTokens,
+    cacheWriteTokens: 0,
+    outputTokens: event.outputTokens,
+    reasoningOutputTokens: event.reasoningOutputTokens,
+  };
+  if (event.costUSD !== undefined) {
+    breakdown.costUSD = event.costUSD;
+    breakdown.pricingVersion = event.pricingVersion;
+  }
+  grouped.set(key, breakdown);
+}
+
+function forkParentFromSource(source: unknown): string | undefined {
+  if (!source || typeof source !== 'object' || Array.isArray(source)) return undefined;
+  const subagent = (source as Record<string, unknown>).subagent;
+  if (!subagent || typeof subagent !== 'object' || Array.isArray(subagent)) return undefined;
+  const spawn = (subagent as Record<string, unknown>).thread_spawn;
+  if (!spawn || typeof spawn !== 'object' || Array.isArray(spawn)) return undefined;
+  const parent = (spawn as Record<string, unknown>).parent_thread_id;
+  return typeof parent === 'string' && parent.trim() ? parent.trim() : undefined;
+}
+
+function clampToken(value: number | undefined): number {
+  return Math.max(Number.isFinite(value) ? value! : 0, 0);
+}
+
+function extractCodexModel(payload: CodexPayload): string | undefined {
+  return payload.model
+    ?? payload.model_name
+    ?? payload.model_info?.slug
+    ?? payload.info?.model
+    ?? payload.info?.model_name;
+}
+
+function totalsFromUsage(usage: TokenUsage): CodexTotals {
+  return {
+    input: clampToken(usage.input_tokens),
+    cached: Math.max(
+      clampToken(usage.cached_input_tokens),
+      clampToken(usage.cache_read_input_tokens),
+    ),
+    output: clampToken(usage.output_tokens),
+    reasoning: clampToken(usage.reasoning_output_tokens),
+  };
+}
+
+function totalsEqual(a: CodexTotals, b: CodexTotals): boolean {
+  return a.input === b.input
+    && a.cached === b.cached
+    && a.output === b.output
+    && a.reasoning === b.reasoning;
+}
+
+function totalsDelta(current: CodexTotals, previous: CodexTotals): CodexTotals | undefined {
+  if (current.input < previous.input || current.cached < previous.cached
+    || current.output < previous.output || current.reasoning < previous.reasoning) return undefined;
+  return {
+    input: current.input - previous.input,
+    cached: current.cached - previous.cached,
+    output: current.output - previous.output,
+    reasoning: current.reasoning - previous.reasoning,
+  };
+}
+
+function totalsAdd(a: CodexTotals, b: CodexTotals): CodexTotals {
+  return {
+    input: a.input + b.input,
+    cached: a.cached + b.cached,
+    output: a.output + b.output,
+    reasoning: a.reasoning + b.reasoning,
+  };
+}
+
+function totalsSum(value: CodexTotals): number {
+  return value.input + value.cached + value.output + value.reasoning;
+}
+
+function looksLikeStaleRegression(current: CodexTotals, previous: CodexTotals, last: CodexTotals): boolean {
+  const previousSum = totalsSum(previous);
+  const currentSum = totalsSum(current);
+  const lastSum = totalsSum(last);
+  if (previousSum <= 0 || currentSum <= 0 || lastSum <= 0) return false;
+  return currentSum * 100 >= previousSum * 98 || currentSum + lastSum * 2 >= previousSum;
+}
+
+function resolveCodexIncrement(
+  total: CodexTotals | undefined,
+  last: CodexTotals | undefined,
+  previous: CodexTotals | undefined,
+): { tokens?: CodexTotals; nextTotals?: CodexTotals } | undefined {
+  if (total && last && previous) {
+    if (totalsEqual(total, previous)) return undefined;
+    if (!totalsDelta(total, previous) && looksLikeStaleRegression(total, previous, last)) return undefined;
+    return { tokens: last, nextTotals: total };
+  }
+  if (total && last) return { tokens: last, nextTotals: total };
+  if (total && previous) {
+    if (totalsEqual(total, previous)) return undefined;
+    const delta = totalsDelta(total, previous);
+    return delta ? { tokens: delta, nextTotals: total } : { nextTotals: total };
+  }
+  if (total) return { tokens: total, nextTotals: total };
+  if (last && previous) return { tokens: last, nextTotals: totalsAdd(previous, last) };
+  if (last) return { tokens: last };
+  return undefined;
+}
+
+function rememberInheritedBaseline(
+  state: CodexFileState,
+  info: CodexPayload['info'],
+): void {
+  const usage = info?.total_token_usage;
+  if (!usage) return;
+  const totals = totalsFromUsage(usage);
+  state.previousTotals = totals;
+  state.inheritedBaseline = totals;
+  state.inheritedReportedTotal = reportedTotalTokens(usage);
+}
+
+function shouldSkipInheritedSnapshot(
+  state: CodexFileState,
+  usage: TokenUsage | undefined,
+  totals: CodexTotals | undefined,
+): boolean {
+  const reported = usage ? reportedTotalTokens(usage) : undefined;
+  if (reported != null && state.inheritedReportedTotal != null
+    && reported <= state.inheritedReportedTotal) return true;
+  const baseline = state.inheritedBaseline;
+  return Boolean(totals && baseline
+    && totals.input <= baseline.input
+    && totals.cached <= baseline.cached
+    && totals.output <= baseline.output
+    && totals.reasoning <= baseline.reasoning);
+}
+
+function reportedTotalTokens(usage: TokenUsage): number | undefined {
+  return typeof usage.total_tokens === 'number' && usage.total_tokens >= 0
+    ? usage.total_tokens
+    : undefined;
+}
+
+function childTurnStartsOwnSession(state: CodexFileState, turnId: string | undefined): boolean {
+  if (!state.forkedChildReplaySessionId) return true;
+  const childId = state.forkedChildSessionId;
+  if (!childId) return true;
+  const childKey = uuidV7OrderKey(childId);
+  if (!turnId || !childKey) return true;
+  const turnKey = uuidV7OrderKey(turnId);
+  if (!turnKey) return state.childIsUserFork || state.taskStartedTurnIds.has(turnId);
+  const turnMs = turnKey.slice(0, 12);
+  const childMs = childKey.slice(0, 12);
+  if (turnMs > childMs) return true;
+  if (turnMs < childMs) return false;
+  return state.childIsUserFork || state.taskStartedTurnIds.has(turnId);
+}
+
+function childTaskStartsOwnSession(
+  state: CodexFileState,
+  turnId: string | undefined,
+  startedAt: number | undefined,
+): boolean {
+  const childId = state.forkedChildSessionId;
+  if (!turnId || !childId) return false;
+  const childKey = uuidV7OrderKey(childId);
+  if (!childKey) return true;
+  const turnKey = uuidV7OrderKey(turnId);
+  if (turnKey) return turnKey.slice(0, 12) >= childKey.slice(0, 12);
+  const childStartedMs = Number.parseInt(childKey.slice(0, 12), 16);
+  return Number.isFinite(startedAt) && startedAt! >= Math.floor(childStartedMs / 1_000);
+}
+
+function uuidV7OrderKey(id: string): string | undefined {
+  const parts = id.split('-');
+  if (parts.length !== 5 || parts[0]?.length !== 8 || parts[1]?.length !== 4
+    || parts[2]?.length !== 4 || parts[3]?.length !== 4 || parts[4]?.length !== 12
+    || !parts[2]?.startsWith('7') || !parts.every(part => /^[0-9a-f]+$/i.test(part))) return undefined;
+  return parts.join('').toLowerCase();
 }
 
 async function collectSessionFiles(baseDir: string): Promise<string[]> {
-  const paths: string[] = [];
-
-  // archived_sessions/*.jsonl
-  const archivedDir = join(baseDir, 'archived_sessions');
-  try {
-    const files = await readdir(archivedDir);
-    for (const f of files) {
-      if (f.endsWith('.jsonl')) paths.push(join(archivedDir, f));
-    }
-  } catch { /* ignore */ }
-
-  // sessions/**/*.jsonl (递归)
+  // 与 Codex 本身的生命周期一致：活动会话优先，归档副本随后；各目录
+  // 内按路径排序，确保重复事件的 workspace 归属稳定。
+  const activePaths: string[] = [];
   const sessionsDir = join(baseDir, 'sessions');
-  await walkDir(sessionsDir, paths);
+  await walkDir(sessionsDir, activePaths);
+  activePaths.sort();
 
-  return paths;
+  const archivedPaths: string[] = [];
+  await walkDir(join(baseDir, 'archived_sessions'), archivedPaths);
+  archivedPaths.sort();
+
+  return [...activePaths, ...archivedPaths];
 }
 
 async function detectCodexServiceTier(baseDir: string): Promise<CodexServiceTier> {

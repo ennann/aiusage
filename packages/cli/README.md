@@ -9,12 +9,31 @@
 - scheduling automatic sync to an AIUsage Worker
 - diagnosing configuration and connectivity issues
 
-Kimi scanning supports both legacy Kimi CLI data in `~/.kimi/sessions/` and
-new Kimi Code data in `$KIMI_CODE_HOME/sessions/` (default:
-`~/.kimi-code/sessions/`). It reads only token counters and session metadata
-from `wire.jsonl`; conversation content is not uploaded. The new wire-format
-parser references the MIT-licensed [tokscale](https://github.com/junhoyeo/tokscale)
-implementation.
+The local scanners have been compatibility-audited against the overlapping
+parsers in the MIT-licensed [tokscale](https://github.com/junhoyeo/tokscale)
+project. AIUsage keeps tool-specific safeguards where the source semantics
+differ, rather than treating every local record as billable token usage.
+
+## Local scanner coverage
+
+| Tool | Sources and compatibility behavior |
+|------|------------------------------------|
+| Claude Code | `~/.config/claude/projects/` and `~/.claude/projects/` JSONL; deduplicates parent/sidechain replays, merges streaming snapshots per token field, and honors wrapper providers. Aggregate `stats-cache.json` is intentionally not converted into guessed per-message usage. |
+| Codex CLI | Active and archived `~/.codex` sessions; fork-aware replay boundaries, inherited baselines, `last_token_usage`, and total-delta fallback. |
+| Cursor | Reads the local `state.vscdb` credential and requests Cursor's token-strategy usage CSV; the database is snapshotted when locked. |
+| Copilot CLI | OpenTelemetry JSONL under `~/.copilot/otel/` plus `session-state` shutdown totals; granular inference spans supersede same-trace aggregates. |
+| Copilot for VS Code | Chat logs, legacy session JSON, and modern CRDT `workspaceStorage/**/chatSessions/*.jsonl`; modern sessions contribute real token fields, while legacy records remain interaction-only. |
+| Gemini CLI | Session JSON/JSONL, headless stats, and `$set.messages` updates under `~/.gemini/tmp/`, with last-write-wins request deduplication. |
+| Antigravity | `~/.gemini/antigravity/brain` and browser-recording metadata; currently reports interaction counts because those artifacts do not expose reliable token counters. |
+| Amp | `~/.local/share/amp/threads/`; reconciles the usage ledger with message usage so partial ledgers are completed without double-counting. |
+| Kimi CLI / Kimi Code | Legacy `~/.kimi/sessions/` and `$KIMI_CODE_HOME/sessions/` (default `~/.kimi-code/sessions/`) `wire.jsonl`; handles progressive status snapshots and nested agent sessions. |
+| Qwen Code | Current `~/.qwen/projects/` and legacy `~/.qwen/tmp/` chat JSONL, with session/position deduplication and cache-aware input accounting. |
+| Droid | `~/.factory/sessions/*.settings.json`; uses persisted token totals first and the transcript only as a model fallback. |
+| OpenCode | OpenCode 1.2+ `opencode.db` through read-only `sqlite3`, plus legacy `storage/message/*.json`. |
+| Pi / Oh My Pi | `~/.pi/agent/sessions/` and `~/.omp/agent/sessions/` JSONL, including provider, cache-write, and session metadata. |
+
+Only token counters and session metadata are aggregated or uploaded. Conversation
+content and local credentials are never uploaded.
 
 ## Install
 

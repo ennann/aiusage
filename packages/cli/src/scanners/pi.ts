@@ -8,6 +8,8 @@ import {
   projectFromPath,
   resolveProjectFields,
   walkFiles,
+  fileModifiedTs,
+  inferProviderFromModel,
   initDateMap,
   accumulate,
   finalize,
@@ -19,6 +21,7 @@ import {
  * Pi Coding Agent scanner.
  *
  * 日志目录: ~/.pi/agent/sessions/{encoded-cwd}/{timestamp}_{sessionId}.jsonl
+ * 同时兼容 Oh My Pi: ~/.omp/agent/sessions/
  * 支持环境变量 PI_CODING_AGENT_DIR 覆盖基础目录
  *
  * JSONL 行格式:
@@ -34,13 +37,16 @@ interface PiLine {
   type?: string;
   timestamp?: string | number;
   cwd?: string;
+  name?: string;
   message?: {
     role?: string;
     model?: string;
+    provider?: string;
     usage?: {
       input?: number;
       output?: number;
       cacheRead?: number;
+      cacheWrite?: number;
     };
   };
 }
@@ -51,9 +57,8 @@ export async function scanPiDates(
   projectAliases?: Record<string, string>,
 ): Promise<Map<string, IngestBreakdown[]>> {
   const dates = new Set(targetDates);
-  const sessionsDir = baseDir ?? getSessionsDir();
-
-  const files = await walkFiles(sessionsDir, '.jsonl');
+  const sessionDirs = baseDir ? [baseDir] : getSessionDirs();
+  const files = [...new Set((await Promise.all(sessionDirs.map(dir => walkFiles(dir, '.jsonl')))).flat())];
   if (files.length === 0) return emptyResult(dates);
 
   const grouped = initDateMap(dates);
@@ -71,6 +76,9 @@ export async function scanPiDates(
     const parentDir = dirname(filePath);
     const encodedCwd = basename(parentDir);
     let sessionProjectFields: ProjectFields = { project: extractProjectFromEncoded(encodedCwd), projectDisplay: extractProjectFromEncoded(encodedCwd) };
+    let sessionId = basename(filePath, '.jsonl');
+    let messageIndex = 0;
+    const fallbackTs = await fileModifiedTs(filePath);
 
     for (const line of content.split('\n')) {
       if (!line.trim()) continue;
@@ -83,7 +91,12 @@ export async function scanPiDates(
 
       // session header 提供 cwd
       if (obj.type === 'session' && obj.cwd) {
+        sessionId = obj.id ?? sessionId;
         sessionProjectFields = resolveProjectFields(obj.cwd, projectAliases);
+        continue;
+      }
+      if (obj.type === 'session') {
+        sessionId = obj.id ?? sessionId;
         continue;
       }
 
@@ -97,28 +110,30 @@ export async function scanPiDates(
       if (!usage) continue;
       if (usage.input == null && usage.output == null) continue;
 
-      const ts = parseTs(obj.timestamp);
+      const ts = parseTs(obj.timestamp) ?? fallbackTs;
       if (!ts) continue;
       const dk = dateKey(ts);
       const dayMap = grouped.get(dk);
       if (!dayMap) continue;
 
-      // id 去重
-      if (obj.id) {
-        if (seen.has(obj.id)) continue;
-        seen.add(obj.id);
-      }
+      const messageKey = `${sessionId}:${obj.id ?? messageIndex}`;
+      messageIndex += 1;
+      if (seen.has(messageKey)) continue;
+      seen.add(messageKey);
 
       const model = msg.model ?? 'unknown';
-      const input = usage.input ?? 0;
-      const cached = usage.cacheRead ?? 0;
-      const output = usage.output ?? 0;
+      const provider = msg.provider?.trim() || inferProviderFromModel(model, 'inflection');
+      const input = Math.max(usage.input ?? 0, 0);
+      const cached = Math.max(usage.cacheRead ?? 0, 0);
+      const cacheWrite = Math.max(usage.cacheWrite ?? 0, 0);
+      const output = Math.max(usage.output ?? 0, 0);
+      if (input + cached + cacheWrite + output === 0) continue;
 
       accumulate(
         dayMap,
         `${model}|${sessionProjectFields.project}`,
         {
-          provider: 'inflection',
+          provider,
           product: 'pi',
           channel: 'cli',
           model,
@@ -131,7 +146,7 @@ export async function scanPiDates(
           outputTokens: 0,
           reasoningOutputTokens: 0,
         },
-        { input, cached, cacheWrite: 0, output, reasoning: 0 },
+        { input, cached, cacheWrite, output, reasoning: 0 },
       );
     }
   }
@@ -139,10 +154,12 @@ export async function scanPiDates(
   return finalize(grouped);
 }
 
-function getSessionsDir(): string {
+function getSessionDirs(): string[] {
   const envDir = process.env.PI_CODING_AGENT_DIR;
-  if (envDir) return join(envDir, 'sessions');
-  return join(homedir(), '.pi', 'agent', 'sessions');
+  const piDir = envDir
+    ? join(envDir, 'sessions')
+    : join(homedir(), '.pi', 'agent', 'sessions');
+  return [piDir, join(homedir(), '.omp', 'agent', 'sessions')];
 }
 
 function extractProjectFromEncoded(encoded: string): string {

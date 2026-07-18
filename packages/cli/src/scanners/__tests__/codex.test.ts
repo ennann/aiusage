@@ -361,6 +361,126 @@ describe('Fix 2: deduplication of duplicate events', () => {
     expect(results[0].eventCount).toBe(2); // 两个会话各 1 笔真实 turn，全零不计
     expect(results[0].outputTokens).toBe(200); // 80 + 120
   });
+
+  it('不会因两个独立 session 的累计 token 完全相同而误杀其中一个', async () => {
+    const day = '2025-10-16';
+    const dir = join(tmpDir, 'sessions', '2025', '10', '16');
+    for (const id of ['session-a', 'session-b']) {
+      await writeSession(dir, `${id}.jsonl`, [
+        { type: 'session_meta', payload: { id, cwd: '/same-project' } },
+        { type: 'turn_context', payload: { model: 'gpt-5-codex', cwd: '/same-project' } },
+        {
+          type: 'event_msg', timestamp: `${day}T10:00:00.000Z`,
+          payload: { type: 'token_count', info: {
+            total_token_usage: { input_tokens: 100, cached_input_tokens: 50, output_tokens: 10 },
+            last_token_usage: { input_tokens: 100, cached_input_tokens: 50, output_tokens: 10 },
+          } },
+        },
+      ]);
+    }
+
+    const results = await scanCodex(day, tmpDir);
+    expect(results[0]).toEqual(expect.objectContaining({
+      eventCount: 2, inputTokens: 100, cachedInputTokens: 100, outputTokens: 20,
+    }));
+  });
+
+  it('同一 session 在活动目录和归档目录各一份时仍只统计一次', async () => {
+    const day = '2025-10-16';
+    const lines = [
+      { type: 'session_meta', payload: { id: 'same-session', cwd: '/same-project' } },
+      { type: 'turn_context', payload: { model: 'gpt-5-codex', cwd: '/same-project' } },
+      {
+        type: 'event_msg', timestamp: `${day}T10:00:00.000Z`,
+        payload: { type: 'token_count', info: {
+          total_token_usage: { input_tokens: 100, cached_input_tokens: 50, output_tokens: 10 },
+          last_token_usage: { input_tokens: 100, cached_input_tokens: 50, output_tokens: 10 },
+        } },
+      },
+    ];
+    await writeSession(join(tmpDir, 'sessions', '2025', '10', '16'), 'active.jsonl', lines);
+    const archivedLines = lines.map((line) => JSON.parse(
+      JSON.stringify(line).replaceAll('/same-project', '/stale-archived-project'),
+    ));
+    await writeSession(join(tmpDir, 'archived_sessions', 'nested'), 'archived.jsonl', archivedLines);
+
+    const results = await scanCodex(day, tmpDir);
+    expect(results[0]).toEqual(expect.objectContaining({
+      project: '/same-project', eventCount: 1, outputTokens: 10,
+    }));
+  });
+
+  it('session_meta 的初始 workspace 优先于后续 turn_context cwd', async () => {
+    const day = '2025-10-16';
+    await writeSession(join(tmpDir, 'sessions', '2025', '10', '16'), 'workspace.jsonl', [
+      { type: 'session_meta', payload: { id: 'workspace-session', cwd: '/origin-project' } },
+      { type: 'turn_context', payload: { model: 'gpt-5-codex', cwd: '/later-cwd' } },
+      {
+        type: 'event_msg', timestamp: `${day}T10:00:00.000Z`,
+        payload: { type: 'token_count', info: {
+          total_token_usage: { input_tokens: 100, cached_input_tokens: 50, output_tokens: 10 },
+          last_token_usage: { input_tokens: 100, cached_input_tokens: 50, output_tokens: 10 },
+        } },
+      },
+    ]);
+
+    const results = await scanCodex(day, tmpDir);
+    expect(results[0]).toEqual(expect.objectContaining({ project: '/origin-project' }));
+  });
+
+  it('子会话跳过复制的父历史，只统计超过继承基线的自身 turn', async () => {
+    const day = '2025-10-16';
+    const dir = join(tmpDir, 'sessions', '2025', '10', '16');
+    const parentId = '019e5b00-0000-7000-8000-000000000001';
+    const childId = '019e5c03-0000-7000-8000-000000000001';
+    await writeSession(dir, 'child.jsonl', [
+      {
+        type: 'session_meta',
+        payload: {
+          id: childId,
+          forked_from_id: parentId,
+          source: { subagent: { thread_spawn: { parent_thread_id: parentId } } },
+          cwd: '/child-project',
+        },
+      },
+      { type: 'session_meta', payload: { id: parentId, cwd: '/parent-project' } },
+      { type: 'turn_context', payload: { turn_id: parentId, model: 'gpt-5-codex', cwd: '/parent-project' } },
+      {
+        type: 'event_msg', timestamp: `${day}T10:00:00.000Z`,
+        payload: { type: 'token_count', info: {
+          total_token_usage: { input_tokens: 300, cached_input_tokens: 200, output_tokens: 30, total_tokens: 330 },
+          last_token_usage: { input_tokens: 300, cached_input_tokens: 200, output_tokens: 30, total_tokens: 330 },
+        } },
+      },
+      {
+        type: 'event_msg', timestamp: `${day}T10:00:00.500Z`,
+        payload: { type: 'task_started', turn_id: childId },
+      },
+      { type: 'turn_context', payload: { turn_id: childId, model: 'gpt-5-codex' } },
+      {
+        type: 'event_msg', timestamp: `${day}T10:00:01.000Z`,
+        payload: { type: 'token_count', info: {
+          total_token_usage: { input_tokens: 300, cached_input_tokens: 200, output_tokens: 30, total_tokens: 330 },
+          last_token_usage: { input_tokens: 250, cached_input_tokens: 180, output_tokens: 25, total_tokens: 275 },
+        } },
+      },
+      {
+        type: 'event_msg', timestamp: `${day}T10:00:02.000Z`,
+        payload: { type: 'token_count', info: {
+          total_token_usage: { input_tokens: 320, cached_input_tokens: 210, output_tokens: 32, total_tokens: 352 },
+          last_token_usage: { input_tokens: 20, cached_input_tokens: 10, output_tokens: 2, total_tokens: 22 },
+        } },
+      },
+    ]);
+
+    const results = await scanCodex(day, tmpDir);
+    expect(results).toEqual([
+      expect.objectContaining({
+        project: '/child-project', eventCount: 1, inputTokens: 10,
+        cachedInputTokens: 10, outputTokens: 2,
+      }),
+    ]);
+  });
 });
 
 // ─── Fix 3: fallback to delta when last_token_usage is absent ───

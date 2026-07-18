@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseTs, dateKey } from '../utils.js';
+import { parseTs, dateKey, inferProviderFromModel, projectFromPath, resolveProjectFields } from '../utils.js';
 
 describe('parseTs', () => {
   it('treats 10-digit numeric values as Unix seconds (not milliseconds)', () => {
@@ -46,5 +46,21 @@ describe('dateKey', () => {
   it('formats local date as YYYY-MM-DD', () => {
     const d = new Date(2026, 5, 2); // 本地 6/2
     expect(dateKey(d)).toBe('2026-06-02');
+  });
+});
+
+describe('inferProviderFromModel', () => {
+  it('识别常见跨工具模型供应商，并保留未知模型的 fallback', () => {
+    expect(inferProviderFromModel('claude-sonnet-4-6', 'pi')).toBe('anthropic');
+    expect(inferProviderFromModel('gpt-5.6', 'pi')).toBe('openai');
+    expect(inferProviderFromModel('gemini-3.1-pro-preview', 'pi')).toBe('google');
+    expect(inferProviderFromModel('custom-model', 'pi')).toBe('pi');
+  });
+});
+
+describe('project path parsing', () => {
+  it('兼容 Windows 与 POSIX 路径分隔符', () => {
+    expect(projectFromPath('C:\\Users\\test\\project')).toBe('project');
+    expect(resolveProjectFields('/Users/test/project').projectDisplay).toBe('project');
   });
 });

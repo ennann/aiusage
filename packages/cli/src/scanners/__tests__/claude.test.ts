@@ -43,18 +43,6 @@ function claudeRecord(opts: {
   };
 }
 
-function makeStatsCache(opts: {
-  dailyModelTokens: Array<{ date: string; tokensByModel: Record<string, number> }>;
-  modelUsage?: Record<string, { inputTokens: number; outputTokens: number }>;
-}): string {
-  return JSON.stringify({
-    version: '1',
-    lastComputedDate: '2026-01-31',
-    dailyModelTokens: opts.dailyModelTokens,
-    modelUsage: opts.modelUsage ?? {},
-  });
-}
-
 let tmpDir: string;
 // baseDirs that getClaudeProjectDirs() will use: tmpDir/projects
 // stats-cache lives at: tmpDir/stats-cache.json
@@ -96,7 +84,7 @@ describe('JSONL scanning', () => {
     expect(b.cacheWriteTokens).toBe(3000);
   });
 
-  it('deduplicates repeated records with the same messageId+requestId (first-seen wins)', async () => {
+  it('deduplicates repeated records with the same messageId+requestId', async () => {
     const projectDir = join(tmpDir, 'projects', '-Users-test-project');
     // Same messageId+requestId in 3 files (session replay pattern): identical token counts
     await writeJsonl(projectDir, 'session1.jsonl', [
@@ -116,184 +104,90 @@ describe('JSONL scanning', () => {
     expect(b.eventCount).toBe(1);     // single event despite 3 files
   });
 
+  it('缺少 requestId 时按 message.id 去重，并合并流式快照的字段最大值', async () => {
+    const projectDir = join(tmpDir, 'projects', '-Users-test-project');
+    await writeJsonl(projectDir, 'session.jsonl', [
+      {
+        type: 'assistant', timestamp: '2026-01-15T10:00:00.000Z', cwd: '/Users/test/project',
+        message: { id: 'msg_stream', model: 'claude-opus-4-8', usage: {
+          input_tokens: 100, cache_read_input_tokens: 300, output_tokens: 20,
+        } },
+      },
+      {
+        type: 'assistant', timestamp: '2026-01-15T10:00:01.000Z', cwd: '/Users/test/project',
+        message: { id: 'msg_stream', model: 'claude-opus-4-8', usage: {
+          input_tokens: 150, cache_read_input_tokens: 250, output_tokens: 40,
+        } },
+      },
+    ]);
+
+    const [b] = (await scanClaudeDates(['2026-01-15'], join(tmpDir, 'projects'))).get('2026-01-15')!;
+    expect(b).toEqual(expect.objectContaining({
+      eventCount: 1,
+      inputTokens: 150,
+      cachedInputTokens: 300,
+      outputTokens: 40,
+    }));
+  });
+
+  it('缓存写入总量使用权威字段，并随流式快照更新明细', async () => {
+    const projectDir = join(tmpDir, 'projects', '-Users-test-project');
+    await writeJsonl(projectDir, 'session.jsonl', [
+      {
+        type: 'assistant', timestamp: '2026-01-15T10:00:00.000Z', cwd: '/Users/test/project',
+        message: { id: 'msg_cache', model: 'claude-opus-4-8', usage: {
+          input_tokens: 10, output_tokens: 20, cache_creation_input_tokens: 100,
+          cache_creation: { ephemeral_5m_input_tokens: 60, ephemeral_1h_input_tokens: 30 },
+        } },
+      },
+      {
+        type: 'assistant', timestamp: '2026-01-15T10:00:01.000Z', cwd: '/Users/test/project',
+        message: { id: 'msg_cache', model: 'claude-opus-4-8', usage: {
+          input_tokens: 10, output_tokens: 20, cache_creation_input_tokens: 120,
+          cache_creation: { ephemeral_5m_input_tokens: 70, ephemeral_1h_input_tokens: 50 },
+        } },
+      },
+    ]);
+
+    const [b] = (await scanClaudeDates(['2026-01-15'], join(tmpDir, 'projects'))).get('2026-01-15')!;
+    expect(b).toEqual(expect.objectContaining({
+      eventCount: 1,
+      cacheWriteTokens: 120,
+      cacheWrite5mTokens: 70,
+      cacheWrite1hTokens: 50,
+    }));
+  });
+
+  it('从显式字段或模型前缀识别兼容模型供应商', async () => {
+    const projectDir = join(tmpDir, 'projects', '-Users-test-project');
+    await writeJsonl(projectDir, 'session.jsonl', [
+      {
+        type: 'assistant', timestamp: '2026-01-15T10:00:00.000Z', cwd: '/Users/test/project',
+        message: { id: 'msg_custom', model: 'model_api/experimental_0630', usage: {
+          input_tokens: 100, output_tokens: 20,
+        } },
+      },
+    ]);
+
+    const [b] = (await scanClaudeDates(['2026-01-15'], join(tmpDir, 'projects'))).get('2026-01-15')!;
+    expect(b.provider).toBe('model_api');
+  });
+
   it('returns empty array for a date with no JSONL data and no stats-cache', async () => {
     const result = await scanClaudeDates(['2025-11-01'], join(tmpDir, 'projects'));
     expect(result.get('2025-11-01')).toEqual([]);
   });
 });
 
-// ─── Stats-cache fallback ────────────────────────────────────────────────────
-
-describe('stats-cache fallback', () => {
-  it('fills a date with no JSONL data from stats-cache dailyModelTokens', async () => {
-    await writeFile(
-      join(tmpDir, 'stats-cache.json'),
-      makeStatsCache({
-        dailyModelTokens: [
-          { date: '2025-12-25', tokensByModel: { 'claude-opus-4-5-20251101': 100_000 } },
-        ],
-        modelUsage: {
-          'claude-opus-4-5-20251101': { inputTokens: 800_000, outputTokens: 200_000 }, // 80/20 ratio
-        },
-      }),
-    );
+describe('stats-cache safety', () => {
+  it('does not fabricate per-model input/output from aggregate stats-cache data', async () => {
+    await writeFile(join(tmpDir, 'stats-cache.json'), JSON.stringify({
+      dailyModelTokens: [
+        { date: '2025-12-25', tokensByModel: { 'claude-opus-4-5': 500_000 } },
+      ],
+    }));
 
     const result = await scanClaudeDates(['2025-12-25'], join(tmpDir, 'projects'));
-    const breakdowns = result.get('2025-12-25')!;
-    expect(breakdowns).toHaveLength(1);
-    const b = breakdowns[0];
-    expect(b.model).toBe('claude-opus-4-5');
-    expect(b.provider).toBe('anthropic');
-    expect(b.product).toBe('claude-code');
-    // 80% input, 20% output
-    expect(b.inputTokens).toBe(80_000);
-    expect(b.outputTokens).toBe(20_000);
-    // cache fields are unknown from stats-cache
-    expect(b.cachedInputTokens).toBe(0);
-    expect(b.cacheWriteTokens).toBe(0);
-  });
-
-  it('uses 70/30 default ratio when modelUsage has no entry for the model', async () => {
-    await writeFile(
-      join(tmpDir, 'stats-cache.json'),
-      makeStatsCache({
-        dailyModelTokens: [
-          { date: '2025-12-26', tokensByModel: { 'claude-unknown-model-20251201': 50_000 } },
-        ],
-        modelUsage: {}, // no entry for this model
-      }),
-    );
-
-    const result = await scanClaudeDates(['2025-12-26'], join(tmpDir, 'projects'));
-    const [b] = result.get('2025-12-26')!;
-    expect(b.inputTokens).toBe(35_000);  // 70% of 50000
-    expect(b.outputTokens).toBe(15_000); // 30% of 50000
-  });
-
-  it('does NOT use stats-cache for a date that already has JSONL data', async () => {
-    // Write JSONL data for Dec 27
-    const projectDir = join(tmpDir, 'projects', '-Users-test-project');
-    await writeJsonl(projectDir, 'session.jsonl', [
-      claudeRecord({
-        timestamp: '2025-12-27T10:00:00.000Z',
-        requestId: 'req_999',
-        model: 'claude-opus-4-5-20251101',
-        inputTokens: 1_000,
-        outputTokens: 100,
-      }),
-    ]);
-    // Stats-cache also has Dec 27 with different (much larger) values
-    await writeFile(
-      join(tmpDir, 'stats-cache.json'),
-      makeStatsCache({
-        dailyModelTokens: [
-          { date: '2025-12-27', tokensByModel: { 'claude-opus-4-5-20251101': 999_999 } },
-        ],
-        modelUsage: { 'claude-opus-4-5-20251101': { inputTokens: 7, outputTokens: 3 } },
-      }),
-    );
-
-    const result = await scanClaudeDates(['2025-12-27'], join(tmpDir, 'projects'));
-    const [b] = result.get('2025-12-27')!;
-    // Should come from JSONL, not stats-cache
-    expect(b.inputTokens).toBe(1_000);
-    expect(b.outputTokens).toBe(100);
-  });
-
-  it('handles missing stats-cache.json gracefully', async () => {
-    // No stats-cache.json written
-    const result = await scanClaudeDates(['2025-12-28'], join(tmpDir, 'projects'));
-    expect(result.get('2025-12-28')).toEqual([]);
-  });
-
-  it('handles malformed stats-cache.json gracefully', async () => {
-    await writeFile(join(tmpDir, 'stats-cache.json'), 'not valid json {{{{');
-
-    const result = await scanClaudeDates(['2025-12-29'], join(tmpDir, 'projects'));
-    expect(result.get('2025-12-29')).toEqual([]);
-  });
-
-  it('covers multiple missing dates from a single stats-cache', async () => {
-    await writeFile(
-      join(tmpDir, 'stats-cache.json'),
-      makeStatsCache({
-        dailyModelTokens: [
-          { date: '2025-12-25', tokensByModel: { 'claude-opus-4-5-20251101': 100_000 } },
-          { date: '2025-12-26', tokensByModel: { 'claude-opus-4-5-20251101': 200_000 } },
-          { date: '2025-12-28', tokensByModel: { 'claude-opus-4-5-20251101': 50_000 } }, // not requested
-        ],
-        modelUsage: { 'claude-opus-4-5-20251101': { inputTokens: 6, outputTokens: 4 } }, // 60/40
-      }),
-    );
-
-    const result = await scanClaudeDates(
-      ['2025-12-25', '2025-12-26'],
-      join(tmpDir, 'projects'),
-    );
-    expect(result.get('2025-12-25')![0].inputTokens).toBe(60_000);
-    expect(result.get('2025-12-26')![0].inputTokens).toBe(120_000);
-    expect(result.has('2025-12-28')).toBe(false); // not requested
-  });
-
-  it('normalises model names from stats-cache (strips date suffix)', async () => {
-    await writeFile(
-      join(tmpDir, 'stats-cache.json'),
-      makeStatsCache({
-        dailyModelTokens: [
-          { date: '2025-12-30', tokensByModel: { 'claude-sonnet-4-5-20250929': 40_000 } },
-        ],
-      }),
-    );
-
-    const result = await scanClaudeDates(['2025-12-30'], join(tmpDir, 'projects'));
-    const [b] = result.get('2025-12-30')!;
-    expect(b.model).toBe('claude-sonnet-4-5'); // date suffix stripped
-  });
-});
-
-// ─── Integration: JSONL + stats-cache mixed ──────────────────────────────────
-
-describe('Integration: JSONL and stats-cache for different dates', () => {
-  it('returns JSONL data for covered dates and stats-cache data for uncovered dates', async () => {
-    // JSONL covers Jan 15
-    const projectDir = join(tmpDir, 'projects', '-Users-test-project');
-    await writeJsonl(projectDir, 'session.jsonl', [
-      claudeRecord({
-        timestamp: '2026-01-15T10:00:00.000Z',
-        requestId: 'req_100',
-        model: 'claude-opus-4-6',
-        inputTokens: 2_000,
-        outputTokens: 300,
-      }),
-    ]);
-
-    // Stats-cache covers Dec 25 (before JSONL rotation)
-    await writeFile(
-      join(tmpDir, 'stats-cache.json'),
-      makeStatsCache({
-        dailyModelTokens: [
-          { date: '2025-12-25', tokensByModel: { 'claude-opus-4-5-20251101': 500_000 } },
-        ],
-        modelUsage: { 'claude-opus-4-5-20251101': { inputTokens: 623, outputTokens: 377 } },
-      }),
-    );
-
-    const result = await scanClaudeDates(
-      ['2026-01-15', '2025-12-25'],
-      join(tmpDir, 'projects'),
-    );
-
-    // Jan 15: from JSONL
-    const jan15 = result.get('2026-01-15')!;
-    expect(jan15).toHaveLength(1);
-    expect(jan15[0].model).toBe('claude-opus-4-6');
-    expect(jan15[0].inputTokens).toBe(2_000);
-
-    // Dec 25: from stats-cache, with 62.3/37.7 ratio
-    const dec25 = result.get('2025-12-25')!;
-    expect(dec25).toHaveLength(1);
-    expect(dec25[0].model).toBe('claude-opus-4-5');
-    expect(dec25[0].inputTokens).toBe(311_500); // round(500000 * 623/1000)
-    expect(dec25[0].cachedInputTokens).toBe(0); // cache unknown from stats-cache
+    expect(result.get('2025-12-25')).toEqual([]);
   });
 });
