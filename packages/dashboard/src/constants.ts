@@ -34,7 +34,7 @@ export const PROVIDER_LABELS: Record<string, string> = {
   google: 'Google',
   github: 'GitHub',
   sourcegraph: 'Sourcegraph',
-  moonshot: 'Moonshot',
+  moonshot: 'Kimi / Moonshot',
   alibaba: 'Alibaba',
   droid: 'Droid',
   opencode: 'OpenCode',

@@ -13,11 +13,13 @@ async function writeJsonl(dir: string, filename: string, lines: object[]): Promi
 
 let tmpDir: string;
 let origEnv: string | undefined;
+let origKimiCodeHome: string | undefined;
 
 beforeEach(async () => {
   tmpDir = join(tmpdir(), `aiusage-project-test-${Date.now()}`);
   await mkdir(tmpDir, { recursive: true });
   origEnv = process.env.CLAUDE_CONFIG_DIR;
+  origKimiCodeHome = process.env.KIMI_CODE_HOME;
 });
 
 afterEach(async () => {
@@ -26,6 +28,11 @@ afterEach(async () => {
     delete process.env.CLAUDE_CONFIG_DIR;
   } else {
     process.env.CLAUDE_CONFIG_DIR = origEnv;
+  }
+  if (origKimiCodeHome === undefined) {
+    delete process.env.KIMI_CODE_HOME;
+  } else {
+    process.env.KIMI_CODE_HOME = origKimiCodeHome;
   }
   await rm(tmpDir, { recursive: true, force: true });
 });
@@ -121,6 +128,32 @@ describe('空目录处理', () => {
     const results = await discoverProjects();
     // 不一定是空（其他工具可能有项目），但至少不报错
     expect(Array.isArray(results)).toBe(true);
+  });
+});
+
+// ─── Kimi Code 项目发现 ───
+
+describe('Kimi Code 项目发现', () => {
+  it('从 session_index.jsonl 的 workDir 提取项目名', async () => {
+    process.env.CLAUDE_CONFIG_DIR = tmpDir;
+    process.env.KIMI_CODE_HOME = join(tmpDir, '.kimi-code');
+    await mkdir(process.env.KIMI_CODE_HOME, { recursive: true });
+    await writeFile(
+      join(process.env.KIMI_CODE_HOME, 'session_index.jsonl'),
+      JSON.stringify({
+        sessionId: 'session-1',
+        sessionDir: join(process.env.KIMI_CODE_HOME, 'sessions', 'workspace', 'session-1'),
+        workDir: '/Users/test/Projects/kimi-project',
+      }),
+    );
+
+    const results = await discoverProjects();
+    expect(results).toContainEqual(
+      expect.objectContaining({
+        name: 'kimi-project',
+        sources: expect.arrayContaining(['kimi']),
+      }),
+    );
   });
 });
 

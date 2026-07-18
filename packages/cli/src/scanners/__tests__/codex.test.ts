@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdir, writeFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { PRICING_VERSION } from '@aiusage/shared';
 import { scanCodex } from '../codex.js';
 
 // Helper to write a JSONL session file
@@ -149,7 +150,7 @@ describe('Codex tiered pricing', () => {
     expect(result.inputTokens).toBe(500_000);
     expect(result.outputTokens).toBe(20_000);
     expect(result.costUSD).toBeCloseTo(5.25, 4);
-    expect(result.pricingVersion).toMatch(/^2026-07-10/);
+    expect(result.pricingVersion).toBe(PRICING_VERSION);
   });
 });
 

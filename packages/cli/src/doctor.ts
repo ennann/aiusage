@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { readConfig, getConfigPath } from './config.js';
 import { fetchHealth } from './api.js';
 import { getScheduleStatus } from './schedule.js';
+import { resolveKimiCodeHome } from './scanners/kimi.js';
 import type { Lang } from './i18n.js';
 
 export interface Check {
@@ -159,7 +160,8 @@ export async function runDoctor(lang: Lang = 'zh'): Promise<Check[]> {
     { dir: join(home, '.gemini', 'tmp'), label: 'Gemini CLI', exts: ['.json'] },
     { dir: join(home, '.gemini', 'antigravity'), label: 'Antigravity', exts: ['.json'] },
     { dir: join(home, '.qwen', 'tmp'), label: 'Qwen Code', exts: ['.jsonl'] },
-    { dir: join(home, '.kimi', 'sessions'), label: 'Kimi Code', exts: ['.jsonl'] },
+    { dir: join(resolveKimiCodeHome(home), 'sessions'), label: 'Kimi Code', exts: ['.jsonl'] },
+    { dir: join(home, '.kimi', 'sessions'), label: 'Kimi CLI (legacy)', exts: ['.jsonl'] },
     { dir: join(home, '.local', 'share', 'amp', 'threads'), label: 'Amp', exts: ['.json'] },
     { dir: join(home, '.factory', 'sessions'), label: 'Droid', exts: ['.jsonl', '.json'] },
     { dir: join(home, '.local', 'share', 'opencode'), label: 'OpenCode', exts: ['.json'] },
