@@ -125,7 +125,7 @@ function getParamsTable(locale: Locale) {
   return [
     { name: 'widget', values: WIDGETS.map((w) => w.id).join(', '), default: '-', desc: isZh ? '要渲染的组件 ID' : 'Widget ID to render', required: true },
     { name: 'items', values: '0,1,2,...', default: isZh ? '全部' : 'all', desc: isZh ? '仅显示指定索引的子项（逗号分隔）' : 'Show only specified sub-items by index (comma-separated)', required: false },
-    { name: 'range', values: '7d, 30d, 90d, month, all', default: '30d', desc: isZh ? '数据时间范围' : 'Data time range', required: false },
+    { name: 'range', values: '7d, 30d, 90d, 180d, month, all', default: '30d', desc: isZh ? '数据时间范围' : 'Data time range', required: false },
     { name: 'theme', values: 'light, dark, auto', default: 'auto', desc: isZh ? '颜色主题' : 'Color theme', required: false },
     { name: 'transparent', values: '0, 1, true', default: '0', desc: isZh ? '启用透明背景' : 'Enable transparent background', required: false },
     { name: 'locale', values: 'auto, en, zh', default: 'en', desc: isZh ? '界面语言；auto 跟随浏览器语言' : 'Interface language; auto follows browser language', required: false },
@@ -146,7 +146,7 @@ export function EmbedDocsPage() {
   // Config state
   const [selectedWidget, setSelectedWidget] = useState<WidgetId>(WIDGETS[0].id);
   const [themeOpt, setThemeOpt] = useState<'auto' | 'light' | 'dark'>('auto');
-  const [range, setRange] = useState<'7d' | '30d' | '90d' | 'month' | 'all'>('30d');
+  const [range, setRange] = useState<'7d' | '30d' | '90d' | '180d' | 'month' | 'all'>('30d');
   const [selectedLocale, setSelectedLocale] = useState<EmbedLocale>('auto');
   const [currencyOpt, setCurrencyOpt] = useState<EmbedCurrency>('auto');
   const [transparent, setTransparent] = useState(false);
@@ -285,6 +285,7 @@ export function EmbedDocsPage() {
                 { value: '7d' as const, label: '7D' },
                 { value: '30d' as const, label: '30D' },
                 { value: '90d' as const, label: '90D' },
+                { value: '180d' as const, label: '180D' },
                 { value: 'month' as const, label: isZh ? '本月' : 'Month' },
                 { value: 'all' as const, label: isZh ? '全部' : 'All' },
               ]}

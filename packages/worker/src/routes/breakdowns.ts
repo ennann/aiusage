@@ -65,8 +65,13 @@ export async function handleBreakdowns(url: URL, env: Env): Promise<Response> {
     params.push(provider);
   }
   if (product) {
-    conditions.push('b.product = ?');
-    params.push(product);
+    if (product === 'trae') {
+      conditions.push('b.product IN (?, ?, ?)');
+      params.push('trae', 'trae-cn', 'trae-intl');
+    } else {
+      conditions.push('b.product = ?');
+      params.push(product);
+    }
   }
   if (model) {
     conditions.push('b.model = ?');
@@ -187,6 +192,7 @@ function buildMinDate(range: string): string | null | undefined {
   if (range === '7d') days = 7;
   else if (range === '30d') days = 30;
   else if (range === '3m' || range === '90d') days = 90;
+  else if (range === '6m' || range === '180d') days = 180;
   else return undefined;
 
   const min = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);

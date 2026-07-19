@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
-import type { IngestBreakdown } from '@aiusage/shared';
+import { PRICING_VERSION, type IngestBreakdown } from '@aiusage/shared';
 import {
   accumulate,
   dateKey,
@@ -18,7 +18,8 @@ import {
  * Trae scanner.
  *
  * - Trae CN: reads the privacy-minimized cache written by `aiusage trae sync`.
- * - Trae international: also reads tokscale's `trae-cache/sessions/*.json`.
+ * - Trae international: reads AIUsage's account API cache and remains
+ *   compatible with tokscale's `trae-cache/sessions/*.json`.
  *
  * The tokscale cache compatibility follows its MIT-licensed Trae parser:
  * https://github.com/junhoyeo/tokscale/blob/main/crates/tokscale-core/src/sessions/trae.rs
@@ -62,6 +63,7 @@ interface ParsedEvent {
   dedupKey: string;
   sessionId: string;
   timestamp: Date;
+  product: 'trae-cn' | 'trae-intl';
   provider: string;
   model: string;
   project: string;
@@ -75,6 +77,7 @@ interface ParsedEvent {
 
 export interface TraeScanOptions {
   nativeCacheDir?: string;
+  intlCacheDir?: string;
   tokscaleCacheDir?: string;
   projectAliases?: Record<string, string>;
 }
@@ -91,6 +94,13 @@ export function resolveTokscaleTraeCacheDir(home = homedir()): string {
     : join(home, '.config', 'tokscale', 'trae-cache', 'sessions');
 }
 
+export function resolveTraeIntlCacheDir(home = homedir()): string {
+  const explicit = process.env.AIUSAGE_TRAE_INTL_CACHE_DIR?.trim();
+  return explicit
+    ? resolve(explicit)
+    : join(home, '.aiusage', 'trae-cache', 'intl', 'sessions');
+}
+
 export async function scanTraeDates(
   targetDates: string[],
   options: TraeScanOptions = {},
@@ -99,81 +109,89 @@ export async function scanTraeDates(
   if (dates.size === 0) return new Map();
 
   const nativeDir = options.nativeCacheDir ?? resolveTraeNativeCacheDir();
+  const intlDir = options.intlCacheDir ?? resolveTraeIntlCacheDir();
   const tokscaleDir = options.tokscaleCacheDir ?? resolveTokscaleTraeCacheDir();
   const cacheSources = [...new Set([
     `${nativeDir}\0native`,
+    `${intlDir}\0intl`,
     `${tokscaleDir}\0tokscale`,
   ])];
   const files = (await Promise.all(cacheSources.map(async source => {
-    const [dir, kind] = source.split('\0') as [string, 'native' | 'tokscale'];
+    const [dir, kind] = source.split('\0') as [string, 'native' | 'intl' | 'tokscale'];
     return (await walkFiles(dir, '.json')).map(filePath => ({ filePath, kind }));
   }))).flat();
 
   if (files.length === 0) return emptyResult(dates);
 
   const grouped = initDateMap(dates);
-  const seenEvents = new Set<string>();
+  const selectedEvents = new Map<string, ParsedEvent>();
   const sessionSets = new Map<string, Set<string>>();
 
   for (const { filePath, kind } of files) {
     const value = await readJson(filePath);
     if (value == null) continue;
 
-    const events = kind === 'native'
-      ? parseNativeCache(value)
-      : parseTokscaleCache(value);
+    const events = kind === 'native' ? parseNativeCache(value) : parseIntlCache(value);
 
     for (const event of events) {
-      if (seenEvents.has(event.dedupKey)) continue;
-      seenEvents.add(event.dedupKey);
-
-      const usageDate = dateKey(event.timestamp);
-      if (!dates.has(usageDate)) continue;
-      const day = grouped.get(usageDate);
-      if (!day) continue;
-
-      const projectFields = resolveProjectFields(event.project, options.projectAliases);
-      const breakdownKey = `${event.provider}|${event.model}|${projectFields.project}`;
-      accumulate(
-        day,
-        breakdownKey,
-        {
-          provider: event.provider,
-          product: 'trae',
-          channel: 'ide',
-          model: event.model,
-          project: projectFields.project,
-          projectDisplay: projectFields.projectDisplay,
-          projectAlias: projectFields.projectAlias,
-          sessionCount: 0,
-          inputTokens: 0,
-          cachedInputTokens: 0,
-          cacheWriteTokens: 0,
-          outputTokens: 0,
-          reasoningOutputTokens: 0,
-        },
-        event,
-      );
-
-      if (event.costUSD && event.costUSD > 0) {
-        const breakdown = day.get(breakdownKey);
-        if (breakdown) breakdown.costUSD = (breakdown.costUSD ?? 0) + event.costUSD;
+      const existing = selectedEvents.get(event.dedupKey);
+      if (!existing || shouldReplaceEvent(existing, event)) {
+        selectedEvents.set(event.dedupKey, event);
       }
-
-      const sessionKey = `${usageDate}|${breakdownKey}`;
-      let sessions = sessionSets.get(sessionKey);
-      if (!sessions) {
-        sessions = new Set<string>();
-        sessionSets.set(sessionKey, sessions);
-      }
-      sessions.add(event.sessionId);
     }
+  }
+
+  for (const event of selectedEvents.values()) {
+    const usageDate = dateKey(event.timestamp);
+    if (!dates.has(usageDate)) continue;
+    const day = grouped.get(usageDate);
+    if (!day) continue;
+
+    const projectFields = resolveProjectFields(event.project, options.projectAliases);
+    const breakdownKey = `${event.product}|${event.provider}|${event.model}|${projectFields.project}`;
+    accumulate(
+      day,
+      breakdownKey,
+      {
+        provider: event.provider,
+        product: event.product,
+        channel: 'ide',
+        model: event.model,
+        project: projectFields.project,
+        projectDisplay: projectFields.projectDisplay,
+        projectAlias: projectFields.projectAlias,
+        sessionCount: 0,
+        inputTokens: 0,
+        cachedInputTokens: 0,
+        cacheWriteTokens: 0,
+        outputTokens: 0,
+        reasoningOutputTokens: 0,
+      },
+      event,
+    );
+
+    if (event.costUSD && event.costUSD > 0) {
+      const breakdown = day.get(breakdownKey);
+      if (breakdown) {
+        breakdown.costUSD = (breakdown.costUSD ?? 0) + event.costUSD;
+        // International Trae returns the vendor's account-level charge.
+        breakdown.pricingVersion = PRICING_VERSION;
+      }
+    }
+
+    const sessionKey = `${usageDate}|${breakdownKey}`;
+    let sessions = sessionSets.get(sessionKey);
+    if (!sessions) {
+      sessions = new Set<string>();
+      sessionSets.set(sessionKey, sessions);
+    }
+    sessions.add(event.sessionId);
   }
 
   const result = finalize(grouped);
   for (const [usageDate, breakdowns] of result) {
     for (const breakdown of breakdowns) {
-      const key = `${usageDate}|${breakdown.provider}|${breakdown.model}|${breakdown.project}`;
+      const key = `${usageDate}|${breakdown.product}|${breakdown.provider}|${breakdown.model}|${breakdown.project}`;
       breakdown.sessionCount = sessionSets.get(key)?.size ?? 0;
     }
   }
@@ -207,6 +225,7 @@ function parseNativeCache(value: unknown): ParsedEvent[] {
       dedupKey: `trae-cn:${messageId}`,
       sessionId,
       timestamp,
+      product: 'trae-cn',
       provider: inferProviderFromModel(model, 'trae'),
       model,
       project,
@@ -216,7 +235,7 @@ function parseNativeCache(value: unknown): ParsedEvent[] {
   return events;
 }
 
-function parseTokscaleCache(value: unknown): ParsedEvent[] {
+function parseIntlCache(value: unknown): ParsedEvent[] {
   if (!Array.isArray(value)) return [];
   const events: ParsedEvent[] = [];
 
@@ -245,9 +264,12 @@ function parseTokscaleCache(value: unknown): ParsedEvent[] {
     if (tokenTotal(tokens) === 0) continue;
 
     events.push({
-      dedupKey: `trae-intl:${sessionId}:${session.usage_time}`,
+      // The international API returns aggregate rows by session. Multiple
+      // cache artifacts can contain newer snapshots of the same session.
+      dedupKey: `trae-intl:${sessionId}`,
       sessionId,
       timestamp,
+      product: 'trae-intl',
       provider: inferProviderFromModel(model, 'trae'),
       model,
       project: 'unknown',
@@ -256,6 +278,16 @@ function parseTokscaleCache(value: unknown): ParsedEvent[] {
     });
   }
   return events;
+}
+
+function shouldReplaceEvent(existing: ParsedEvent, incoming: ParsedEvent): boolean {
+  if (incoming.timestamp.getTime() !== existing.timestamp.getTime()) {
+    return incoming.timestamp > existing.timestamp;
+  }
+  const incomingTotal = tokenTotal(incoming);
+  const existingTotal = tokenTotal(existing);
+  if (incomingTotal !== existingTotal) return incomingTotal > existingTotal;
+  return (incoming.costUSD ?? 0) > (existing.costUSD ?? 0);
 }
 
 export function normalizeTraeModel(name?: string): string {

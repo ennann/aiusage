@@ -137,6 +137,60 @@ describe('buildLocalReport', () => {
       }),
     );
   });
+
+  it('limits all-history discovery and output to the selected Trae edition', async () => {
+    const traeDir = join(homeDir, '.aiusage', 'trae-cache', 'sessions');
+    const geminiDir = join(homeDir, '.gemini', 'tmp', 'other-project');
+    await Promise.all([
+      mkdir(traeDir, { recursive: true }),
+      mkdir(geminiDir, { recursive: true }),
+    ]);
+    await writeFile(join(traeDir, 'session.json'), JSON.stringify({
+      schemaVersion: 1,
+      source: 'trae-cn-local-rpc',
+      syncedAt: '2026-07-19T00:00:00Z',
+      sessionId: 'trae-session',
+      project: '/Users/test/Projects/trae',
+      events: [{
+        messageId: 'trae-message',
+        timestamp: '2026-01-15T12:00:00Z',
+        model: 'GPT-5.4',
+        inputTokens: 100,
+        cachedInputTokens: 200,
+        cacheWriteTokens: 0,
+        outputTokens: 10,
+        reasoningOutputTokens: 0,
+      }],
+    }));
+    await writeFile(join(geminiDir, 'session.json'), JSON.stringify({
+      data: {
+        model: 'gemini-2.5-pro',
+        messages: [{
+          timestamp: '2025-01-01T12:00:00Z',
+          usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 1 },
+        }],
+      },
+    }));
+
+    const { buildLocalReport } = await import('../report.js');
+    const report = await buildLocalReport('all', { tools: ['trae-cn'] });
+
+    expect(report.requestedDays).toBe(1);
+    expect(report.daily.map(day => day.usageDate)).toEqual(['2026-01-15']);
+    expect(report.bySource.map(source => source.source)).toEqual(['openai/trae-cn']);
+    expect(report.totals.totalTokens).toBe(310);
+  });
+});
+
+describe('Trae CLI filters', () => {
+  it('supports the 6-month range and expands the Trae alias to both editions', async () => {
+    const { parseReportRange } = await import('../report.js');
+    const { parseToolSelection } = await import('../scan.js');
+
+    expect(parseReportRange('6m')).toBe('6m');
+    expect(parseToolSelection('trae')).toEqual(['trae-cn', 'trae-intl', 'trae']);
+    expect(parseToolSelection('trae-cn,trae-intl')).toEqual(['trae-cn', 'trae-intl']);
+  });
 });
 
 describe('calculateBreakdownCost', () => {
@@ -186,6 +240,31 @@ describe('calculateBreakdownCost', () => {
     }, warnings);
 
     expect(cost).toBe(33.5);
+    expect([...warnings]).toEqual([]);
+  });
+
+  it('trusts Trae international vendor cost across catalog versions', async () => {
+    const { calculateBreakdownCost } = await import('../report.js');
+    const { catalog } = await import('@aiusage/shared');
+    const warnings = new Set<string>();
+
+    const cost = calculateBreakdownCost({
+      provider: 'openai',
+      product: 'trae-intl',
+      channel: 'ide',
+      model: 'gpt-5.4',
+      project: 'unknown',
+      eventCount: 1,
+      inputTokens: 100,
+      cachedInputTokens: 200,
+      cacheWriteTokens: 0,
+      outputTokens: 20,
+      reasoningOutputTokens: 0,
+      costUSD: 0.25,
+      pricingVersion: 'older-cli',
+    }, warnings, { ...catalog, version: 'future-catalog' });
+
+    expect(cost).toBe(0.25);
     expect([...warnings]).toEqual([]);
   });
 

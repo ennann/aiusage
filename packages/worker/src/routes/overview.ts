@@ -321,8 +321,7 @@ export function buildWhere(filters: DashboardFilters, omit?: FilterKey): WherePa
     params.push(filters.provider);
   }
   if (filters.product && omit !== 'product') {
-    clauses.push('b.product = ?');
-    params.push(filters.product);
+    appendProductFilter(clauses, params, 'b', filters.product);
   }
   if (filters.channel && omit !== 'channel') {
     clauses.push('b.channel = ?');
@@ -369,16 +368,19 @@ async function loadFacetOptions(column: string, filters: DashboardFilters, env: 
     env,
   ) : null;
 
-  return Promise.all((rows.results ?? []).map(async row => ({
+  const items = await Promise.all((rows.results ?? []).map(async row => ({
     value: row.value,
     label: column === 'project'
       ? await toPublicProjectName(row.value, env)
       : column === 'device_id'
         ? (deviceLabels?.get(row.value) ?? row.value)
-        : row.value,
+        : column === 'product'
+          ? productLabel(row.value, false)
+          : row.value,
     estimatedCostUsd: roundUsd(row.estimated_cost_usd ?? 0),
     eventCount: Number(row.event_count ?? 0),
   })));
+  return column === 'product' ? addCombinedTraeFacet(items) : items;
 }
 
 async function loadDeviceLabels(deviceIds: string[], env: Env): Promise<Map<string, string>> {
@@ -537,8 +539,7 @@ function buildActivityWhere(filters: DashboardFilters): WhereParts {
     params.push(filters.provider);
   }
   if (filters.product) {
-    clauses.push('a.product = ?');
-    params.push(filters.product);
+    appendProductFilter(clauses, params, 'a', filters.product);
   }
   if (filters.channel && filters.channel !== 'cli') {
     clauses.push('1 = 0');
@@ -635,8 +636,48 @@ function buildMinDate(range: string): string | null | undefined {
   if (range === '7d') days = 7;
   else if (range === '30d') days = 30;
   else if (range === '3m' || range === '90d') days = 90;
+  else if (range === '6m' || range === '180d') days = 180;
   else return undefined;
 
   const min = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
   return min.toISOString().split('T')[0];
+}
+
+function appendProductFilter(
+  clauses: string[],
+  params: (string | number)[],
+  tableAlias: 'a' | 'b',
+  product: string,
+): void {
+  if (product === 'trae') {
+    clauses.push(`${tableAlias}.product IN (?, ?, ?)`);
+    params.push('trae', 'trae-cn', 'trae-intl');
+    return;
+  }
+  clauses.push(`${tableAlias}.product = ?`);
+  params.push(product);
+}
+
+function productLabel(value: string, combined: boolean): string {
+  if (value === 'trae-cn') return 'Trae CN';
+  if (value === 'trae-intl') return 'Trae International';
+  if (value === 'trae') return combined ? 'Trae (All)' : 'Trae (Legacy)';
+  return value;
+}
+
+function addCombinedTraeFacet(items: FacetItem[]): FacetItem[] {
+  const traeItems = items.filter(item => item.value === 'trae' || item.value === 'trae-cn' || item.value === 'trae-intl');
+  if (traeItems.length <= 1) return items;
+
+  const combined: FacetItem = {
+    value: 'trae',
+    label: productLabel('trae', true),
+    estimatedCostUsd: roundUsd(traeItems.reduce((sum, item) => sum + item.estimatedCostUsd, 0)),
+    eventCount: traeItems.reduce((sum, item) => sum + item.eventCount, 0),
+  };
+  return [
+    ...items.filter(item => item.value !== 'trae' && item.value !== 'trae-cn' && item.value !== 'trae-intl'),
+    combined,
+    ...traeItems.filter(item => item.value !== 'trae'),
+  ].sort((a, b) => b.estimatedCostUsd - a.estimatedCostUsd || a.label.localeCompare(b.label));
 }

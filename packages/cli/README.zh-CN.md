@@ -5,7 +5,7 @@
 - 发现和管理本机 AI 工具项目
 - 扫描本地 AI 编程工具的 Token 用量（Claude Code、Codex、Cursor、Copilot CLI、Copilot VS Code、Gemini CLI、Antigravity、Amp、Kimi Code、Qwen Code、Droid、OpenCode、Pi、Trae）
 - 通过 Anthropic Admin API 导入历史用量
-- 生成本地用量报告（最近 7 天、30 天、90 天或全部历史）
+- 生成本地用量报告（最近 7 天、30 天、90 天、180 天或全部历史）
 - 定时自动同步数据到 AIUsage Worker
 - 诊断配置与连接问题
 
@@ -14,9 +14,11 @@ Kimi 同时支持旧版 Kimi CLI 的 `~/.kimi/sessions/` 与新版 Kimi Code 的
 `wire.jsonl` 中的 Token 计数与会话元数据，不上传对话正文；新版格式参考了
 [tokscale](https://github.com/junhoyeo/tokscale) 的 MIT 开源实现。
 
-Trae CN 通过 `aiusage trae sync` 调用 Trae 自己的本地 `ai-agent` 接口读取历史
-Token 计数，缓存到 `~/.aiusage/trae-cache/sessions/`；不会直接破解加密数据库。
-国际版 Trae 也兼容 `tokscale trae sync` 生成的缓存。
+Trae CN 通过 `aiusage trae sync --edition cn` 调用 Trae 自己的本地 `ai-agent`
+接口读取历史 Token 计数，缓存到 `~/.aiusage/trae-cache/sessions/`；不会直接破解
+加密数据库。国际版通过 `--edition intl` 在本机读取 Trae IDE 或 Trae Solo 的登录
+信息（旧版直接读取、新版在本机解密），并调用官方账号用量 API；实现和缓存解析均与
+[tokscale](https://github.com/junhoyeo/tokscale) 的 MIT 开源实现交叉校验。
 
 ## 安装
 
@@ -62,7 +64,11 @@ aiusage project alias --remove myapp    # 移除别名
 aiusage report                          # 默认: 最近 7 天 + 今天，英文，紧凑模式
 aiusage report --range 1m               # 最近 30 天
 aiusage report --range 3m               # 最近 90 天
+aiusage report --range 6m               # 最近 180 天
 aiusage report --range all              # 全部历史
+aiusage report --tool trae-cn --range all    # 仅 Trae CN
+aiusage report --tool trae-intl --range 6m   # 仅 Trae 国际版
+aiusage report --tool trae --range all       # 两个版本合计
 aiusage report --detail                 # 展示全部列、热门模型、定价说明
 aiusage report --lang zh                # 中文输出
 aiusage report --no-emoji               # 禁用标题 emoji
@@ -73,19 +79,31 @@ aiusage report --json                   # JSON 输出
 
 ### trae sync
 
-先同步 Trae CN 的本地历史用量，再运行常规报告或看板上传：
+按版本同步 Trae 历史用量，再运行常规报告或看板上传：
 
 ```bash
-aiusage trae sync
-aiusage report --range all
+aiusage trae sync --edition cn           # 默认值；Trae CN 本地历史
+aiusage trae sync --edition intl --since 180  # 国际版账号最近 180 天
+aiusage trae sync --edition all --since 180   # 两边都尝试，任一成功即可
+
+aiusage report --tool trae-cn --range all
+aiusage report --tool trae-intl --range 6m
+aiusage report --tool trae --range all   # CN + 国际版 + 兼容旧数据
 ```
 
 如果 Trae CN 未运行，AIUsage 会用仅限本机的调试端口临时启动它，读取官方
 `ai-agent` 会话接口，完成后自动退出。如果 Trae 已经在运行但没有开启该端口，
 请先退出 Trae 再重试。也可以通过 `--port 9230 --no-launch` 连接自行启动的实例。
 
-缓存只包含会话标识、项目路径、时间、模型名和 Token 数字，不包含对话正文或登录凭据。
-国际版用户可先执行 `tokscale trae sync`，AIUsage 会自动读取兼容缓存。
+Trae 国际版 IDE 与 Trae Solo 共用账号级用量，只会通过第一个可用凭据请求一次，不会
+重复统计。AIUsage 会在本机读取或解密 `storage.json` 中的登录信息，并以 `0600` 权限保存到
+`~/.aiusage/trae-cache/intl/credentials-{ide,solo}.json`；凭据和对话正文都不会上传。
+官方 API 返回的会话级 Token/费用缓存位于
+`~/.aiusage/trae-cache/intl/sessions/usage.json`。现有
+`~/.config/tokscale/trae-cache/sessions/*.json` 仍会读取，并按会话保留最新快照，避免双算。
+
+报告筛选值为 `trae-cn`、`trae-intl`；`trae` 是两者合计的稳定别名。常规 `sync`
+始终按完整日期汇总上传，因此不接受 `--tool`，避免把局部结果当成整日统计。
 
 ### 统一日期参数
 
@@ -95,11 +113,12 @@ aiusage report --range all
 aiusage scan --today                    # 仅今天
 aiusage report --date 2026-03-31        # 指定日期
 aiusage sync --range 1m                 # 最近 30 天
+aiusage report --range 6m               # 最近 180 天
 aiusage sync --lookback 14              # 最近 14 天 + 今天
 aiusage scan --from 2025-01-01 --to 2026-04-05
 ```
 
-使用 `--range 1m`，不要写成 `range -1m`。`report` 额外支持 `--range all`；`scan` 和 `sync` 如需很长历史范围，请明确使用 `--from/--to`。
+使用 `--range 1m`，不要写成 `range -1m`。`scan`、`report`、`sync` 支持 `--range 6m`；`report` 额外支持 `--range all`。`scan` 和 `sync` 如需更长历史范围，请明确使用 `--from/--to`。
 
 ### scan
 
@@ -109,6 +128,7 @@ aiusage scan --from 2025-01-01 --to 2026-04-05
 aiusage scan                            # 昨天
 aiusage scan --date 2026-03-31          # 指定日期
 aiusage scan --range 1m                 # 最近 30 天
+aiusage scan --tool trae-cn --range 6m  # 仅 Trae CN 最近 180 天
 aiusage scan --date 2026-03-31 --json   # JSON 输出
 ```
 

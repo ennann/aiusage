@@ -6,10 +6,15 @@ import { calculateCost, PRICING_VERSION, type PricingCatalog } from '@aiusage/sh
 import { scanDates } from './scan.js';
 import { parseTs, dateKey, fileModifiedTs } from './scanners/utils.js';
 import { resolveKimiCodeHome } from './scanners/kimi.js';
+import {
+  resolveTokscaleTraeCacheDir,
+  resolveTraeIntlCacheDir,
+  resolveTraeNativeCacheDir,
+} from './scanners/trae.js';
 import { discoverOpenCodeUsageDates } from './scanners/opencode.js';
 import type { PricingInfo } from './pricing.js';
 
-export type ReportRange = '7d' | '1m' | '3m' | 'all' | 'today';
+export type ReportRange = '7d' | '1m' | '3m' | '6m' | 'all' | 'today';
 
 interface Totals {
   eventCount: number;
@@ -48,12 +53,14 @@ export interface LocalReport {
   byModel: ModelSummary[];
   pricing: PricingInfo;
   pricingWarnings: string[];
+  tools?: string[];
 }
 
 interface BuildReportOptions {
   projectAliases?: Record<string, string>;
   /** 直接传入日期列表时忽略 range 参数 */
   dates?: string[];
+  tools?: readonly string[];
   pricingCatalog?: PricingCatalog;
   pricingInfo?: PricingInfo;
 }
@@ -65,7 +72,7 @@ export async function buildLocalReport(
   const requestedDates = options.dates
     ? options.dates
     : range === 'all'
-    ? await discoverAllDates()
+    ? await discoverAllDates(options.tools)
     : range === 'today'
     ? [dateKey(getTodayLocalDate())]
     : buildPresetDates(range);
@@ -77,7 +84,10 @@ export async function buildLocalReport(
   const pricingWarnings = new Set<string>();
   let daysWithData = 0;
 
-  const results = await scanDates(requestedDates, { projectAliases: options.projectAliases });
+  const results = await scanDates(requestedDates, {
+    projectAliases: options.projectAliases,
+    tools: options.tools,
+  });
 
   for (const result of results) {
     const usageDate = result.usageDate;
@@ -128,14 +138,15 @@ export async function buildLocalReport(
       version: options.pricingCatalog?.version ?? 'bundled',
     },
     pricingWarnings: [...pricingWarnings].sort(),
+    ...(options.tools ? { tools: [...options.tools] } : {}),
   };
 }
 
 export function parseReportRange(value: string | boolean | undefined, today?: boolean): ReportRange {
   if (today) return 'today';
   if (value === undefined || value === true) return '7d';
-  if (value === '7d' || value === '1m' || value === '3m' || value === 'all' || value === 'today') return value;
-  throw new Error('--range 仅支持 7d、1m、3m、all、today');
+  if (value === '7d' || value === '1m' || value === '3m' || value === '6m' || value === 'all' || value === 'today') return value;
+  throw new Error('--range 仅支持 7d、1m、3m、6m、all、today');
 }
 
 function getRangeLabel(range: ReportRange): string {
@@ -146,6 +157,8 @@ function getRangeLabel(range: ReportRange): string {
       return '最近 30 天';
     case '3m':
       return '最近 90 天';
+    case '6m':
+      return '最近 180 天';
     case 'all':
       return '全部历史';
     case 'today':
@@ -154,7 +167,7 @@ function getRangeLabel(range: ReportRange): string {
 }
 
 function buildPresetDates(range: Exclude<ReportRange, 'all' | 'today'>): string[] {
-  const days = range === '7d' ? 7 : range === '1m' ? 30 : 90;
+  const days = range === '7d' ? 7 : range === '1m' ? 30 : range === '3m' ? 90 : 180;
   const today = getTodayLocalDate();
   const result: string[] = [];
 
@@ -167,29 +180,46 @@ function buildPresetDates(range: Exclude<ReportRange, 'all' | 'today'>): string[
   return result;
 }
 
-async function discoverAllDates(): Promise<string[]> {
+async function discoverAllDates(tools?: readonly string[]): Promise<string[]> {
   const dates = new Set<string>();
   const home = homedir();
-  await Promise.all([
-    discoverClaudeDates(dates),
-    discoverCodexDates(dates),
-    discoverGeminiDates(dates),
-    discoverCopilotVscodeDates(dates),
-    discoverAntigravityDates(dates),
-    discoverGenericJsonlDates(join(home, '.copilot', 'session-state'), dates),
-    discoverGenericJsonlDates(join(home, '.copilot', 'otel'), dates),
-    discoverGenericJsonlDates(join(home, '.qwen', 'tmp'), dates),
-    discoverGenericJsonlDates(join(home, '.qwen', 'projects'), dates),
-    discoverGenericJsonlDates(join(home, '.kimi', 'sessions'), dates),
-    discoverGenericJsonlDates(join(resolveKimiCodeHome(home), 'sessions'), dates),
-    discoverGenericJsonDates(join(home, '.local', 'share', 'amp', 'threads'), dates),
-    discoverGenericJsonDates(join(home, '.factory', 'sessions'), dates),
-    discoverOpenCodeUsageDates().then(found => found.forEach(date => dates.add(date))),
-    discoverGenericJsonlDates(join(home, '.pi', 'agent', 'sessions'), dates),
-    discoverGenericJsonlDates(join(home, '.omp', 'agent', 'sessions'), dates),
-  ]);
+  const selected = tools ? new Set(tools) : null;
+  const includes = (...products: string[]) => !selected || products.some(product => selected.has(product));
+  const discoveries: Array<Promise<void>> = [];
+
+  if (includes('claude-code')) discoveries.push(discoverClaudeDates(dates));
+  if (includes('codex')) discoveries.push(discoverCodexDates(dates));
+  if (includes('gemini-cli')) discoveries.push(discoverGeminiDates(dates));
+  if (includes('copilot-vscode')) discoveries.push(discoverCopilotVscodeDates(dates));
+  if (includes('antigravity')) discoveries.push(discoverAntigravityDates(dates));
+  if (includes('copilot-cli')) {
+    discoveries.push(discoverGenericJsonlDates(join(home, '.copilot', 'session-state'), dates));
+    discoveries.push(discoverGenericJsonlDates(join(home, '.copilot', 'otel'), dates));
+  }
+  if (includes('qwen-code')) {
+    discoveries.push(discoverGenericJsonlDates(join(home, '.qwen', 'tmp'), dates));
+    discoveries.push(discoverGenericJsonlDates(join(home, '.qwen', 'projects'), dates));
+  }
+  if (includes('kimi-code')) {
+    discoveries.push(discoverGenericJsonlDates(join(home, '.kimi', 'sessions'), dates));
+    discoveries.push(discoverGenericJsonlDates(join(resolveKimiCodeHome(home), 'sessions'), dates));
+  }
+  if (includes('amp')) discoveries.push(discoverGenericJsonDates(join(home, '.local', 'share', 'amp', 'threads'), dates));
+  if (includes('droid')) discoveries.push(discoverGenericJsonDates(join(home, '.factory', 'sessions'), dates));
+  if (includes('opencode')) discoveries.push(discoverOpenCodeUsageDates().then(found => { found.forEach(date => dates.add(date)); }));
+  if (includes('pi')) {
+    discoveries.push(discoverGenericJsonlDates(join(home, '.pi', 'agent', 'sessions'), dates));
+    discoveries.push(discoverGenericJsonlDates(join(home, '.omp', 'agent', 'sessions'), dates));
+  }
+  if (includes('trae-cn', 'trae')) discoveries.push(discoverGenericJsonDates(resolveTraeNativeCacheDir(home), dates));
+  if (includes('trae-intl', 'trae')) {
+    discoveries.push(discoverGenericJsonDates(resolveTraeIntlCacheDir(home), dates));
+    discoveries.push(discoverGenericJsonDates(resolveTokscaleTraeCacheDir(home), dates));
+  }
+
+  await Promise.all(discoveries);
   const explicitCopilotOtel = process.env.COPILOT_OTEL_FILE_EXPORTER_PATH?.trim();
-  if (explicitCopilotOtel) await discoverJsonlFileDates(explicitCopilotOtel, dates);
+  if (explicitCopilotOtel && includes('copilot-cli')) await discoverJsonlFileDates(explicitCopilotOtel, dates);
   return [...dates].sort();
 }
 
@@ -233,6 +263,7 @@ async function discoverGenericJsonDates(baseDir: string, dates: Set<string>): Pr
     if (!content) continue;
     let data: any;
     try { data = JSON.parse(content); } catch { continue; }
+    if (Array.isArray(data) && data.length === 0) continue;
     const foundDate = Array.isArray(data)
       ? data.reduce((found, row) => collectRecordDates(row, dates) || found, false)
       : collectRecordDates(data, dates);
@@ -247,6 +278,7 @@ function collectRecordDates(record: Record<string, any> | undefined, dates: Set<
     record.timestamp, record.time, record.created_at, record.createTime, record.startTime,
     record.lastUpdated, record.created, record.providerLockTimestamp, record.endTime,
     record.hrTime, record._hrTime, record.observedTimestamp, record.timeUnixNano,
+    record.usage_time,
     record.time?.created,
   ];
   for (const value of candidates) {
@@ -263,6 +295,7 @@ function collectRecordDates(record: Record<string, any> | undefined, dates: Set<
     ...(Array.isArray(record.data?.history) ? record.data.history : []),
     ...(Array.isArray(record.$set?.messages) ? record.$set.messages : []),
     ...(Array.isArray(record.usageLedger?.events) ? record.usageLedger.events : []),
+    ...(Array.isArray(record.events) ? record.events : []),
   ];
   for (const row of nestedRows) found = collectRecordDates(row, dates) || found;
   return found;
@@ -630,8 +663,9 @@ function toBreakdownTotals(
 
 /**
  * 计算单个 breakdown 的成本：
- * 1. 若 Claude Code JSONL 自带 costUSD（旧版本会写），直接采用
- * 2. 否则委托给 @aiusage/shared 的 calculateCost
+ * 1. Trae 国际版官方 API 返回的费用始终采用
+ * 2. 其他 scanner 的 costUSD 仅在定价版本匹配时采用
+ * 3. 否则委托给 @aiusage/shared 的 calculateCost
  *
  * 失败/估算情况注入 warning 给上层报告展示。
  */
@@ -642,7 +676,9 @@ export function calculateBreakdownCost(
 ): number {
   const effectivePricingVersion = pricingCatalog?.version ?? PRICING_VERSION;
   const sourceCostMatchesCatalog =
-    breakdown.pricingVersion == null || breakdown.pricingVersion === effectivePricingVersion;
+    breakdown.product === 'trae-intl' ||
+    breakdown.pricingVersion == null ||
+    breakdown.pricingVersion === effectivePricingVersion;
   if (breakdown.costUSD != null && breakdown.costUSD > 0 && sourceCostMatchesCatalog) {
     return breakdown.costUSD;
   }

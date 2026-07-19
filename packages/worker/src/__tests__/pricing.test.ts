@@ -66,6 +66,27 @@ describe('calculateCost: 基本计费', () => {
     expect(result.costStatus).toBe('estimated');
   });
 
+  it('始终采用 Trae 国际版官方 API 返回的账号费用', () => {
+    const result = calculateIngestBreakdownCost({
+      provider: 'openai',
+      product: 'trae-intl',
+      channel: 'ide',
+      model: 'gpt-5.4',
+      project: 'unknown',
+      eventCount: 1,
+      inputTokens: 100,
+      cachedInputTokens: 200,
+      cacheWriteTokens: 0,
+      outputTokens: 20,
+      reasoningOutputTokens: 0,
+      costUSD: 0.25,
+      pricingVersion: 'stale-catalog',
+    });
+
+    expect(result.estimatedCostUsd).toBe(0.25);
+    expect(result.costStatus).toBe('exact');
+  });
+
   it('忽略旧 scanner 用作缺省值的零成本', () => {
     const result = calculateIngestBreakdownCost({
       provider: 'openai',

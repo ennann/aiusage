@@ -6,14 +6,17 @@ import { scanTraeDates } from '../trae.js';
 
 let rootDir: string;
 let nativeDir: string;
+let intlDir: string;
 let tokscaleDir: string;
 
 beforeEach(async () => {
   rootDir = join(tmpdir(), `aiusage-trae-${Date.now()}-${Math.random().toString(16).slice(2)}`);
   nativeDir = join(rootDir, 'native');
+  intlDir = join(rootDir, 'intl');
   tokscaleDir = join(rootDir, 'tokscale');
   await Promise.all([
     mkdir(nativeDir, { recursive: true }),
+    mkdir(intlDir, { recursive: true }),
     mkdir(tokscaleDir, { recursive: true }),
   ]);
 });
@@ -46,13 +49,14 @@ describe('scanTraeDates', () => {
 
     const result = await scanTraeDates(['2026-07-17'], {
       nativeCacheDir: nativeDir,
+      intlCacheDir: intlDir,
       tokscaleCacheDir: tokscaleDir,
       projectAliases: { 'trae-project': 'Trae 项目' },
     });
 
     expect(result.get('2026-07-17')).toEqual([expect.objectContaining({
       provider: 'anthropic',
-      product: 'trae',
+      product: 'trae-cn',
       channel: 'ide',
       model: 'claude-sonnet-4.6',
       project: '/Users/test/Projects/trae-project',
@@ -98,13 +102,14 @@ describe('scanTraeDates', () => {
 
     const result = await scanTraeDates(['2026-07-17'], {
       nativeCacheDir: nativeDir,
+      intlCacheDir: intlDir,
       tokscaleCacheDir: tokscaleDir,
     });
     const breakdowns = result.get('2026-07-17') ?? [];
 
     expect(breakdowns).toContainEqual(expect.objectContaining({
       provider: 'openai',
-      product: 'trae',
+      product: 'trae-intl',
       model: 'gpt-5.4',
       eventCount: 1,
       sessionCount: 1,
@@ -116,9 +121,64 @@ describe('scanTraeDates', () => {
     }));
     expect(breakdowns).toContainEqual(expect.objectContaining({
       provider: 'trae',
+      product: 'trae-intl',
       model: 'trae-auto',
       inputTokens: 50,
       outputTokens: 5,
+    }));
+  });
+
+  it('keeps CN and international usage separate while deduplicating newer international snapshots', async () => {
+    await writeFile(join(nativeDir, 'cn.json'), JSON.stringify({
+      schemaVersion: 1,
+      source: 'trae-cn-local-rpc',
+      syncedAt: '2026-07-19T00:00:00Z',
+      sessionId: 'shared-session',
+      project: '/Users/test/Projects/shared',
+      events: [{
+        messageId: 'shared-message',
+        timestamp: '2026-07-17T12:00:00Z',
+        model: 'GPT-5.4',
+        inputTokens: 100,
+        cachedInputTokens: 0,
+        cacheWriteTokens: 0,
+        outputTokens: 10,
+        reasoningOutputTokens: 0,
+      }],
+    }));
+    await writeFile(join(tokscaleDir, 'older.json'), JSON.stringify([{
+      model_name: 'GPT-5.4',
+      session_id: 'shared-session',
+      usage_time: 1784289600,
+      dollar_float: 0.1,
+      extra_info: { input_token: 200, output_token: 20, cache_read_token: 0, cache_write_token: 0 },
+    }]));
+    await writeFile(join(intlDir, 'usage.json'), JSON.stringify([{
+      model_name: 'GPT-5.4',
+      session_id: 'shared-session',
+      usage_time: 1784289600,
+      dollar_float: 0.2,
+      extra_info: { input_token: 300, output_token: 30, cache_read_token: 0, cache_write_token: 0 },
+    }]));
+
+    const result = await scanTraeDates(['2026-07-17'], {
+      nativeCacheDir: nativeDir,
+      intlCacheDir: intlDir,
+      tokscaleCacheDir: tokscaleDir,
+    });
+    const breakdowns = result.get('2026-07-17') ?? [];
+
+    expect(breakdowns).toHaveLength(2);
+    expect(breakdowns).toContainEqual(expect.objectContaining({
+      product: 'trae-cn',
+      inputTokens: 100,
+      outputTokens: 10,
+    }));
+    expect(breakdowns).toContainEqual(expect.objectContaining({
+      product: 'trae-intl',
+      inputTokens: 300,
+      outputTokens: 30,
+      costUSD: 0.2,
     }));
   });
 });
