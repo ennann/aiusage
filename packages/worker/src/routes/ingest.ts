@@ -103,6 +103,17 @@ export async function handleIngest(request: Request, env: Env): Promise<Response
       )
       .run();
 
+    if (day.breakdowns.some(b => b.product === 'trae-cn' || b.product === 'trae-intl')) {
+      // CLI 1.7.5 briefly stored both editions as `trae`. Once the same day is
+      // re-uploaded with explicit editions, remove only that legacy bucket so
+      // it cannot be counted twice. Other tools and partial imports stay intact.
+      await env.DB.prepare(
+        "DELETE FROM daily_usage_breakdown WHERE device_id = ? AND usage_date = ? AND product = 'trae'",
+      )
+        .bind(tokenPayload.deviceId, day.usageDate)
+        .run();
+    }
+
     for (const { breakdown: b, cost, cacheWrite5mTokens, cacheWrite1hTokens } of breakdownsWithCost) {
       const rawProject = b.project || 'unknown';
       const isFullPath = rawProject.startsWith('/') || /^[A-Z]:\\/i.test(rawProject);

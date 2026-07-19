@@ -5,7 +5,7 @@
 - discovering and managing projects across AI tools
 - scanning local Claude Code, Codex, Cursor, Copilot CLI, Copilot for VS Code, Gemini CLI, Antigravity, Amp, Kimi Code, Qwen Code, Droid, OpenCode, Pi, and Trae usage
 - importing historical usage from Anthropic Admin API
-- printing local usage summaries for the last 7 days, 30 days, 90 days, or all history
+- printing local usage summaries for the last 7, 30, 90, or 180 days, or all history
 - scheduling automatic sync to an AIUsage Worker
 - diagnosing configuration and connectivity issues
 
@@ -31,7 +31,8 @@ differ, rather than treating every local record as billable token usage.
 | Droid | `~/.factory/sessions/*.settings.json`; uses persisted token totals first and the transcript only as a model fallback. |
 | OpenCode | OpenCode 1.2+ `opencode.db` through read-only `sqlite3`, plus legacy `storage/message/*.json`. |
 | Pi / Oh My Pi | `~/.pi/agent/sessions/` and `~/.omp/agent/sessions/` JSONL, including provider, cache-write, and session metadata. |
-| Trae / Trae CN | `aiusage trae sync` reads Trae CN history through Trae's official local `ai-agent` RPC and writes a privacy-minimized cache under `~/.aiusage/trae-cache/sessions/`. The scanner also accepts international Trae caches produced by `tokscale trae sync` under `~/.config/tokscale/trae-cache/sessions/`. The encrypted SQLCipher database is never opened directly. |
+| Trae CN | `aiusage trae sync --edition cn` reads local history through Trae's official `ai-agent` RPC and writes a privacy-minimized cache under `~/.aiusage/trae-cache/sessions/`. The encrypted SQLCipher database is never opened directly. |
+| Trae / Trae Solo (international) | `aiusage trae sync --edition intl` reads the older plain-JSON or decrypts the newer desktop credential format, then queries Trae's official account usage API once; IDE and Solo share the same account-level data. Numeric session data is cached under `~/.aiusage/trae-cache/intl/sessions/`. Existing tokscale caches under `~/.config/tokscale/trae-cache/sessions/` remain compatible and are deduplicated by session. |
 
 Only token counters and session metadata are aggregated or uploaded. Conversation
 content and local credentials are never uploaded.
@@ -80,7 +81,11 @@ Local usage report. No cloud upload required.
 aiusage report                          # default: last 7 days + today, English, compact
 aiusage report --range 1m               # last 30 days
 aiusage report --range 3m               # last 90 days
+aiusage report --range 6m               # last 180 days
 aiusage report --range all              # all history
+aiusage report --tool trae-cn --range all    # Trae CN only
+aiusage report --tool trae-intl --range 6m   # international only
+aiusage report --tool trae --range all       # both editions
 aiusage report --detail                 # show all columns, top models, pricing notes
 aiusage report --lang zh                # Chinese output
 aiusage report --no-emoji               # disable emoji in title
@@ -93,16 +98,23 @@ Reads data from local tool data directories including `~/.claude/projects` (Clau
 
 ### trae sync
 
-Sync Trae CN's local historical token counters before running a regular report or dashboard upload:
+Sync either Trae edition before running a regular report or dashboard upload:
 
 ```bash
-aiusage trae sync
-aiusage report --range all
+aiusage trae sync --edition cn
+aiusage trae sync --edition intl --since 180
+aiusage trae sync --edition all --since 180
+
+aiusage report --tool trae-cn --range all
+aiusage report --tool trae-intl --range 6m
+aiusage report --tool trae --range all
 ```
 
 If Trae CN is closed, AIUsage temporarily launches it with a local-only debugging port, reads the official `ai-agent` session API, then closes the temporary instance. If Trae is already running without that port, quit Trae and rerun the command. Use `--port 9230 --no-launch` to connect to an instance you started yourself.
 
-Only session identifiers, workspace paths, timestamps, model labels, and numeric token counters are cached. Conversation content and login credentials are neither cached nor uploaded. International Trae users can run `tokscale trae sync`; AIUsage reads that compatible cache automatically.
+Trae IDE and Trae Solo share account-level international usage, so AIUsage stops after the first working credential and does not double-count the account. It reads or decrypts `storage.json` locally and stores credentials with `0600` permissions under `~/.aiusage/trae-cache/intl/credentials-{ide,solo}.json`; credentials and conversation content are never uploaded. The numeric API cache is written to `~/.aiusage/trae-cache/intl/sessions/usage.json`. Existing tokscale session caches are still read, with the newest snapshot retained per session.
+
+Use `--tool trae-cn` or `--tool trae-intl` to isolate one edition. `--tool trae` is the stable combined alias and includes compatible legacy rows. Regular `sync` deliberately rejects `--tool` because it uploads authoritative full-day snapshots.
 
 ### Shared date options
 
@@ -112,11 +124,12 @@ Only session identifiers, workspace paths, timestamps, model labels, and numeric
 aiusage scan --today                    # today only
 aiusage report --date 2026-03-31        # specific date
 aiusage sync --range 1m                 # last 30 days
+aiusage report --range 6m               # last 180 days
 aiusage sync --lookback 14              # last 14 days + today
 aiusage scan --from 2025-01-01 --to 2026-04-05
 ```
 
-Use `--range 1m`, not `range -1m`. `report` also supports `--range all`; `scan` and `sync` require explicit `--from/--to` for large historical ranges.
+Use `--range 1m`, not `range -1m`. `scan`, `report`, and `sync` support `--range 6m`; `report` also supports `--range all`. Use explicit `--from/--to` for larger scan or sync ranges.
 
 ### scan
 
@@ -126,6 +139,7 @@ Scan local usage and print detailed breakdowns.
 aiusage scan                            # yesterday
 aiusage scan --date 2026-03-31          # specific date
 aiusage scan --range 1m                 # last 30 days
+aiusage scan --tool trae-cn --range 6m  # Trae CN only, last 180 days
 aiusage scan --date 2026-03-31 --json   # JSON output
 ```
 

@@ -69,6 +69,12 @@ export function getTokenColor(s: typeof TOKEN_SERIES[number], isDark: boolean) {
 }
 
 export function formatProductLabel(raw: string): string {
+  const labels: Record<string, string> = {
+    trae: 'Trae (All)',
+    'trae-cn': 'Trae CN',
+    'trae-intl': 'Trae International',
+  };
+  if (labels[raw]) return labels[raw];
   return raw
     .split('-')
     .map((w) => (w === 'cli' ? 'CLI' : w.charAt(0).toUpperCase() + w.slice(1)))

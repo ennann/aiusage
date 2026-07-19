@@ -161,8 +161,9 @@ Repeat on every machine you want to track.
 
 | Command | Description |
 |---------|-------------|
-| `aiusage report [--range 7d\|1m\|3m\|all] [--json]` | Local usage report with cost estimates |
-| `aiusage scan [--date YYYY-MM-DD] [--json]` | Scan a single day |
+| `aiusage report [--tool TOOL] [--range 7d\|1m\|3m\|6m\|all] [--json]` | Local usage report with cost estimates |
+| `aiusage scan [--tool TOOL] [--date YYYY-MM-DD\|--range 6m] [--json]` | Scan one tool, date, or range |
+| `aiusage trae sync [--edition cn\|intl\|all] [--since 180]` | Cache Trae CN local or international account usage |
 | `aiusage sync [--today] [--lookback N] [--date YYYY-MM-DD]` | Upload data to server |
 | `aiusage schedule [on\|off\|status] [--every 5m]` | Manage auto-sync |
 | `aiusage enroll --server URL --site-id ID --enroll-token TOKEN` | Register device |
@@ -234,8 +235,8 @@ The controller automatically detects and scans all installed tools:
 | Amp | Model provider (Sourcegraph product) | `~/.local/share/amp/threads/` |
 | Kimi Code | Moonshot | `$KIMI_CODE_HOME/sessions/` (default `~/.kimi-code/sessions/`) |
 | Kimi CLI (legacy) | Moonshot | `~/.kimi/sessions/` |
-| Trae CN | Trae / underlying model provider | `aiusage trae sync` → `~/.aiusage/trae-cache/sessions/` (official local `ai-agent` RPC) |
-| Trae / Trae Solo (international) | Trae / underlying model provider | `tokscale trae sync` → `~/.config/tokscale/trae-cache/sessions/` |
+| Trae CN | Trae / underlying model provider | `aiusage trae sync --edition cn` → `~/.aiusage/trae-cache/sessions/` (official local `ai-agent` RPC) |
+| Trae / Trae Solo (international) | Trae / underlying model provider | `aiusage trae sync --edition intl --since 180` → `~/.aiusage/trae-cache/intl/sessions/` (official account API); tokscale caches remain compatible |
 | Qwen Code | Alibaba | `~/.qwen/projects/`, legacy `~/.qwen/tmp/` |
 | Droid | Factory | `~/.factory/sessions/*.settings.json` |
 | OpenCode | OpenCode | `~/.local/share/opencode/opencode.db`, legacy `storage/message/` |

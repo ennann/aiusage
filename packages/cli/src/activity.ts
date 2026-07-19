@@ -952,6 +952,7 @@ function getRangeLabel(range: ReportRange): string {
     case '7d': return '最近 7 天';
     case '1m': return '最近 30 天';
     case '3m': return '最近 90 天';
+    case '6m': return '最近 180 天';
     case 'all': return '全部历史';
     case 'today': return '今天';
   }

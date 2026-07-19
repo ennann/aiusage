@@ -28,8 +28,60 @@ export interface ScanResult {
   };
 }
 
-interface ScanOptions {
+export interface ScanOptions {
   projectAliases?: Record<string, string>;
+  /** Product ids selected by the user-facing --tool filter. */
+  tools?: readonly string[];
+}
+
+export const TOOL_IDS = [
+  'amp',
+  'antigravity',
+  'claude-code',
+  'codex',
+  'copilot-cli',
+  'copilot-vscode',
+  'cursor',
+  'droid',
+  'gemini-cli',
+  'kimi-code',
+  'opencode',
+  'pi',
+  'qwen-code',
+  'trae',
+  'trae-cn',
+  'trae-intl',
+] as const;
+
+const TOOL_ID_SET = new Set<string>(TOOL_IDS);
+
+/**
+ * Parse a comma-separated --tool value. `trae` is a stable alias for both
+ * editions and the short-lived legacy `product=trae` rows from CLI 1.7.5.
+ */
+export function parseToolSelection(value: string | boolean | undefined, zh = false): string[] | undefined {
+  if (value == null) return undefined;
+  if (typeof value !== 'string' || value.trim() === '') {
+    throw new Error(zh ? '--tool 需要指定工具名称' : '--tool requires a tool name');
+  }
+
+  const selected = new Set<string>();
+  for (const raw of value.split(',')) {
+    const tool = raw.trim().toLowerCase();
+    if (!TOOL_ID_SET.has(tool)) {
+      throw new Error(zh
+        ? `未知工具: ${raw.trim()}。可用值: ${TOOL_IDS.join(', ')}`
+        : `Unknown tool: ${raw.trim()}. Available values: ${TOOL_IDS.join(', ')}`);
+    }
+    if (tool === 'trae') {
+      selected.add('trae-cn');
+      selected.add('trae-intl');
+      selected.add('trae');
+    } else {
+      selected.add(tool);
+    }
+  }
+  return [...selected];
 }
 
 export async function scanDate(targetDate: string, options: ScanOptions = {}): Promise<ScanResult> {
@@ -45,27 +97,37 @@ export async function scanDates(targetDates: string[], options: ScanOptions = {}
   const uniqueDates = [...new Set(targetDates)];
   if (uniqueDates.length === 0) return [];
 
-  const scanners = [
-    scanAntigravityDates(uniqueDates),
-    scanClaudeDates(uniqueDates, undefined, options.projectAliases),
-    scanCodexDates(uniqueDates, undefined, options.projectAliases),
-    scanCopilotDates(uniqueDates, undefined, options.projectAliases),
-    scanCopilotVscodeDates(uniqueDates, undefined, options.projectAliases),
-    scanCursorDates(uniqueDates),
-    scanGeminiDates(uniqueDates, undefined, options.projectAliases),
-    scanQwenDates(uniqueDates, undefined, options.projectAliases),
-    scanKimiDates(uniqueDates, undefined, options.projectAliases),
-    scanAmpDates(uniqueDates, undefined, options.projectAliases),
-    scanDroidDates(uniqueDates, undefined, options.projectAliases),
-    scanOpencodeDates(uniqueDates, undefined, options.projectAliases),
-    scanPiDates(uniqueDates, undefined, options.projectAliases),
-    scanTraeDates(uniqueDates, { projectAliases: options.projectAliases }),
+  const selected = options.tools ? new Set(options.tools) : undefined;
+  const scannerDefinitions: Array<{ products: string[]; scan: () => Promise<Map<string, IngestBreakdown[]>> }> = [
+    { products: ['antigravity'], scan: () => scanAntigravityDates(uniqueDates) },
+    { products: ['claude-code'], scan: () => scanClaudeDates(uniqueDates, undefined, options.projectAliases) },
+    { products: ['codex'], scan: () => scanCodexDates(uniqueDates, undefined, options.projectAliases) },
+    { products: ['copilot-cli'], scan: () => scanCopilotDates(uniqueDates, undefined, options.projectAliases) },
+    { products: ['copilot-vscode'], scan: () => scanCopilotVscodeDates(uniqueDates, undefined, options.projectAliases) },
+    { products: ['cursor'], scan: () => scanCursorDates(uniqueDates) },
+    { products: ['gemini-cli'], scan: () => scanGeminiDates(uniqueDates, undefined, options.projectAliases) },
+    { products: ['qwen-code'], scan: () => scanQwenDates(uniqueDates, undefined, options.projectAliases) },
+    { products: ['kimi-code'], scan: () => scanKimiDates(uniqueDates, undefined, options.projectAliases) },
+    { products: ['amp'], scan: () => scanAmpDates(uniqueDates, undefined, options.projectAliases) },
+    { products: ['droid'], scan: () => scanDroidDates(uniqueDates, undefined, options.projectAliases) },
+    { products: ['opencode'], scan: () => scanOpencodeDates(uniqueDates, undefined, options.projectAliases) },
+    { products: ['pi'], scan: () => scanPiDates(uniqueDates, undefined, options.projectAliases) },
+    {
+      products: ['trae-cn', 'trae-intl', 'trae'],
+      scan: () => scanTraeDates(uniqueDates, { projectAliases: options.projectAliases }),
+    },
   ];
+
+  const scanners = scannerDefinitions
+    .filter(definition => !selected || definition.products.some(product => selected.has(product)))
+    .map(definition => definition.scan());
 
   const results = await Promise.all(scanners);
 
   return uniqueDates.map((usageDate) => {
-    const breakdowns = results.flatMap(m => m.get(usageDate) ?? []);
+    const breakdowns = results
+      .flatMap(m => m.get(usageDate) ?? [])
+      .filter(breakdown => !selected || selected.has(breakdown.product));
     const totals = breakdowns.reduce(
       (acc, b) => ({
         eventCount: acc.eventCount + b.eventCount,

@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { hostname } from 'node:os';
-import { scanDate, scanDates } from './scan.js';
+import { parseToolSelection, scanDate, scanDates } from './scan.js';
 import { scanAnthropicApiDates } from './scanners/anthropic-admin-api.js';
 import { scanAnthropicCsvDates } from './scanners/anthropic-csv.js';
 import { buildLocalReport, parseReportRange } from './report.js';
@@ -28,6 +28,7 @@ import { applyPrivacy, applyProjectPrivacy } from './privacy.js';
 import type { IngestActivityItem, IngestDay } from '@aiusage/shared';
 import { getPricingStatus, resolvePricingCatalog } from './pricing.js';
 import { syncTraeCnUsage } from './trae-sync.js';
+import { syncTraeIntlUsage } from './trae-intl-sync.js';
 
 const argv = process.argv.slice(2);
 const command = argv[0];
@@ -69,8 +70,8 @@ try {
     } else {
       const zh = (await readConfig()).lang === 'zh';
       throw new Error(zh
-        ? '用法: aiusage trae sync [--port 9230] [--no-launch] [--json]'
-        : 'Usage: aiusage trae sync [--port 9230] [--no-launch] [--json]');
+        ? '用法: aiusage trae sync [--edition cn|intl|all] [--since 180] [--port 9230] [--no-launch] [--json]'
+        : 'Usage: aiusage trae sync [--edition cn|intl|all] [--since 180] [--port 9230] [--no-launch] [--json]');
     }
   } else if (command === 'init') {
     const parsed = parseArgs(argv.slice(1));
@@ -163,9 +164,10 @@ async function runScan(flags: Record<string, string | boolean>, positionals: str
 
   const isJson = Boolean(flags.json);
   const dates = resolveScanDates(flags, config);
+  const tools = parseToolSelection(flags.tool, zh);
   const results = dates.length === 1
-    ? [await scanDate(dates[0], { projectAliases: config.projectAliases })]
-    : await scanDates(dates, { projectAliases: config.projectAliases });
+    ? [await scanDate(dates[0], { projectAliases: config.projectAliases, tools })]
+    : await scanDates(dates, { projectAliases: config.projectAliases, tools });
 
   if (isJson) {
     console.log(JSON.stringify(results.length === 1 ? results[0] : results, null, 2));
@@ -221,10 +223,12 @@ function printScanResult(result: Awaited<ReturnType<typeof scanDate>>, zh: boole
 
 async function runReport(flags: Record<string, string | boolean>, positionals: string[] = []) {
   const config = await readConfig();
-  assertNoPositionals('report', positionals, config.lang === 'zh');
+  const zh = config.lang === 'zh';
+  assertNoPositionals('report', positionals, zh);
 
   // 日期解析：--from/--start, --to/--end, --date, --today, --range, --lookback
   const { dates, range } = resolveDateParams(flags, config);
+  const tools = parseToolSelection(flags.tool, zh);
   const targetName = resolveOptionalString(flags.target, undefined);
   const pricingTarget = targetName
     ? findTargetOrThrow(config, targetName)
@@ -236,6 +240,7 @@ async function runReport(flags: Record<string, string | boolean>, positionals: s
   const report = await buildLocalReport(range, {
     projectAliases: config.projectAliases,
     dates,
+    tools,
     pricingCatalog: pricing.catalog,
     pricingInfo: pricing.info,
   });
@@ -353,6 +358,11 @@ function prompt(question: string): Promise<string> {
 async function runSync(flags: Record<string, string | boolean>, positionals: string[] = []) {
   const config = await readConfig();
   assertNoPositionals('sync', positionals, config.lang === 'zh');
+  if (flags.tool != null) {
+    throw new Error(config.lang === 'zh'
+      ? '--tool 仅用于 scan/report；sync 始终上传所选日期的完整快照'
+      : '--tool is only available for scan/report; sync always uploads complete daily snapshots');
+  }
 
   const allTargets = config.targets ?? [];
   if (allTargets.length === 0) {
@@ -455,29 +465,84 @@ async function runTraeSync(flags: Record<string, string | boolean>, positionals:
   const portFlag = resolveOptionalString(flags.port, undefined);
   const port = portFlag ? parsePositiveInt(portFlag, '--port') : undefined;
   if (port != null && port > 65_535) throw new Error('--port 必须在 1 到 65535 之间');
+  const edition = parseTraeEdition(flags.edition, zh);
+  const sinceFlag = resolveOptionalString(flags.since, undefined);
+  const sinceDays = sinceFlag ? parsePositiveInt(sinceFlag, '--since') : undefined;
 
   if (!flags.json) {
-    console.log(zh
-      ? '正在通过 Trae CN 官方本地接口同步历史用量…'
-      : 'Syncing Trae CN history through its official local interface…');
+    if (edition === 'cn' || edition === 'all') {
+      console.log(zh
+        ? '正在通过 Trae CN 官方本地接口同步历史用量…'
+        : 'Syncing Trae CN history through its official local interface…');
+    }
+    if (edition === 'intl' || edition === 'all') {
+      console.log(zh
+        ? '正在通过 Trae 国际版官方账号 API 同步用量…'
+        : 'Syncing Trae International account usage through its official API…');
+    }
   }
 
-  const result = await syncTraeCnUsage({
-    port,
-    appPath: resolveOptionalString(flags.app, undefined),
-    launch: flags['no-launch'] !== true,
-  });
+  let cnResult: Awaited<ReturnType<typeof syncTraeCnUsage>> | undefined;
+  let intlResult: Awaited<ReturnType<typeof syncTraeIntlUsage>> | undefined;
+  const warnings: string[] = [];
+
+  if (edition === 'cn' || edition === 'all') {
+    try {
+      cnResult = await syncTraeCnUsage({
+        port,
+        appPath: resolveOptionalString(flags.app, undefined),
+        launch: flags['no-launch'] !== true,
+      });
+    } catch (error) {
+      if (edition === 'cn') throw error;
+      warnings.push(`Trae CN: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  if (edition === 'intl' || edition === 'all') {
+    try {
+      intlResult = await syncTraeIntlUsage({ sinceDays });
+    } catch (error) {
+      if (edition === 'intl') throw error;
+      warnings.push(`Trae International: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  if (!cnResult && !intlResult) throw new Error(warnings.join('\n') || '没有可同步的 Trae 数据源');
 
   if (flags.json) {
-    console.log(JSON.stringify(result, null, 2));
+    const payload = edition === 'cn' ? cnResult : edition === 'intl' ? intlResult : {
+      edition: 'all',
+      cn: cnResult,
+      intl: intlResult,
+      warnings,
+    };
+    console.log(JSON.stringify(payload, null, 2));
     return;
   }
 
-  console.log(zh
-    ? `已同步 ${result.sessions} 个会话、${result.events} 条用量记录，共 ${fmt(result.totals.totalTokens)} tokens。`
-    : `Synced ${result.sessions} sessions and ${result.events} usage records (${fmt(result.totals.totalTokens)} tokens).`);
-  console.log(`${zh ? '缓存' : 'Cache'}: ${result.cacheDir}`);
-  for (const warning of result.warnings) console.warn(`${zh ? '警告' : 'Warning'}: ${warning}`);
+  if (cnResult) {
+    console.log(zh
+      ? `Trae CN：已同步 ${cnResult.sessions} 个会话、${cnResult.events} 条用量记录，共 ${fmt(cnResult.totals.totalTokens)} tokens。`
+      : `Trae CN: synced ${cnResult.sessions} sessions and ${cnResult.events} usage records (${fmt(cnResult.totals.totalTokens)} tokens).`);
+    console.log(`${zh ? '缓存' : 'Cache'}: ${cnResult.cacheDir}`);
+    for (const warning of cnResult.warnings) warnings.push(`Trae CN: ${warning}`);
+  }
+  if (intlResult) {
+    console.log(zh
+      ? `Trae 国际版：本次获取 ${intlResult.fetchedSessions} 个会话，缓存共 ${intlResult.storedSessions} 个会话、${fmt(intlResult.totals.totalTokens)} tokens。`
+      : `Trae International: fetched ${intlResult.fetchedSessions} sessions; cache now contains ${intlResult.storedSessions} sessions (${fmt(intlResult.totals.totalTokens)} tokens).`);
+    console.log(`${zh ? '缓存' : 'Cache'}: ${intlResult.cacheDir}`);
+  }
+  for (const warning of warnings) console.warn(`${zh ? '警告' : 'Warning'}: ${warning}`);
+}
+
+function parseTraeEdition(value: string | boolean | undefined, zh: boolean): 'cn' | 'intl' | 'all' {
+  if (value == null) return 'cn';
+  if (value === 'cn' || value === 'intl' || value === 'all') return value;
+  throw new Error(zh
+    ? '--edition 仅支持 cn、intl、all'
+    : '--edition only supports cn, intl, or all');
 }
 
 function buildActivityPayloadByDate(
@@ -842,11 +907,11 @@ async function helpForSubcommand(_command: string): Promise<void> {
 function printHelp(zh = false) {
   console.log(`aiusage v${getVersion()}\n`);
   const cmds = zh ? [
-    ['scan [--date YYYY-MM-DD|--today|--range 7d|1m|3m] [--json]', '扫描用量明细'],
-    ['report [--today] [--range 7d|1m|3m|all] [--detail] [--json]', '本地用量报告'],
-    ['activity [--today] [--range 7d|1m|3m|all] [--detail] [--json]', '本地交互指标'],
-    ['sync [--today] [--range 7d|1m|3m]',                         '上传用量到服务端'],
-    ['trae sync [--port 9230] [--no-launch]',                    '同步 Trae CN 本地历史用量'],
+    ['scan [--tool 工具] [--date YYYY-MM-DD|--today|--range 7d|1m|3m|6m] [--json]', '扫描用量明细'],
+    ['report [--tool 工具] [--range 7d|1m|3m|6m|all] [--detail] [--json]', '本地用量报告'],
+    ['activity [--today] [--range 7d|1m|3m|6m|all] [--detail] [--json]', '本地交互指标'],
+    ['sync [--today] [--range 7d|1m|3m|6m]',                         '上传用量到服务端'],
+    ['trae sync [--edition cn|intl|all] [--since 180]',           '同步 Trae CN/国际版用量'],
     ['scan/report/sync --from YYYY-MM-DD [--to YYYY-MM-DD]',      '指定日期范围（--start/--end 同义）'],
     ['project [list|alias]',                                  '项目管理与别名设置'],
     ['pricing [status|update] [--url URL]',                   '查看/更新定价目录'],
@@ -857,11 +922,11 @@ function printHelp(zh = false) {
     ['enroll --server URL --site-id ID --enroll-token TOKEN','注册设备到服务端'],
     ['health [--server URL]',                                '测试服务端连通性'],
   ] : [
-    ['scan [--date YYYY-MM-DD|--today|--range 7d|1m|3m] [--json]', 'Scan usage breakdown'],
-    ['report [--today] [--range 7d|1m|3m|all] [--detail] [--json]', 'Local usage report'],
-    ['activity [--today] [--range 7d|1m|3m|all] [--detail] [--json]', 'Local interaction metrics'],
-    ['sync [--today] [--range 7d|1m|3m]',                         'Upload usage to server'],
-    ['trae sync [--port 9230] [--no-launch]',                    'Sync local Trae CN history'],
+    ['scan [--tool TOOL] [--date YYYY-MM-DD|--today|--range 7d|1m|3m|6m] [--json]', 'Scan usage breakdown'],
+    ['report [--tool TOOL] [--range 7d|1m|3m|6m|all] [--detail] [--json]', 'Local usage report'],
+    ['activity [--today] [--range 7d|1m|3m|6m|all] [--detail] [--json]', 'Local interaction metrics'],
+    ['sync [--today] [--range 7d|1m|3m|6m]',                         'Upload usage to server'],
+    ['trae sync [--edition cn|intl|all] [--since 180]',           'Sync Trae CN/International usage'],
     ['scan/report/sync --from YYYY-MM-DD [--to YYYY-MM-DD]',      'Date range (--start/--end aliases)'],
     ['project [list|alias]',                                 'Project management & aliases'],
     ['pricing [status|update] [--url URL]',                  'Pricing catalog management'],
@@ -887,22 +952,22 @@ function printHelp(zh = false) {
 function printUsageHint(zh = false) {
   console.log(`aiusage v${getVersion()}\n`);
   const cmds = zh ? [
-    ['scan [--date YYYY-MM-DD|--range 1m]',   '扫描用量明细'],
-    ['report [--today] [--range 7d|1m|3m|all]', '本地用量报告'],
-    ['activity [--range 7d|1m|3m|all]',       '本地交互指标'],
-    ['sync [--today] [--range 7d|1m|3m]',     '上传用量到服务端'],
-    ['trae sync',                             '同步 Trae CN 本地历史用量'],
+    ['scan [--tool 工具] [--date YYYY-MM-DD|--range 1m|6m]',   '扫描用量明细'],
+    ['report [--tool 工具] [--range 7d|1m|3m|6m|all]', '本地用量报告'],
+    ['activity [--range 7d|1m|3m|6m|all]',       '本地交互指标'],
+    ['sync [--today] [--range 7d|1m|3m|6m]',     '上传用量到服务端'],
+    ['trae sync [--edition cn|intl|all]',        '同步 Trae CN/国际版用量'],
     ['project [list|alias]',                  '项目管理与别名设置'],
     ['pricing [status|update]',               '查看/更新定价目录'],
     ['schedule [on|off|status]',              '定时同步管理'],
     ['doctor',                                '诊断检查'],
     ['config set <key> <value>',              '修改配置'],
   ] : [
-    ['scan [--date YYYY-MM-DD|--range 1m]',   'Scan usage breakdown'],
-    ['report [--today] [--range 7d|1m|3m|all]', 'Local usage report'],
-    ['activity [--range 7d|1m|3m|all]',       'Local interaction metrics'],
-    ['sync [--today] [--range 7d|1m|3m]',     'Upload usage to server'],
-    ['trae sync',                             'Sync local Trae CN history'],
+    ['scan [--tool TOOL] [--date YYYY-MM-DD|--range 1m|6m]',   'Scan usage breakdown'],
+    ['report [--tool TOOL] [--range 7d|1m|3m|6m|all]', 'Local usage report'],
+    ['activity [--range 7d|1m|3m|6m|all]',       'Local interaction metrics'],
+    ['sync [--today] [--range 7d|1m|3m|6m]',     'Upload usage to server'],
+    ['trae sync [--edition cn|intl|all]',        'Sync Trae CN/International usage'],
     ['project [list|alias]',                  'Project management & aliases'],
     ['pricing [status|update]',               'Pricing catalog management'],
     ['schedule [on|off|status]',              'Scheduled sync management'],
@@ -1012,6 +1077,7 @@ function resolveDateParams(flags: Record<string, string | boolean>, config: { lo
     if (range === '7d') return { dates: [...getClosedDates(6), getTodayDate()], range };
     if (range === '1m') return { dates: [...getClosedDates(29), getTodayDate()], range };
     if (range === '3m') return { dates: [...getClosedDates(89), getTodayDate()], range };
+    if (range === '6m') return { dates: [...getClosedDates(179), getTodayDate()], range };
     return { range };
   }
   // --lookback
