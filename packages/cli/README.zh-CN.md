@@ -3,7 +3,7 @@
 `@aiusage/cli` 是 AIUsage 命令行工具，用于：
 
 - 发现和管理本机 AI 工具项目
-- 扫描本地 AI 编程工具的 Token 用量（Claude Code、Codex、Cursor、Copilot CLI、Copilot VS Code、Gemini CLI、Antigravity、Amp、Kimi Code、Qwen Code、Droid、OpenCode、Pi）
+- 扫描本地 AI 编程工具的 Token 用量（Claude Code、Codex、Cursor、Copilot CLI、Copilot VS Code、Gemini CLI、Antigravity、Amp、Kimi Code、Qwen Code、Droid、OpenCode、Pi、Trae）
 - 通过 Anthropic Admin API 导入历史用量
 - 生成本地用量报告（最近 7 天、30 天、90 天或全部历史）
 - 定时自动同步数据到 AIUsage Worker
@@ -13,6 +13,10 @@ Kimi 同时支持旧版 Kimi CLI 的 `~/.kimi/sessions/` 与新版 Kimi Code 的
 `$KIMI_CODE_HOME/sessions/`（默认 `~/.kimi-code/sessions/`）。扫描器仅读取
 `wire.jsonl` 中的 Token 计数与会话元数据，不上传对话正文；新版格式参考了
 [tokscale](https://github.com/junhoyeo/tokscale) 的 MIT 开源实现。
+
+Trae CN 通过 `aiusage trae sync` 调用 Trae 自己的本地 `ai-agent` 接口读取历史
+Token 计数，缓存到 `~/.aiusage/trae-cache/sessions/`；不会直接破解加密数据库。
+国际版 Trae 也兼容 `tokscale trae sync` 生成的缓存。
 
 ## 安装
 
@@ -66,6 +70,22 @@ aiusage report --json                   # JSON 输出
 ```
 
 **紧凑模式**（默认）显示来源和每日汇总表，合并缓存列，保留 2 位小数成本。**详细模式**（`--detail`）展开所有列（CacheRead、CacheWrite、Reasoning），增加热门模型和定价说明，显示 4 位小数成本。
+
+### trae sync
+
+先同步 Trae CN 的本地历史用量，再运行常规报告或看板上传：
+
+```bash
+aiusage trae sync
+aiusage report --range all
+```
+
+如果 Trae CN 未运行，AIUsage 会用仅限本机的调试端口临时启动它，读取官方
+`ai-agent` 会话接口，完成后自动退出。如果 Trae 已经在运行但没有开启该端口，
+请先退出 Trae 再重试。也可以通过 `--port 9230 --no-launch` 连接自行启动的实例。
+
+缓存只包含会话标识、项目路径、时间、模型名和 Token 数字，不包含对话正文或登录凭据。
+国际版用户可先执行 `tokscale trae sync`，AIUsage 会自动读取兼容缓存。
 
 ### 统一日期参数
 

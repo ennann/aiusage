@@ -26,6 +26,8 @@ export const PROVIDER_COLORS: Record<string, string> = {
   alibaba: '#cbd5e1',
   droid: '#e2e8f0',
   opencode: '#f1f5f9',
+  trae: '#7c3aed',
+  zhipu: '#2563eb',
 };
 
 export const PROVIDER_LABELS: Record<string, string> = {
@@ -38,6 +40,8 @@ export const PROVIDER_LABELS: Record<string, string> = {
   alibaba: 'Alibaba',
   droid: 'Droid',
   opencode: 'OpenCode',
+  trae: 'Trae',
+  zhipu: 'Zhipu AI',
 };
 
 export function providerLabel(id: string): string {

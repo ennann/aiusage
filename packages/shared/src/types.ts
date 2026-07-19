@@ -1,7 +1,7 @@
 // ── 统计维度 ──
 
-export type Provider = 'anthropic' | 'openai' | 'google' | 'github' | 'alibaba' | 'moonshot' | 'sourcegraph' | 'inflection' | 'cursor' | (string & {});
-export type Product = 'claude-code' | 'codex' | 'copilot-cli' | 'copilot-vscode' | 'gemini-cli' | 'antigravity' | 'qwen-code' | 'kimi-code' | 'amp' | 'droid' | 'opencode' | 'pi' | 'cursor' | (string & {});
+export type Provider = 'anthropic' | 'openai' | 'google' | 'github' | 'alibaba' | 'moonshot' | 'sourcegraph' | 'inflection' | 'cursor' | 'trae' | 'zhipu' | (string & {});
+export type Product = 'claude-code' | 'codex' | 'copilot-cli' | 'copilot-vscode' | 'gemini-cli' | 'antigravity' | 'qwen-code' | 'kimi-code' | 'amp' | 'droid' | 'opencode' | 'pi' | 'cursor' | 'trae' | (string & {});
 export type Channel = 'cli' | 'ide' | 'web' | 'api';
 export type CostStatus = 'exact' | 'estimated' | 'unavailable';
 export type DeviceStatus = 'active' | 'disabled';

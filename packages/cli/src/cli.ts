@@ -27,6 +27,7 @@ import { discoverProjects } from './project.js';
 import { applyPrivacy, applyProjectPrivacy } from './privacy.js';
 import type { IngestActivityItem, IngestDay } from '@aiusage/shared';
 import { getPricingStatus, resolvePricingCatalog } from './pricing.js';
+import { syncTraeCnUsage } from './trae-sync.js';
 
 const argv = process.argv.slice(2);
 const command = argv[0];
@@ -59,6 +60,18 @@ try {
     const parsed = parseArgs(argv.slice(1));
     if (parsed.flags.help) return helpForSubcommand('sync');
     await runSync(parsed.flags, parsed.positionals);
+  } else if (command === 'trae') {
+    const sub = argv[1];
+    const parsed = parseArgs(argv.slice(2));
+    if (sub === '--help' || sub === '-h' || parsed.flags.help) return helpForSubcommand('trae');
+    if (sub === 'sync') {
+      await runTraeSync(parsed.flags, parsed.positionals);
+    } else {
+      const zh = (await readConfig()).lang === 'zh';
+      throw new Error(zh
+        ? '用法: aiusage trae sync [--port 9230] [--no-launch] [--json]'
+        : 'Usage: aiusage trae sync [--port 9230] [--no-launch] [--json]');
+    }
   } else if (command === 'init') {
     const parsed = parseArgs(argv.slice(1));
     if (parsed.flags.help) return helpForSubcommand('init');
@@ -434,6 +447,39 @@ async function runSync(flags: Record<string, string | boolean>, positionals: str
   }, null, 2));
 }
 
+async function runTraeSync(flags: Record<string, string | boolean>, positionals: string[] = []) {
+  const config = await readConfig();
+  const zh = config.lang === 'zh';
+  assertNoPositionals('trae sync', positionals, zh);
+
+  const portFlag = resolveOptionalString(flags.port, undefined);
+  const port = portFlag ? parsePositiveInt(portFlag, '--port') : undefined;
+  if (port != null && port > 65_535) throw new Error('--port 必须在 1 到 65535 之间');
+
+  if (!flags.json) {
+    console.log(zh
+      ? '正在通过 Trae CN 官方本地接口同步历史用量…'
+      : 'Syncing Trae CN history through its official local interface…');
+  }
+
+  const result = await syncTraeCnUsage({
+    port,
+    appPath: resolveOptionalString(flags.app, undefined),
+    launch: flags['no-launch'] !== true,
+  });
+
+  if (flags.json) {
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+
+  console.log(zh
+    ? `已同步 ${result.sessions} 个会话、${result.events} 条用量记录，共 ${fmt(result.totals.totalTokens)} tokens。`
+    : `Synced ${result.sessions} sessions and ${result.events} usage records (${fmt(result.totals.totalTokens)} tokens).`);
+  console.log(`${zh ? '缓存' : 'Cache'}: ${result.cacheDir}`);
+  for (const warning of result.warnings) console.warn(`${zh ? '警告' : 'Warning'}: ${warning}`);
+}
+
 function buildActivityPayloadByDate(
   items: ActivityItem[],
   visibility: Parameters<typeof applyProjectPrivacy>[1],
@@ -800,6 +846,7 @@ function printHelp(zh = false) {
     ['report [--today] [--range 7d|1m|3m|all] [--detail] [--json]', '本地用量报告'],
     ['activity [--today] [--range 7d|1m|3m|all] [--detail] [--json]', '本地交互指标'],
     ['sync [--today] [--range 7d|1m|3m]',                         '上传用量到服务端'],
+    ['trae sync [--port 9230] [--no-launch]',                    '同步 Trae CN 本地历史用量'],
     ['scan/report/sync --from YYYY-MM-DD [--to YYYY-MM-DD]',      '指定日期范围（--start/--end 同义）'],
     ['project [list|alias]',                                  '项目管理与别名设置'],
     ['pricing [status|update] [--url URL]',                   '查看/更新定价目录'],
@@ -814,6 +861,7 @@ function printHelp(zh = false) {
     ['report [--today] [--range 7d|1m|3m|all] [--detail] [--json]', 'Local usage report'],
     ['activity [--today] [--range 7d|1m|3m|all] [--detail] [--json]', 'Local interaction metrics'],
     ['sync [--today] [--range 7d|1m|3m]',                         'Upload usage to server'],
+    ['trae sync [--port 9230] [--no-launch]',                    'Sync local Trae CN history'],
     ['scan/report/sync --from YYYY-MM-DD [--to YYYY-MM-DD]',      'Date range (--start/--end aliases)'],
     ['project [list|alias]',                                 'Project management & aliases'],
     ['pricing [status|update] [--url URL]',                  'Pricing catalog management'],
@@ -843,6 +891,7 @@ function printUsageHint(zh = false) {
     ['report [--today] [--range 7d|1m|3m|all]', '本地用量报告'],
     ['activity [--range 7d|1m|3m|all]',       '本地交互指标'],
     ['sync [--today] [--range 7d|1m|3m]',     '上传用量到服务端'],
+    ['trae sync',                             '同步 Trae CN 本地历史用量'],
     ['project [list|alias]',                  '项目管理与别名设置'],
     ['pricing [status|update]',               '查看/更新定价目录'],
     ['schedule [on|off|status]',              '定时同步管理'],
@@ -853,6 +902,7 @@ function printUsageHint(zh = false) {
     ['report [--today] [--range 7d|1m|3m|all]', 'Local usage report'],
     ['activity [--range 7d|1m|3m|all]',       'Local interaction metrics'],
     ['sync [--today] [--range 7d|1m|3m]',     'Upload usage to server'],
+    ['trae sync',                             'Sync local Trae CN history'],
     ['project [list|alias]',                  'Project management & aliases'],
     ['pricing [status|update]',               'Pricing catalog management'],
     ['schedule [on|off|status]',              'Scheduled sync management'],

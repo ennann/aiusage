@@ -234,6 +234,8 @@ The controller automatically detects and scans all installed tools:
 | Amp | Model provider (Sourcegraph product) | `~/.local/share/amp/threads/` |
 | Kimi Code | Moonshot | `$KIMI_CODE_HOME/sessions/` (default `~/.kimi-code/sessions/`) |
 | Kimi CLI (legacy) | Moonshot | `~/.kimi/sessions/` |
+| Trae CN | Trae / underlying model provider | `aiusage trae sync` → `~/.aiusage/trae-cache/sessions/` (official local `ai-agent` RPC) |
+| Trae / Trae Solo (international) | Trae / underlying model provider | `tokscale trae sync` → `~/.config/tokscale/trae-cache/sessions/` |
 | Qwen Code | Alibaba | `~/.qwen/projects/`, legacy `~/.qwen/tmp/` |
 | Droid | Factory | `~/.factory/sessions/*.settings.json` |
 | OpenCode | OpenCode | `~/.local/share/opencode/opencode.db`, legacy `storage/message/` |

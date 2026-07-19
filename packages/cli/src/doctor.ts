@@ -5,6 +5,7 @@ import { readConfig, getConfigPath } from './config.js';
 import { fetchHealth } from './api.js';
 import { getScheduleStatus } from './schedule.js';
 import { resolveKimiCodeHome } from './scanners/kimi.js';
+import { resolveTraeNativeCacheDir, resolveTokscaleTraeCacheDir } from './scanners/trae.js';
 import type { Lang } from './i18n.js';
 
 export interface Check {
@@ -173,6 +174,7 @@ export async function runDoctor(lang: Lang = 'zh'): Promise<Check[]> {
     { dirs: [join(home, '.factory', 'sessions')], label: 'Droid', exts: ['.settings.json'] },
     { dirs: [join(home, '.local', 'share', 'opencode')], label: 'OpenCode', exts: ['.db', '.json'] },
     { dirs: [join(home, '.pi', 'agent', 'sessions'), join(home, '.omp', 'agent', 'sessions')], label: 'Pi / OMP', exts: ['.jsonl'] },
+    { dirs: [resolveTraeNativeCacheDir(home), resolveTokscaleTraeCacheDir(home)], label: 'Trae', exts: ['.json'] },
   ];
 
   for (const tool of tools) {
