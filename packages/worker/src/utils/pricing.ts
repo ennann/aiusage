@@ -21,7 +21,7 @@ export function calculateIngestBreakdownCost(breakdown: IngestBreakdown): CostCa
     { requestCount: breakdown.eventCount },
   );
 
-  const hasVendorReportedCost = breakdown.product === 'trae-intl';
+  const hasVendorReportedCost = breakdown.product === 'trae-intl' || breakdown.product === 'opencode';
   if (
     breakdown.costUSD == null ||
     !Number.isFinite(breakdown.costUSD) ||

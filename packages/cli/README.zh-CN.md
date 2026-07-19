@@ -14,6 +14,17 @@ Kimi 同时支持旧版 Kimi CLI 的 `~/.kimi/sessions/` 与新版 Kimi Code 的
 `wire.jsonl` 中的 Token 计数与会话元数据，不上传对话正文；新版格式参考了
 [tokscale](https://github.com/junhoyeo/tokscale) 的 MIT 开源实现。
 
+OpenCode 同时读取 XDG 数据目录中的全部 `opencode*.db`：兼容 v1 `message`
+与 v2 `session_message`，并保留旧版 `storage/message/*.json` 兜底。扫描器会对
+多渠道数据库、迁移期双写和 fork 副本去重，采用消息内的供应商费用。支持
+`XDG_DATA_HOME` 与 `OPENCODE_DB`。Node 22.13+ 使用内置只读 SQLite；更早的
+受支持 Node 版本回退系统 `sqlite3`。数据库位于其他自定义目录时可配置：
+
+```bash
+aiusage config set scanner.opencodeDbPaths "/custom/opencode-next.db" "/custom/opencode-stable.db"
+aiusage config set scanner.opencodeDbPaths default  # 清除自定义路径
+```
+
 Trae CN 通过 `aiusage trae sync --edition cn` 调用 Trae 自己的本地 `ai-agent`
 接口读取历史 Token 计数，缓存到 `~/.aiusage/trae-cache/sessions/`；不会直接破解
 加密数据库。国际版通过 `--edition intl` 在本机读取 Trae IDE 或 Trae Solo 的登录
@@ -227,6 +238,7 @@ aiusage config set emoji false                          # 禁用报告标题 emo
 aiusage config set device.alias "MacBook Pro 工作机"      # Dashboard 上显示的设备名称
 aiusage config set privacy.projectVisibility masked     # hidden | masked | plain
 aiusage config set project.alias MyApp "我的应用"        # 推荐用 aiusage project alias
+aiusage config set scanner.opencodeDbPaths "/custom/opencode-next.db"  # 额外 OpenCode 数据库
 aiusage config set anthropic-admin-key sk-ant-admin...  # 用于 aiusage import
 ```
 

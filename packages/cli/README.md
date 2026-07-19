@@ -29,7 +29,7 @@ differ, rather than treating every local record as billable token usage.
 | Kimi CLI / Kimi Code | Legacy `~/.kimi/sessions/` and `$KIMI_CODE_HOME/sessions/` (default `~/.kimi-code/sessions/`) `wire.jsonl`; handles progressive status snapshots and nested agent sessions. |
 | Qwen Code | Current `~/.qwen/projects/` and legacy `~/.qwen/tmp/` chat JSONL, with session/position deduplication and cache-aware input accounting. |
 | Droid | `~/.factory/sessions/*.settings.json`; uses persisted token totals first and the transcript only as a model fallback. |
-| OpenCode | OpenCode 1.2+ `opencode.db` through read-only `sqlite3`, plus legacy `storage/message/*.json`. |
+| OpenCode | All XDG `opencode*.db` channel databases, including v1 `message` and v2 `session_message`, plus legacy `storage/message/*.json`; deduplicates dual writes/forks and preserves provider-reported cost. Node 22.13+ uses built-in read-only SQLite, with system `sqlite3` as the older-Node fallback. |
 | Pi / Oh My Pi | `~/.pi/agent/sessions/` and `~/.omp/agent/sessions/` JSONL, including provider, cache-write, and session metadata. |
 | Trae CN | `aiusage trae sync --edition cn` reads local history through Trae's official `ai-agent` RPC and writes a privacy-minimized cache under `~/.aiusage/trae-cache/sessions/`. The encrypted SQLCipher database is never opened directly. |
 | Trae / Trae Solo (international) | `aiusage trae sync --edition intl` reads the older plain-JSON or decrypts the newer desktop credential format, then queries Trae's official account usage API once; IDE and Solo share the same account-level data. Numeric session data is cached under `~/.aiusage/trae-cache/intl/sessions/`. Existing tokscale caches under `~/.config/tokscale/trae-cache/sessions/` remain compatible and are deduplicated by session. |
@@ -239,6 +239,7 @@ aiusage config set emoji false                          # disable emoji in repor
 aiusage config set device.alias "MacBook Pro 工作机"      # device display name on dashboard
 aiusage config set privacy.projectVisibility masked     # hidden | masked | plain
 aiusage config set project.alias MyApp "我的应用"        # prefer: aiusage project alias
+aiusage config set scanner.opencodeDbPaths "/custom/opencode-next.db"  # extra OpenCode DB
 aiusage config set anthropic-admin-key sk-ant-admin...  # for aiusage import
 ```
 

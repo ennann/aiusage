@@ -87,6 +87,27 @@ describe('calculateCost: 基本计费', () => {
     expect(result.costStatus).toBe('exact');
   });
 
+  it('始终采用 OpenCode 消息中持久化的供应商费用', () => {
+    const result = calculateIngestBreakdownCost({
+      provider: 'openai',
+      product: 'opencode',
+      channel: 'cli',
+      model: 'gpt-5.6',
+      project: '/tmp/project',
+      eventCount: 2,
+      inputTokens: 500,
+      cachedInputTokens: 100,
+      cacheWriteTokens: 0,
+      outputTokens: 50,
+      reasoningOutputTokens: 0,
+      costUSD: 0.42,
+      pricingVersion: 'opencode-provider',
+    });
+
+    expect(result.estimatedCostUsd).toBe(0.42);
+    expect(result.costStatus).toBe('exact');
+  });
+
   it('忽略旧 scanner 用作缺省值的零成本', () => {
     const result = calculateIngestBreakdownCost({
       provider: 'openai',

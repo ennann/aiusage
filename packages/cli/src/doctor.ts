@@ -6,6 +6,7 @@ import { fetchHealth } from './api.js';
 import { getScheduleStatus } from './schedule.js';
 import { resolveKimiCodeHome } from './scanners/kimi.js';
 import { resolveTraeNativeCacheDir, resolveTokscaleTraeCacheDir } from './scanners/trae.js';
+import { detectOpenCodeSqliteRuntime, resolveOpenCodeSources } from './scanners/opencode.js';
 import type { Lang } from './i18n.js';
 
 export interface Check {
@@ -35,6 +36,8 @@ const msgs = {
     notInstalled: 'Not installed',
     installedNoData: 'Installed, no usage data yet',
     hasData: (n: number) => `${n} session${n > 1 ? 's' : ''} found`,
+    openCodeData: (dbs: number, legacy: number) => `${dbs} database(s), ${legacy} legacy message(s) found`,
+    openCodeSqliteUnavailable: 'Database found, but this Node version requires the system sqlite3 executable',
     schedule: 'Schedule',
     scheduleEvery: 'every',
     scheduleEnabled: 'Enabled',
@@ -59,6 +62,8 @@ const msgs = {
     notInstalled: '未安装',
     installedNoData: '已安装，暂无使用数据',
     hasData: (n: number) => `发现 ${n} 个会话`,
+    openCodeData: (dbs: number, legacy: number) => `发现 ${dbs} 个数据库、${legacy} 条旧版消息`,
+    openCodeSqliteUnavailable: '已发现数据库，但当前 Node 版本需要安装系统 sqlite3 才能读取',
     schedule: '定时同步',
     scheduleEvery: '每',
     scheduleEnabled: '已启用',
@@ -172,7 +177,6 @@ export async function runDoctor(lang: Lang = 'zh'): Promise<Check[]> {
     { dirs: [join(home, '.kimi', 'sessions')], label: 'Kimi CLI (legacy)', exts: ['.jsonl'] },
     { dirs: [join(home, '.local', 'share', 'amp', 'threads')], label: 'Amp', exts: ['.json'] },
     { dirs: [join(home, '.factory', 'sessions')], label: 'Droid', exts: ['.settings.json'] },
-    { dirs: [join(home, '.local', 'share', 'opencode')], label: 'OpenCode', exts: ['.db', '.json'] },
     { dirs: [join(home, '.pi', 'agent', 'sessions'), join(home, '.omp', 'agent', 'sessions')], label: 'Pi / OMP', exts: ['.jsonl'] },
     { dirs: [resolveTraeNativeCacheDir(home), resolveTokscaleTraeCacheDir(home)], label: 'Trae', exts: ['.json'] },
   ];
@@ -198,6 +202,42 @@ export async function runDoctor(lang: Lang = 'zh'): Promise<Check[]> {
     } else {
       checks.push({ group: g3, name: tool.label, status: 'warn', message: s.installedNoData });
     }
+  }
+
+  const openCodeSources = await resolveOpenCodeSources({
+    dbPaths: config.scanner?.opencodeDbPaths,
+  });
+  const openCodeLegacyCount = await countFiles(openCodeSources.legacyDir, ['.json']);
+  let openCodeInstalled = openCodeSources.dbPaths.length > 0 || openCodeLegacyCount > 0;
+  if (!openCodeInstalled) {
+    try {
+      await stat(openCodeSources.dataDir);
+      openCodeInstalled = true;
+    } catch {
+      // No OpenCode data directory and no configured database.
+    }
+  }
+  if (!openCodeInstalled) {
+    checks.push({ group: g3, name: 'OpenCode', status: 'warn', message: s.notInstalled });
+  } else if (openCodeSources.dbPaths.length === 0 && openCodeLegacyCount === 0) {
+    checks.push({ group: g3, name: 'OpenCode', status: 'warn', message: s.installedNoData });
+  } else if (
+    openCodeSources.dbPaths.length > 0
+    && await detectOpenCodeSqliteRuntime() === 'unavailable'
+  ) {
+    checks.push({
+      group: g3,
+      name: 'OpenCode',
+      status: 'warn',
+      message: s.openCodeSqliteUnavailable,
+    });
+  } else {
+    checks.push({
+      group: g3,
+      name: 'OpenCode',
+      status: 'ok',
+      message: s.openCodeData(openCodeSources.dbPaths.length, openCodeLegacyCount),
+    });
   }
 
   // 定时任务

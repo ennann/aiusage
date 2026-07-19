@@ -30,6 +30,10 @@ export interface AIUsageConfig {
     url?: string;
     cacheTtlHours?: number;
   };
+  scanner?: {
+    /** Extra OpenCode databases outside XDG_DATA_HOME/opencode. */
+    opencodeDbPaths?: string[];
+  };
   lang?: 'en' | 'zh';
   emoji?: boolean;
 
@@ -67,6 +71,7 @@ function migrateConfig(config: AIUsageConfig): AIUsageConfig {
     projectAliases: config.projectAliases,
     privacy: config.privacy,
     pricing: config.pricing,
+    scanner: config.scanner,
     lang: config.lang,
     emoji: config.emoji,
     targets: [target],
@@ -194,6 +199,20 @@ export function setConfigValue(
       ...(next.pricing ?? {}),
       cacheTtlHours: parsePositiveInt(requireSingleValue(keyPath, values), keyPath),
     };
+    return next;
+  }
+
+  if (keyPath === 'scanner.opencodeDbPaths') {
+    const paths = [...new Set(values.map(value => value.trim()).filter(Boolean))];
+    if (paths.length === 0) {
+      throw new Error('scanner.opencodeDbPaths 至少需要一个 opencode*.db 路径');
+    }
+    if (paths.length === 1 && ['none', 'off', 'default'].includes(paths[0].toLowerCase())) {
+      next.scanner = { ...(next.scanner ?? {}) };
+      delete next.scanner.opencodeDbPaths;
+      return next;
+    }
+    next.scanner = { ...(next.scanner ?? {}), opencodeDbPaths: paths };
     return next;
   }
 

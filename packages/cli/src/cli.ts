@@ -165,9 +165,10 @@ async function runScan(flags: Record<string, string | boolean>, positionals: str
   const isJson = Boolean(flags.json);
   const dates = resolveScanDates(flags, config);
   const tools = parseToolSelection(flags.tool, zh);
+  const opencodeDbPaths = config.scanner?.opencodeDbPaths;
   const results = dates.length === 1
-    ? [await scanDate(dates[0], { projectAliases: config.projectAliases, tools })]
-    : await scanDates(dates, { projectAliases: config.projectAliases, tools });
+    ? [await scanDate(dates[0], { projectAliases: config.projectAliases, opencodeDbPaths, tools })]
+    : await scanDates(dates, { projectAliases: config.projectAliases, opencodeDbPaths, tools });
 
   if (isJson) {
     console.log(JSON.stringify(results.length === 1 ? results[0] : results, null, 2));
@@ -239,6 +240,7 @@ async function runReport(flags: Record<string, string | boolean>, positionals: s
   });
   const report = await buildLocalReport(range, {
     projectAliases: config.projectAliases,
+    opencodeDbPaths: config.scanner?.opencodeDbPaths,
     dates,
     tools,
     pricingCatalog: pricing.catalog,
@@ -387,7 +389,10 @@ async function runSync(flags: Record<string, string | boolean>, positionals: str
   console.log(`扫描 ${targetDates.length} 天 (${targetDates[0]} ~ ${targetDates[targetDates.length - 1]}) ...`);
 
   const [results, activityReport] = await Promise.all([
-    scanDates(targetDates, { projectAliases: config.projectAliases }),
+    scanDates(targetDates, {
+      projectAliases: config.projectAliases,
+      opencodeDbPaths: config.scanner?.opencodeDbPaths,
+    }),
     buildActivityReport('all', { dates: targetDates, projectAliases: config.projectAliases }),
   ]);
   const visibility = config.privacy?.projectVisibility;
