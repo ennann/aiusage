@@ -2,8 +2,8 @@
 
 ## tokscale
 
-Portions of the Kimi and Trae local usage parsers, Trae credential decryption,
-and Trae account usage synchronization are adapted from
+Portions of the Kimi, Trae, and OpenCode local usage parsers, Trae credential
+decryption, and Trae account usage synchronization are adapted from
 [junhoyeo/tokscale](https://github.com/junhoyeo/tokscale).
 
 MIT License

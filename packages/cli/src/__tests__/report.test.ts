@@ -268,6 +268,31 @@ describe('calculateBreakdownCost', () => {
     expect([...warnings]).toEqual([]);
   });
 
+  it('trusts OpenCode provider-reported cost across catalog versions', async () => {
+    const { calculateBreakdownCost } = await import('../report.js');
+    const { catalog } = await import('@aiusage/shared');
+    const warnings = new Set<string>();
+
+    const cost = calculateBreakdownCost({
+      provider: 'openai',
+      product: 'opencode',
+      channel: 'cli',
+      model: 'gpt-5.6',
+      project: '/tmp/project',
+      eventCount: 1,
+      inputTokens: 100,
+      cachedInputTokens: 20,
+      cacheWriteTokens: 0,
+      outputTokens: 10,
+      reasoningOutputTokens: 0,
+      costUSD: 0.42,
+      pricingVersion: 'opencode-provider',
+    }, warnings, { ...catalog, version: 'future-catalog' });
+
+    expect(cost).toBe(0.42);
+    expect([...warnings]).toEqual([]);
+  });
+
   it('estimates Codex auto-review with gpt-5.4 pricing', async () => {
     const { calculateBreakdownCost } = await import('../report.js');
     const warnings = new Set<string>();

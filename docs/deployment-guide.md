@@ -239,7 +239,7 @@ The controller automatically detects and scans all installed tools:
 | Trae / Trae Solo (international) | Trae / underlying model provider | `aiusage trae sync --edition intl --since 180` → `~/.aiusage/trae-cache/intl/sessions/` (official account API); tokscale caches remain compatible |
 | Qwen Code | Alibaba | `~/.qwen/projects/`, legacy `~/.qwen/tmp/` |
 | Droid | Factory | `~/.factory/sessions/*.settings.json` |
-| OpenCode | OpenCode | `~/.local/share/opencode/opencode.db`, legacy `storage/message/` |
+| OpenCode | OpenCode / underlying model provider | `$XDG_DATA_HOME/opencode/opencode*.db` (v1 `message` + v2 `session_message`), legacy `storage/message/`; supports `OPENCODE_DB` and configured extra paths |
 | Pi / Oh My Pi | Multiple | `~/.pi/agent/sessions/`, `~/.omp/agent/sessions/` |
 
 The scanner implementations are compatibility-audited against the overlapping

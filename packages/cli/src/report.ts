@@ -58,6 +58,7 @@ export interface LocalReport {
 
 interface BuildReportOptions {
   projectAliases?: Record<string, string>;
+  opencodeDbPaths?: readonly string[];
   /** 直接传入日期列表时忽略 range 参数 */
   dates?: string[];
   tools?: readonly string[];
@@ -72,7 +73,7 @@ export async function buildLocalReport(
   const requestedDates = options.dates
     ? options.dates
     : range === 'all'
-    ? await discoverAllDates(options.tools)
+    ? await discoverAllDates(options.tools, options.opencodeDbPaths)
     : range === 'today'
     ? [dateKey(getTodayLocalDate())]
     : buildPresetDates(range);
@@ -86,6 +87,7 @@ export async function buildLocalReport(
 
   const results = await scanDates(requestedDates, {
     projectAliases: options.projectAliases,
+    opencodeDbPaths: options.opencodeDbPaths,
     tools: options.tools,
   });
 
@@ -180,7 +182,10 @@ function buildPresetDates(range: Exclude<ReportRange, 'all' | 'today'>): string[
   return result;
 }
 
-async function discoverAllDates(tools?: readonly string[]): Promise<string[]> {
+async function discoverAllDates(
+  tools?: readonly string[],
+  opencodeDbPaths?: readonly string[],
+): Promise<string[]> {
   const dates = new Set<string>();
   const home = homedir();
   const selected = tools ? new Set(tools) : null;
@@ -206,7 +211,7 @@ async function discoverAllDates(tools?: readonly string[]): Promise<string[]> {
   }
   if (includes('amp')) discoveries.push(discoverGenericJsonDates(join(home, '.local', 'share', 'amp', 'threads'), dates));
   if (includes('droid')) discoveries.push(discoverGenericJsonDates(join(home, '.factory', 'sessions'), dates));
-  if (includes('opencode')) discoveries.push(discoverOpenCodeUsageDates().then(found => { found.forEach(date => dates.add(date)); }));
+  if (includes('opencode')) discoveries.push(discoverOpenCodeUsageDates({ dbPaths: opencodeDbPaths }).then(found => { found.forEach(date => dates.add(date)); }));
   if (includes('pi')) {
     discoveries.push(discoverGenericJsonlDates(join(home, '.pi', 'agent', 'sessions'), dates));
     discoveries.push(discoverGenericJsonlDates(join(home, '.omp', 'agent', 'sessions'), dates));
@@ -663,7 +668,7 @@ function toBreakdownTotals(
 
 /**
  * 计算单个 breakdown 的成本：
- * 1. Trae 国际版官方 API 返回的费用始终采用
+ * 1. Trae 国际版官方 API 与 OpenCode 本地记录的供应商费用始终采用
  * 2. 其他 scanner 的 costUSD 仅在定价版本匹配时采用
  * 3. 否则委托给 @aiusage/shared 的 calculateCost
  *
@@ -677,6 +682,7 @@ export function calculateBreakdownCost(
   const effectivePricingVersion = pricingCatalog?.version ?? PRICING_VERSION;
   const sourceCostMatchesCatalog =
     breakdown.product === 'trae-intl' ||
+    breakdown.product === 'opencode' ||
     breakdown.pricingVersion == null ||
     breakdown.pricingVersion === effectivePricingVersion;
   if (breakdown.costUSD != null && breakdown.costUSD > 0 && sourceCostMatchesCatalog) {

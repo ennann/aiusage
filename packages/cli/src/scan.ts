@@ -30,6 +30,7 @@ export interface ScanResult {
 
 export interface ScanOptions {
   projectAliases?: Record<string, string>;
+  opencodeDbPaths?: readonly string[];
   /** Product ids selected by the user-facing --tool filter. */
   tools?: readonly string[];
 }
@@ -110,7 +111,13 @@ export async function scanDates(targetDates: string[], options: ScanOptions = {}
     { products: ['kimi-code'], scan: () => scanKimiDates(uniqueDates, undefined, options.projectAliases) },
     { products: ['amp'], scan: () => scanAmpDates(uniqueDates, undefined, options.projectAliases) },
     { products: ['droid'], scan: () => scanDroidDates(uniqueDates, undefined, options.projectAliases) },
-    { products: ['opencode'], scan: () => scanOpencodeDates(uniqueDates, undefined, options.projectAliases) },
+    {
+      products: ['opencode'],
+      scan: () => scanOpencodeDates(uniqueDates, {
+        projectAliases: options.projectAliases,
+        dbPaths: options.opencodeDbPaths,
+      }),
+    },
     { products: ['pi'], scan: () => scanPiDates(uniqueDates, undefined, options.projectAliases) },
     {
       products: ['trae-cn', 'trae-intl', 'trae'],
