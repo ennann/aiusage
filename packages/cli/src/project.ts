@@ -2,6 +2,7 @@ import { open, readdir, readFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { homedir } from 'node:os';
 import { resolveKimiCodeHome } from './scanners/kimi.js';
+import { resolveTraeNativeCacheDir } from './scanners/trae.js';
 
 export interface DiscoveredProject {
   /** 原始项目名（目录 basename） */
@@ -57,6 +58,9 @@ export async function discoverProjects(
 
     // Kimi CLI / Kimi Code: legacy workspace map + new session metadata.
     discoverKimiProjects().then(names => names.forEach(n => add(n, 'kimi'))),
+
+    // Trae CN: privacy-minimized cache written by `aiusage trae sync`.
+    discoverTraeProjects().then(names => names.forEach(n => add(n, 'trae'))),
   ]);
 
   // ���建结果
@@ -384,6 +388,20 @@ async function discoverKimiProjects(): Promise<string[]> {
     }
   }
 
+  return [...projects];
+}
+
+async function discoverTraeProjects(): Promise<string[]> {
+  const projects = new Set<string>();
+  for (const filePath of await walkFiles(resolveTraeNativeCacheDir(), '.json')) {
+    try {
+      const data = JSON.parse(await readFile(filePath, 'utf8')) as { project?: string };
+      const name = basename(data.project?.trim() ?? '');
+      if (name && name !== 'unknown') projects.add(name);
+    } catch {
+      continue;
+    }
+  }
   return [...projects];
 }
 

@@ -19,6 +19,10 @@ importers:
         version: 5.9.3
 
   packages/cli:
+    dependencies:
+      ws:
+        specifier: ^8.18.0
+        version: 8.18.0
     devDependencies:
       '@aiusage/shared':
         specifier: workspace:*

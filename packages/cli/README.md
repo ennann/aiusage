@@ -3,7 +3,7 @@
 `@aiusage/cli` is the AIUsage command-line tool for:
 
 - discovering and managing projects across AI tools
-- scanning local Claude Code, Codex, Cursor, Copilot CLI, Copilot for VS Code, Gemini CLI, Antigravity, Amp, Kimi Code, Qwen Code, Droid, OpenCode, and Pi usage
+- scanning local Claude Code, Codex, Cursor, Copilot CLI, Copilot for VS Code, Gemini CLI, Antigravity, Amp, Kimi Code, Qwen Code, Droid, OpenCode, Pi, and Trae usage
 - importing historical usage from Anthropic Admin API
 - printing local usage summaries for the last 7 days, 30 days, 90 days, or all history
 - scheduling automatic sync to an AIUsage Worker
@@ -31,6 +31,7 @@ differ, rather than treating every local record as billable token usage.
 | Droid | `~/.factory/sessions/*.settings.json`; uses persisted token totals first and the transcript only as a model fallback. |
 | OpenCode | OpenCode 1.2+ `opencode.db` through read-only `sqlite3`, plus legacy `storage/message/*.json`. |
 | Pi / Oh My Pi | `~/.pi/agent/sessions/` and `~/.omp/agent/sessions/` JSONL, including provider, cache-write, and session metadata. |
+| Trae / Trae CN | `aiusage trae sync` reads Trae CN history through Trae's official local `ai-agent` RPC and writes a privacy-minimized cache under `~/.aiusage/trae-cache/sessions/`. The scanner also accepts international Trae caches produced by `tokscale trae sync` under `~/.config/tokscale/trae-cache/sessions/`. The encrypted SQLCipher database is never opened directly. |
 
 Only token counters and session metadata are aggregated or uploaded. Conversation
 content and local credentials are never uploaded.
@@ -67,7 +68,7 @@ aiusage project alias                   # list all configured aliases
 aiusage project alias --remove myapp    # remove alias
 ```
 
-Scans data directories for all supported tools, including Kimi Code session metadata, listing discovered projects with their aliases and sources.
+Scans data directories for all supported tools, including Kimi Code session metadata and the Trae CN sync cache, listing discovered projects with their aliases and sources.
 
 Project aliases are applied locally before upload. If two devices set the same alias for their respective project directories, the server merges them into one project.
 
@@ -89,6 +90,19 @@ aiusage report --json                   # JSON output
 Reads data from local tool data directories including `~/.claude/projects` (Claude Code), `~/.codex` (Codex), Cursor local state plus usage export, VS Code Copilot Chat logs, and `~/.gemini/antigravity` (Antigravity).
 
 **Compact mode** (default) shows Sources and Daily tables with merged Cache column and 2-decimal cost. **Detail mode** (`--detail`) expands all columns (CacheRead, CacheWrite, Reasoning), adds Top Models and Pricing Notes sections, and shows 4-decimal cost.
+
+### trae sync
+
+Sync Trae CN's local historical token counters before running a regular report or dashboard upload:
+
+```bash
+aiusage trae sync
+aiusage report --range all
+```
+
+If Trae CN is closed, AIUsage temporarily launches it with a local-only debugging port, reads the official `ai-agent` session API, then closes the temporary instance. If Trae is already running without that port, quit Trae and rerun the command. Use `--port 9230 --no-launch` to connect to an instance you started yourself.
+
+Only session identifiers, workspace paths, timestamps, model labels, and numeric token counters are cached. Conversation content and login credentials are neither cached nor uploaded. International Trae users can run `tokscale trae sync`; AIUsage reads that compatible cache automatically.
 
 ### Shared date options
 
