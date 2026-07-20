@@ -7,13 +7,15 @@ describe('Trae dashboard filters', () => {
   it('expands the combined Trae product to legacy, CN, and international rows', () => {
     const filters: DashboardFilters = {
       minDate: null,
+      maxDate: null,
+      rangeDays: null,
       range: 'all',
-      deviceId: null,
-      provider: null,
-      product: 'trae',
-      channel: null,
-      model: null,
-      project: null,
+      deviceId: [],
+      provider: [],
+      product: ['trae'],
+      channel: [],
+      model: [],
+      project: [],
     };
 
     expect(buildWhere(filters)).toEqual({

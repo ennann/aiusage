@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { RotateCw, Github, Heart, Sun, Moon, Monitor } from 'lucide-react';
+import {
+  RotateCw, Github, Heart, Sun, Moon, Monitor,
+  ChevronDown, Check, BrainCircuit,
+} from 'lucide-react';
 import type { Locale, T } from './i18n';
 import { I18N, getStoredLocale } from './i18n';
 import type { ThemeMode } from './theme';
@@ -25,6 +28,25 @@ import { buildActivityHeatmapData } from './utils/activity-heatmap-data';
 import { HeaderLogo, FooterLogo, useFaviconFromLogo } from './components/site-logo';
 import { SITE_TITLE } from './site-config';
 import type { InteractionMetricItem, InteractionMetricsPayload } from '@aiusage/shared';
+import codexIcon from '@lobehub/icons-static-svg/icons/codex-color.svg?url';
+import claudeCodeIcon from '@lobehub/icons-static-svg/icons/claudecode-color.svg?url';
+import claudeIcon from '@lobehub/icons-static-svg/icons/claude-color.svg?url';
+import anthropicIcon from '@lobehub/icons-static-svg/icons/anthropic.svg?url';
+import deepseekIcon from '@lobehub/icons-static-svg/icons/deepseek-color.svg?url';
+import openaiIcon from '@lobehub/icons-static-svg/icons/openai.svg?url';
+import geminiIcon from '@lobehub/icons-static-svg/icons/gemini-color.svg?url';
+import geminiCliIcon from '@lobehub/icons-static-svg/icons/geminicli-color.svg?url';
+import glmvIcon from '@lobehub/icons-static-svg/icons/glmv-color.svg?url';
+import kimiIcon from '@lobehub/icons-static-svg/icons/kimi.svg?url';
+import copilotIcon from '@lobehub/icons-static-svg/icons/githubcopilot.svg?url';
+import traeIcon from '@lobehub/icons-static-svg/icons/trae-color.svg?url';
+import qwenIcon from '@lobehub/icons-static-svg/icons/qwen-color.svg?url';
+import openrouterIcon from '@lobehub/icons-static-svg/icons/openrouter-color.svg?url';
+import antigravityIcon from '@lobehub/icons-static-svg/icons/antigravity-color.svg?url';
+import ampIcon from '@lobehub/icons-static-svg/icons/amp-color.svg?url';
+import cursorIcon from '@lobehub/icons-static-svg/icons/cursor.svg?url';
+import opencodeIcon from '@lobehub/icons-static-svg/icons/opencode.svg?url';
+import moonshotIcon from '@lobehub/icons-static-svg/icons/moonshot.svg?url';
 
 // ────────────────────────────────────────
 // Constants
@@ -36,8 +58,63 @@ function getRanges(t: T) {
     { value: '7d', label: t.range7d },
     { value: '30d', label: t.range30d },
     { value: '90d', label: t.range90d },
-    { value: '180d', label: t.range180d },
+    { value: 'month', label: t.thisMonth },
   ] as const;
+}
+
+function formatDeltaPercent(current?: number | null, previous?: number | null): string | undefined {
+  const currentValue = Number(current ?? 0);
+  const previousValue = Number(previous ?? 0);
+  if (!Number.isFinite(currentValue) || !Number.isFinite(previousValue) || previousValue <= 0) return undefined;
+  const delta = ((currentValue - previousValue) / previousValue) * 100;
+  if (!Number.isFinite(delta)) return undefined;
+  const normalized = Math.abs(delta) < 0.05 ? 0 : delta;
+  return `${normalized > 0 ? '+' : ''}${normalized.toFixed(1)}%`;
+}
+
+type FilterIconAsset = {
+  src: string;
+  tone?: 'color' | 'mono';
+} | {
+  Icon: typeof BrainCircuit;
+  tone: 'component';
+};
+
+const colorIcon = (src: string): FilterIconAsset => ({ src, tone: 'color' });
+const monoIcon = (src: string): FilterIconAsset => ({ src, tone: 'mono' });
+const componentIcon = (Icon: typeof BrainCircuit): FilterIconAsset => ({ Icon, tone: 'component' });
+
+function productIcon(value: string): FilterIconAsset | undefined {
+  const id = value.toLowerCase();
+  if (id.includes('claude')) return colorIcon(claudeCodeIcon);
+  if (id.includes('codex')) return colorIcon(codexIcon);
+  if (id.includes('gemini')) return colorIcon(geminiCliIcon);
+  if (id.includes('kimi')) return monoIcon(kimiIcon);
+  if (id.includes('copilot')) return monoIcon(copilotIcon);
+  if (id.includes('trae')) return colorIcon(traeIcon);
+  if (id.includes('qwen')) return colorIcon(qwenIcon);
+  if (id.includes('antigravity')) return colorIcon(antigravityIcon);
+  if (id.includes('amp')) return colorIcon(ampIcon);
+  if (id.includes('cursor')) return monoIcon(cursorIcon);
+  if (id.includes('opencode')) return monoIcon(opencodeIcon);
+  return undefined;
+}
+
+function modelIcon(value: string, label: string): FilterIconAsset {
+  const id = `${value} ${label}`.toLowerCase();
+  if (id.includes('claude')) return colorIcon(claudeIcon);
+  if (id.includes('anthropic')) return monoIcon(anthropicIcon);
+  if (id.includes('deepseek')) return colorIcon(deepseekIcon);
+  if (id.includes('gemini')) return colorIcon(geminiIcon);
+  if (id.includes('glm') || id.includes('zhipu') || id.includes('智谱')) return colorIcon(glmvIcon);
+  if (id.includes('kimi')) return monoIcon(kimiIcon);
+  if (id.includes('moonshot')) return monoIcon(moonshotIcon);
+  if (id.includes('openrouter')) return colorIcon(openrouterIcon);
+  if (id.includes('qwen') || id.includes('通义')) return colorIcon(qwenIcon);
+  if (id.includes('copilot')) return monoIcon(copilotIcon);
+  if (id.includes('trae')) return colorIcon(traeIcon);
+  if (id.includes('gpt') || /\bo\d/.test(id) || id.includes('openai')) return monoIcon(openaiIcon);
+  return componentIcon(BrainCircuit);
 }
 
 // ────────────────────────────────────────
@@ -135,114 +212,168 @@ function SegmentedControl({
   );
 }
 
-function FilterTabs({
-  value,
-  options,
-  onChange,
-  allLabel = 'All',
-  tooltips,
-}: {
-  value: string;
-  options: FacetOption[];
-  onChange: (v: string) => void;
-  allLabel?: string;
-  tooltips?: Record<string, string>;
-}) {
-  if (!options.length) return null;
-  const activeClass = 'bg-white text-slate-900 shadow-sm dark:bg-[#222222] dark:text-slate-300';
-  const inactiveClass = 'text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300';
+function FilterIcon({ icon }: { icon?: FilterIconAsset }) {
+  if (!icon) return null;
+  if (icon.tone === 'component') {
+    const Icon = icon.Icon;
+    return <Icon aria-hidden className="h-4 w-4 shrink-0 text-slate-500 dark:text-slate-300" strokeWidth={1.8} />;
+  }
+  if (icon.tone === 'mono') {
+    return (
+      <span
+        aria-hidden
+        className="h-4 w-4 shrink-0 bg-slate-600 dark:bg-slate-300"
+        style={{
+          WebkitMaskImage: `url("${icon.src}")`,
+          WebkitMaskPosition: 'center',
+          WebkitMaskRepeat: 'no-repeat',
+          WebkitMaskSize: 'contain',
+          maskImage: `url("${icon.src}")`,
+          maskPosition: 'center',
+          maskRepeat: 'no-repeat',
+          maskSize: 'contain',
+        }}
+      />
+    );
+  }
   return (
-    <div className="inline-flex items-center rounded-lg bg-slate-100/80 p-0.5 dark:bg-[#1a1a1a]/80 flex-nowrap">
-      <button
-        onClick={() => onChange('')}
-        className={`shrink-0 rounded-md px-2.5 py-1.5 text-[12px] font-medium whitespace-nowrap transition-all duration-150 ${
-          !value ? activeClass : inactiveClass
-        }`}
-      >
-        {allLabel}
-      </button>
-      {options.map((o) => {
-        const tip = tooltips?.[o.value];
-        return (
-          <span key={o.value} className={tip ? 'group relative' : ''}>
-            <button
-              onClick={() => onChange(o.value === value ? '' : o.value)}
-              className={`shrink-0 rounded-md px-2.5 py-1.5 text-[12px] font-medium whitespace-nowrap transition-all duration-150 ${
-                value === o.value ? activeClass : inactiveClass
-              }`}
-            >
-              {formatProductLabel(o.label)}
-            </button>
-            {tip && (
-              <span className="pointer-events-none absolute left-1/2 top-full z-50 mt-2 w-64 -translate-x-1/2 rounded-lg bg-slate-800 px-3 py-2 text-[11px] leading-relaxed text-slate-200 opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 dark:bg-slate-700">
-                {tip}
-              </span>
-            )}
-          </span>
-        );
-      })}
-    </div>
+    <img
+      src={icon.src}
+      alt=""
+      className="h-4 w-4 shrink-0 rounded-[3px]"
+      loading="lazy"
+    />
   );
 }
 
-function FilterChips({
+function MultiSelectFilter({
   label,
   value,
   options,
   onChange,
   allLabel = 'All',
+  locale,
+  formatLabel = (text) => text,
+  getIcon,
   tooltips,
 }: {
   label: string;
-  value: string;
+  value: string[];
   options: FacetOption[];
-  onChange: (v: string) => void;
+  onChange: (v: string[]) => void;
   allLabel?: string;
+  locale: Locale;
+  formatLabel?: (label: string, value: string) => string;
+  getIcon?: (option: FacetOption) => FilterIconAsset | undefined;
   tooltips?: Record<string, string>;
 }) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const selected = new Set(value);
+  const selectedOptions = options.filter((option) => selected.has(option.value));
+  const hasSelection = value.length > 0;
+  const summary = !hasSelection
+    ? allLabel
+    : value.length === 1
+      ? formatLabel(selectedOptions[0]?.label ?? value[0], value[0])
+      : locale === 'zh' ? `${value.length} 项` : `${value.length} selected`;
+  const selectedIcon = hasSelection && value.length === 1
+    ? getIcon?.(selectedOptions[0] ?? { value: value[0], label: value[0] })
+    : undefined;
+
+  useEffect(() => {
+    if (!open) return;
+    const closeOnOutside = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener('pointerdown', closeOnOutside);
+    return () => document.removeEventListener('pointerdown', closeOnOutside);
+  }, [open]);
+
   if (!options.length) return null;
-  const active = 'bg-slate-900 text-white dark:bg-slate-200 dark:text-slate-900';
-  const inactive = 'bg-white text-slate-500 border border-slate-200 dark:bg-[#1a1a1a] dark:text-slate-400 dark:border-white/10';
+
+  const toggleValue = (next: string) => {
+    onChange(selected.has(next)
+      ? value.filter((item) => item !== next)
+      : [...value, next]);
+  };
+
   return (
-    <div className="flex items-center gap-2 min-w-0">
-      {label && <span className="shrink-0 text-[12px] font-medium text-slate-400 dark:text-slate-500">{label}</span>}
-      <div className="relative min-w-0 flex-1">
-        <div className="overflow-x-auto scrollbar-hide">
-          <div className="flex gap-1.5 w-max pr-4">
-            {allLabel && (
+    <div ref={rootRef} className="relative">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        className={`inline-flex h-9 max-w-full items-center gap-1.5 rounded-lg px-3 text-[13px] font-medium transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-300 dark:focus-visible:ring-white/20 ${
+          hasSelection
+            ? 'bg-white text-slate-700 shadow-sm ring-1 ring-slate-200 dark:bg-[#222222] dark:text-slate-300 dark:ring-white/10'
+            : 'bg-slate-100/80 text-slate-400 hover:text-slate-600 dark:bg-[#1a1a1a]/80 dark:text-slate-500 dark:hover:text-slate-300'
+        }`}
+      >
+        <FilterIcon icon={selectedIcon} />
+        <span className="flex min-w-0 items-center gap-1.5 truncate">
+          <span className="shrink-0">{label}</span>
+          <span className="min-w-0 truncate">{summary}</span>
+        </span>
+        <ChevronDown className={`h-3.5 w-3.5 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+
+      {open && (
+        <div className="absolute left-0 top-full z-50 mt-2 w-[min(320px,calc(100vw-2rem))] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_20px_60px_rgba(15,23,42,0.14)] dark:border-white/10 dark:bg-[#111111] dark:shadow-[0_20px_60px_rgba(0,0,0,0.45)]">
+          <div className="max-h-80 overflow-y-auto p-1.5">
+            <button
+              type="button"
+              onClick={() => onChange([])}
+              className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[12px] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-300 dark:focus-visible:ring-white/20 ${
+                value.length === 0
+                  ? 'bg-slate-50 text-slate-500 dark:bg-white/[0.06] dark:text-slate-400'
+                  : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-white/[0.06] dark:hover:text-slate-200'
+              }`}
+            >
+              <span className="flex h-4 w-4 items-center justify-center rounded border border-slate-200 text-slate-400 dark:border-white/15 dark:text-slate-500">
+                {value.length === 0 && <Check className="h-3 w-3" />}
+              </span>
+              <span className="font-medium">{allLabel}</span>
+            </button>
+
+            {options.map((option) => {
+              const checked = selected.has(option.value);
+              const tip = tooltips?.[option.value];
+              const icon = getIcon?.(option);
+              return (
               <button
-                onClick={() => onChange('')}
-                className={`shrink-0 rounded-full px-3 py-1 text-[12px] font-medium whitespace-nowrap transition-all duration-150 ${
-                  !value ? active : inactive
+                key={option.value}
+                type="button"
+                title={tip}
+                onClick={() => toggleValue(option.value)}
+                className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[12px] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-300 dark:focus-visible:ring-white/20 ${
+                  checked
+                    ? 'bg-slate-100 text-slate-900 dark:bg-white/10 dark:text-slate-200'
+                    : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-white/[0.06] dark:hover:text-slate-200'
                 }`}
               >
-                {allLabel}
-              </button>
-            )}
-            {options.map((o) => {
-              const tip = tooltips?.[o.value];
-              return (
-                <span key={o.value} className={tip ? 'group relative' : ''}>
-                  <button
-                    onClick={() => onChange(o.value === value ? '' : o.value)}
-                    className={`shrink-0 rounded-full px-3 py-1 text-[12px] font-medium whitespace-nowrap transition-all duration-150 ${
-                      value === o.value ? active : inactive
-                    }`}
-                  >
-                    {formatProductLabel(o.label)}
-                  </button>
-                  {tip && (
-                    <span className="pointer-events-none absolute left-1/2 top-full z-50 mt-2 w-64 -translate-x-1/2 rounded-lg bg-slate-800 px-3 py-2 text-[11px] leading-relaxed text-slate-200 opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 dark:bg-slate-700">
-                      {tip}
-                    </span>
-                  )}
+                <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
+                  checked
+                    ? 'border-slate-300 bg-slate-200 text-slate-600 dark:border-white/15 dark:bg-white/10 dark:text-slate-300'
+                    : 'border-slate-200 dark:border-white/15'
+                }`}>
+                  {checked && <Check className="h-3 w-3" />}
                 </span>
+                {icon && (
+                  <span className="flex h-4 w-4 shrink-0 items-center justify-center">
+                    <FilterIcon icon={icon} />
+                  </span>
+                )}
+                <span className="min-w-0 flex-1 truncate">{formatLabel(option.label, option.value)}</span>
+                <span className="shrink-0 tabular-nums text-slate-300 dark:text-slate-600">
+                  {formatCompact(option.eventCount ?? 0, locale)}
+                </span>
+              </button>
               );
             })}
           </div>
         </div>
-        <div className="pointer-events-none absolute inset-y-0 right-0 w-6 bg-gradient-to-l from-[#fafafa] dark:from-[#0a0a0a]" />
-      </div>
+      )}
     </div>
   );
 }
@@ -341,10 +472,9 @@ function InteractionMetricsSection({
         />
         <InteractionMetricTile label={t.subagents} value={formatCompact(metrics.subagentCount, locale)} />
       </div>
-      <div className="mt-6 grid gap-6 lg:grid-cols-3">
+      <div className="mt-6 grid gap-6 lg:grid-cols-2">
         <InteractionTopList title={t.topTools} items={metrics.topTools} locale={locale} proxyLabel={t.proxy} />
         <InteractionTopList title={t.topSkills} items={metrics.topSkills} locale={locale} proxyLabel={t.proxy} />
-        <InteractionTopList title={t.topSubagents} items={metrics.topAgents} locale={locale} proxyLabel={t.proxy} />
       </div>
     </div>
   );
@@ -356,7 +486,10 @@ function InteractionMetricsSection({
 
 export function App() {
   const [filters, setFilters] = useState<FiltersState>({
-    range: '30d', deviceId: '', product: '',
+    range: '30d',
+    deviceIds: [],
+    products: [],
+    models: [],
   });
 
   const {
@@ -425,6 +558,25 @@ export function App() {
     }));
   }, [overview, t, locale, isDark]);
   const unavailable = metricAvailability.tokenMetricsUnavailable;
+  const kpiDeltas = useMemo<Record<string, string | undefined>>(() => {
+    const comparison = overview?.comparison;
+    if (!overview || !comparison || filters.range === 'all') return {};
+    const userMessageCount = typeof overview.interactionMetrics?.userMessageCount === 'number'
+      ? overview.interactionMetrics.userMessageCount
+      : undefined;
+    return {
+      totalCostUsd: formatDeltaPercent(overview.totalCostUsd, comparison.totalCostUsd),
+      totalTokens: formatDeltaPercent(kpis?.totalTokens, comparison.totalTokens),
+      inputTokens: formatDeltaPercent(kpis?.inputTokens, comparison.inputTokens),
+      outputTokens: formatDeltaPercent(kpis?.outputTokens, comparison.outputTokens + comparison.reasoningOutputTokens),
+      cachedTokens: formatDeltaPercent(kpis?.cachedTokens, comparison.cachedInputTokens),
+      activeDays: formatDeltaPercent(overview.activeDays, comparison.activeDays),
+      totalEvents: formatDeltaPercent(overview.totalEvents, comparison.totalEvents),
+      userMessages: formatDeltaPercent(userMessageCount, comparison.userMessageCount),
+      avgDailyCost: formatDeltaPercent(overview.averageDailyCostUsd, comparison.averageDailyCostUsd),
+      cacheHitRate: formatDeltaPercent(kpis?.cacheHitRate, comparison.cacheHitRate),
+    };
+  }, [overview, kpis, filters.range]);
   const activityHeatmap = useMemo(() => buildActivityHeatmapData({
     heatmap: overview?.heatmap ?? [],
     dailyTrend: overview?.dailyTrend ?? [],
@@ -466,77 +618,48 @@ export function App() {
         </div>
       )}
 
-        {/* ── Range + Filters (desktop) ── */}
-        <div className="mt-2 mb-6 hidden sm:flex sm:flex-wrap sm:items-center sm:gap-x-4 sm:gap-y-2">
-          <div className="flex items-center gap-2">
+        {/* ── Range + Filters ── */}
+        <div className="mt-2 mb-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+          <div className="flex min-w-0 items-center gap-2 overflow-x-auto scrollbar-hide">
             <SegmentedControl
-              value={filters.range === 'month' ? '' : filters.range}
+              value={filters.range}
               options={getRanges(t)}
               onChange={(v) => setFilters((f) => ({ ...f, range: v }))}
             />
-            <button
-              onClick={() => setFilters((f) => ({ ...f, range: 'month' }))}
-              className={`shrink-0 rounded-lg px-3 py-1.5 text-[13px] font-medium transition-all duration-150 ${
-                filters.range === 'month'
-                  ? 'bg-white text-slate-900 shadow-sm dark:bg-[#222222] dark:text-slate-300'
-                  : 'bg-slate-100/80 text-slate-400 hover:text-slate-600 dark:bg-[#1a1a1a]/80 dark:text-slate-500 dark:hover:text-slate-300'
-              }`}
-            >
-              {t.thisMonth}
-            </button>
           </div>
-          {overview && fOpts.products.length > 1 && (
-            <>
-              <div className="h-5 w-px bg-slate-200 dark:bg-[#222222]" />
-              <FilterTabs
-                value={filters.product}
+
+          {overview && (
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <MultiSelectFilter
+                label={t.tool}
+                value={filters.products ?? []}
                 options={fOpts.products}
                 allLabel={t.all}
-                onChange={(v) => setFilters((f) => ({ ...f, product: v }))}
+                locale={locale}
+                formatLabel={(label) => formatProductLabel(label)}
+                getIcon={(option) => productIcon(option.value)}
+                onChange={(values) => setFilters((f) => ({ ...f, products: values }))}
                 tooltips={{ 'claude-code': t.claudeCodeDataNotice }}
               />
-            </>
-          )}
-          {overview && fOpts.devices.length >= 1 && (
-            <>
-              <div className="h-5 w-px bg-slate-200 dark:bg-[#222222]" />
-              <FilterTabs
-                value={filters.deviceId}
+              <MultiSelectFilter
+                label={t.model}
+                value={filters.models ?? []}
+                options={fOpts.models}
+                allLabel={t.all}
+                locale={locale}
+                formatLabel={(label) => formatModelName(label, isMobile)}
+                getIcon={(option) => modelIcon(option.value, option.label)}
+                onChange={(values) => setFilters((f) => ({ ...f, models: values }))}
+              />
+              <MultiSelectFilter
+                label={t.device}
+                value={filters.deviceIds ?? []}
                 options={fOpts.devices}
                 allLabel={t.all}
-                onChange={(v) => setFilters((f) => ({ ...f, deviceId: v }))}
+                locale={locale}
+                onChange={(values) => setFilters((f) => ({ ...f, deviceIds: values }))}
               />
-            </>
-          )}
-        </div>
-
-        {/* ── Filters (mobile) ── */}
-        <div className="mt-1 mb-5 flex flex-col gap-3 sm:hidden">
-          <FilterChips
-            label=""
-            value={filters.range}
-            options={[...getRanges(t), { value: 'month', label: t.thisMonth }].map((r) => ({ value: r.value, label: r.label, eventCount: 0, estimatedCostUsd: 0 }))}
-            allLabel=""
-            onChange={(v) => setFilters((f) => ({ ...f, range: v || '30d' }))}
-          />
-          {overview && fOpts.products.length > 1 && (
-            <FilterChips
-              label=""
-              value={filters.product}
-              options={fOpts.products}
-              allLabel={t.all}
-              onChange={(v) => setFilters((f) => ({ ...f, product: v }))}
-              tooltips={{ 'claude-code': t.claudeCodeDataNotice }}
-            />
-          )}
-          {overview && fOpts.devices.length >= 1 && (
-            <FilterChips
-              label=""
-              value={filters.deviceId}
-              options={fOpts.devices}
-              allLabel={t.all}
-              onChange={(v) => setFilters((f) => ({ ...f, deviceId: v }))}
-            />
+            </div>
           )}
         </div>
 
@@ -579,19 +702,20 @@ export function App() {
               <CostKpiCard
                 label={t.estimatedCost}
                 value={unavailable ? t.unavailable : formatUsd(overview?.totalCostUsd ?? 0)}
+                delta={unavailable ? undefined : kpiDeltas.totalCostUsd}
               />
             </div>
             <div className="card">
-              <KpiCard label={t.totalTokens} value={unavailable ? t.unavailable : formatCompact(kpis?.totalTokens ?? 0, locale)} />
+              <KpiCard label={t.totalTokens} value={unavailable ? t.unavailable : formatCompact(kpis?.totalTokens ?? 0, locale)} delta={unavailable ? undefined : kpiDeltas.totalTokens} />
             </div>
             <div className="card">
-              <KpiCard label={t.inputTokens} value={unavailable ? t.unavailable : formatCompact(kpis?.inputTokens ?? 0, locale)} />
+              <KpiCard label={t.inputTokens} value={unavailable ? t.unavailable : formatCompact(kpis?.inputTokens ?? 0, locale)} delta={unavailable ? undefined : kpiDeltas.inputTokens} />
             </div>
             <div className="card">
-              <KpiCard label={t.outputTokens} value={unavailable ? t.unavailable : formatCompact(kpis?.outputTokens ?? 0, locale)} />
+              <KpiCard label={t.outputTokens} value={unavailable ? t.unavailable : formatCompact(kpis?.outputTokens ?? 0, locale)} delta={unavailable ? undefined : kpiDeltas.outputTokens} />
             </div>
             <div className="card">
-              <KpiCard label={t.cachedTokens} value={unavailable ? t.unavailable : formatCompact(kpis?.cachedTokens ?? 0, locale)} />
+              <KpiCard label={t.cachedTokens} value={unavailable ? t.unavailable : formatCompact(kpis?.cachedTokens ?? 0, locale)} delta={unavailable ? undefined : kpiDeltas.cachedTokens} />
             </div>
           </div>
 
@@ -605,13 +729,14 @@ export function App() {
                 label={t.activeDays}
                 value={String(overview?.activeDays ?? 0)}
                 suffix={` / ${overview?.totalDays ?? 0}`}
+                delta={kpiDeltas.activeDays}
               />
             </div>
             <div className="card">
               <KpiCard
-                label={t.sessions}
-                value={formatNumber((overview?.totalSessions ?? 0) > 0 ? overview!.totalSessions : (overview?.totalEvents ?? 0))}
-                suffix={(overview?.totalSessions ?? 0) > 0 && overview!.totalSessions !== overview!.totalEvents ? ` / ${formatNumber(overview!.totalEvents)}` : undefined}
+                label={t.totalEvents}
+                value={formatNumber(overview?.totalEvents ?? 0)}
+                delta={kpiDeltas.totalEvents}
               />
             </div>
             <div className="card">
@@ -620,13 +745,14 @@ export function App() {
                 value={typeof overview?.interactionMetrics?.userMessageCount === 'number'
                   ? formatNumber(overview.interactionMetrics.userMessageCount)
                   : t.unavailable}
+                delta={kpiDeltas.userMessages}
               />
             </div>
             <div className="card">
-              <KpiCard label={t.avgDailyCost} value={unavailable ? t.unavailable : formatUsd(overview?.averageDailyCostUsd ?? 0)} />
+              <KpiCard label={t.avgDailyCost} value={unavailable ? t.unavailable : formatUsd(overview?.averageDailyCostUsd ?? 0)} delta={unavailable ? undefined : kpiDeltas.avgDailyCost} />
             </div>
             <div className="card">
-              <KpiCard label={t.cacheHitRate} value={unavailable ? t.unavailable : formatPercent(kpis?.cacheHitRate ?? 0)} />
+              <KpiCard label={t.cacheHitRate} value={unavailable ? t.unavailable : formatPercent(kpis?.cacheHitRate ?? 0)} delta={unavailable ? undefined : kpiDeltas.cacheHitRate} />
             </div>
           </div>
 

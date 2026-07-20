@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@aiusage/shared": "workspace:*",
+    "@lobehub/icons-static-svg": "^1.94.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^0.542.0",

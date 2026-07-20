@@ -1,6 +1,5 @@
 import type { SankeyGraph } from '@aiusage/shared';
 import type { OverviewPayload, FiltersState } from '../hooks/use-overview';
-import { arrSum } from './format';
 
 /** Get all YYYY-MM-DD dates for the current month (1st to last day). */
 export function currentMonthDates(): string[] {
@@ -29,8 +28,8 @@ export function padMonth(ov: OverviewPayload): OverviewPayload {
   });
 
   const monthTrend = dailyTrend.filter((d) => d.estimatedCostUsd > 0);
-  const totalCostUsd = arrSum(monthTrend.map((d) => d.estimatedCostUsd));
-  const totalEvents = arrSum(monthTrend.map((d) => d.eventCount));
+  const totalCostUsd = monthTrend.reduce((sum, d) => sum + Number(d.estimatedCostUsd || 0), 0);
+  const totalEvents = monthTrend.reduce((sum, d) => sum + Number(d.eventCount || 0), 0);
   const activeDays = monthTrend.length;
 
   // Scale share/sankey data by cost ratio (month vs full range)
@@ -81,10 +80,21 @@ export function padMonth(ov: OverviewPayload): OverviewPayload {
 
 export function buildQuery(f: FiltersState): string {
   const p = new URLSearchParams();
+  const aliases: Record<string, string> = {
+    deviceIds: 'deviceId',
+    products: 'product',
+    models: 'model',
+    projects: 'project',
+  };
+
   for (const [k, v] of Object.entries(f)) {
+    if (Array.isArray(v)) {
+      const key = aliases[k] ?? k;
+      v.filter(Boolean).forEach((item) => p.append(key, item));
+      continue;
+    }
     if (!v) continue;
-    // "month" is frontend-only; request 30d from API
-    p.set(k, k === 'range' && v === 'month' ? '30d' : v);
+    p.set(k, v);
   }
   return p.toString();
 }

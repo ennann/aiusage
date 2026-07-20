@@ -3,7 +3,7 @@ import type { FacetOption } from '@aiusage/shared';
 const EVENT_ONLY_PRODUCTS = new Set(['antigravity', 'copilot-vscode']);
 
 export interface MetricAvailabilityInput {
-  selectedProduct?: string | null;
+  selectedProduct?: string | string[] | null;
   productOptions: Array<Pick<FacetOption, 'value'>>;
   totalEvents: number;
   totalTokens: number;
@@ -15,9 +15,10 @@ export interface MetricAvailability {
 }
 
 function getScopedProducts(
-  selectedProduct: string | null | undefined,
+  selectedProduct: string | string[] | null | undefined,
   productOptions: Array<Pick<FacetOption, 'value'>>,
 ): string[] {
+  if (Array.isArray(selectedProduct)) return selectedProduct.filter(Boolean);
   if (selectedProduct) return [selectedProduct];
   return productOptions.map((option) => option.value).filter(Boolean);
 }

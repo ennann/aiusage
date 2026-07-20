@@ -9840,12 +9840,12 @@ export const DEMO_OVERVIEW: OverviewResponse & { ok: boolean } = {
   "filters": {
     "selection": {
       "range": "all",
-      "deviceId": null,
-      "provider": null,
-      "product": null,
-      "channel": null,
-      "model": null,
-      "project": null
+      "deviceId": [],
+      "provider": [],
+      "product": [],
+      "channel": [],
+      "model": [],
+      "project": []
     },
     "options": {
       "devices": [
