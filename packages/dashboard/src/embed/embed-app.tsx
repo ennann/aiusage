@@ -160,7 +160,7 @@ function WidgetRenderer({
     case 'stats-row2': {
       const cards = [
         { label: t.activeDays, value: String(overview?.activeDays ?? 0), suffix: ` / ${overview?.totalDays ?? 0}` },
-        { label: t.sessions, value: formatNumber((overview?.totalSessions ?? 0) > 0 ? overview!.totalSessions : (overview?.totalEvents ?? 0)) },
+        { label: t.totalEvents, value: formatNumber(overview?.totalEvents ?? 0) },
         {
           label: t.userMessages,
           value: typeof overview?.interactionMetrics?.userMessageCount === 'number'

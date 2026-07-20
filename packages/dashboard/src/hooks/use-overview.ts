@@ -9,13 +9,17 @@ import { getMetricAvailability } from '../utils/metric-availability';
 
 export interface FiltersState {
   range: string;
-  deviceId: string;
-  product: string;
+  deviceId?: string;
+  product?: string;
+  deviceIds?: string[];
+  products?: string[];
+  models?: string[];
+  projects?: string[];
 }
 
 export interface HealthPayload { ok: boolean; siteId: string; version: string; siteTitle?: string }
 export interface OverviewPayload extends OverviewResponse { ok: boolean }
-export interface FacetOption { value: string; label: string }
+export interface FacetOption { value: string; label: string; estimatedCostUsd?: number; eventCount?: number }
 
 // ── Fetch helper ──
 
@@ -88,17 +92,19 @@ export function useOverview(filters: FiltersState) {
     }
 
     return getMetricAvailability({
-      selectedProduct: overview.filters.selection.product,
+      selectedProduct: filters.products?.length ? filters.products : overview.filters.selection.product,
       productOptions: overview.filters.options.products,
       totalEvents: overview.totalEvents,
       totalTokens: kpis.totalTokens,
     });
-  }, [overview, kpis]);
+  }, [overview, kpis, filters.products]);
 
   // Filter options
   const fOpts = useMemo(() => ({
     devices: overview?.filters.options.devices ?? [],
+    models: overview?.filters.options.models ?? [],
     products: overview?.filters.options.products ?? [],
+    projects: overview?.filters.options.projects ?? [],
   }), [overview]);
 
   const refresh = () => setTick((n) => n + 1);

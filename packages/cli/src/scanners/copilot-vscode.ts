@@ -113,8 +113,17 @@ function extractSuccessEvent(line: string): { requestId: string; timestamp: Date
   const requestId = requestIdMatch?.[1] ?? `${timestamp.getTime()}`;
   const model = normalizeModel(parts[2]);
   if (!model) return null;
+  if (isBackgroundRequest(parts[4], model)) return null;
 
   return { requestId, timestamp, model };
+}
+
+function isBackgroundRequest(rawScope: string | undefined, model: string): boolean {
+  const scope = rawScope?.replace(/^\[|\]$/g, '').trim().toLowerCase();
+  if (scope === 'xtabprovider' || scope === 'settingseditorsearchsuggestions') return true;
+  return model.startsWith('copilot-suggestions-')
+    || model.startsWith('copilot-nes-')
+    || model.startsWith('dd_');
 }
 
 function normalizeModel(raw: string): string {

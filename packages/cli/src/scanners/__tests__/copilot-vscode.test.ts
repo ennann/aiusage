@@ -94,6 +94,7 @@ describe('scanCopilotVscodeDates', () => {
       '2026-02-12 09:39:03.512 [info] Got Copilot token for hubeiqiao',
       '2026-02-12 09:39:05.000 [info] Open workspace file:///Users/test/project-one',
       '2026-02-12 09:40:20.336 [info] ccreq:4380bcbb.copilotmd | success | gpt-4.1 -> gpt-4.1-2025-04-14 | 2277ms | [settingsEditorSearchSuggestions]',
+      '2026-02-12 09:40:25.336 [info] ccreq:4480bcbb.copilotmd | success | copilot-suggestions-lysithea-0022 | 2277ms | [XtabProvider]',
       '2026-02-12 09:40:30.000 [info] ccreq:4390bcbb.copilotmd | error | gpt-4.1 -> gpt-4.1-2025-04-14 | 300ms | [settingsEditorSearchSuggestions]',
       '2026-02-12 09:41:20.336 [info] ccreq:4490bcbb.copilotmd | success | claude-sonnet-4.5 | 199ms | [chat]',
     ]);
@@ -105,21 +106,7 @@ describe('scanCopilotVscodeDates', () => {
     );
 
     const breakdowns = result.get('2026-02-12') ?? [];
-    expect(breakdowns).toHaveLength(2);
-
-    expect(breakdowns).toContainEqual({
-      provider: 'github',
-      product: 'copilot-vscode',
-      channel: 'ide',
-      model: 'gpt-4.1-2025-04-14',
-      project: 'Project One',
-      eventCount: 1,
-      inputTokens: 0,
-      cachedInputTokens: 0,
-      cacheWriteTokens: 0,
-      outputTokens: 0,
-      reasoningOutputTokens: 0,
-    });
+    expect(breakdowns).toHaveLength(1);
 
     expect(breakdowns).toContainEqual({
       provider: 'github',

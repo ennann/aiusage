@@ -120,7 +120,24 @@ export interface OverviewResponse {
   sankey: SankeyGraph;
   heatmap: HeatmapDay[];
   interactionMetrics?: InteractionMetricsPayload;
+  comparison?: OverviewComparisonPayload | null;
   filters: DashboardFiltersPayload;
+}
+
+export interface OverviewComparisonPayload {
+  activeDays: number;
+  totalEvents: number;
+  totalSessions: number;
+  totalCostUsd: number;
+  averageDailyCostUsd: number;
+  inputTokens: number;
+  cachedInputTokens: number;
+  cacheWriteTokens: number;
+  outputTokens: number;
+  reasoningOutputTokens: number;
+  totalTokens: number;
+  cacheHitRate: number;
+  userMessageCount?: number;
 }
 
 export interface InteractionMetricItem {
@@ -202,12 +219,12 @@ export interface FacetOption {
 export interface DashboardFiltersPayload {
   selection: {
     range: string;
-    deviceId: string | null;
-    provider: string | null;
-    product: string | null;
-    channel: string | null;
-    model: string | null;
-    project: string | null;
+    deviceId: string[];
+    provider: string[];
+    product: string[];
+    channel: string[];
+    model: string[];
+    project: string[];
   };
   options: {
     devices: FacetOption[];
