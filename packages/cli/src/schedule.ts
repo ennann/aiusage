@@ -1,3 +1,4 @@
+import { realpathSync } from 'node:fs';
 import { mkdir, readFile, stat, unlink, writeFile } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -61,8 +62,10 @@ export async function getScheduleStatus(): Promise<ScheduleStatus> {
 
 // ── resolve paths ──
 
-function resolveCommandPaths(): { nodePath: string; scriptPath: string } {
-  const scriptPath = resolve(process.argv[1]);
+export function resolveCommandPaths(): { nodePath: string; scriptPath: string } {
+  const entryPath = process.argv[1];
+  if (!entryPath) throw new Error('无法解析当前 aiusage 命令路径');
+  const scriptPath = realpathSync(resolve(entryPath));
   if (scriptPath.includes('_npx') || scriptPath.includes('/npx-')) {
     throw new Error(
       '检测到通过 npx 运行，定时任务需要全局安装。\n请先执行: npm install -g @aiusage/cli',
